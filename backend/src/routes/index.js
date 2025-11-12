@@ -1,0 +1,35 @@
+import express from 'express';
+import authRoutes from './authRoutes.js';
+import userRoutes from './userRoutes.js';
+import studentRoutes from './studentRoutes.js';
+import courseRoutes from './courseRoutes.js';
+import subjectRoutes from './subjectRoutes.js';
+import assignmentRoutes from './assignmentRoutes.js';
+import teacherRoutes from './teacherRoutes.js';
+import gradeRoutes from './gradeRoutes.js';
+import attendanceRoutes from './attendanceRoutes.js';
+import paymentRoutes from './paymentRoutes.js';
+import periodRoutes from './periodRoutes.js';
+import subPeriodRoutes from './subPeriodRoutes.js';
+import institutionRoutes from './institutionRoutes.js';
+import schoolYearRoutes from './schoolYearRoutes.js';
+
+const router = express.Router();
+
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/students', studentRoutes);
+router.use('/courses', courseRoutes);
+router.use('/subjects', subjectRoutes);
+router.use('/assignments', assignmentRoutes);
+router.use('/teachers', teacherRoutes);
+router.use('/grades', gradeRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/periods', periodRoutes);
+router.use('/sub-periods', subPeriodRoutes);
+router.use('/institutions', institutionRoutes);
+router.use('/school-years', schoolYearRoutes);
+
+export default router;
+

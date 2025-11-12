@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: gestion-escolar-db
+    environment:
+      POSTGRES_USER: gestionscolar
+      POSTGRES_PASSWORD: gestionscolar2024
+      POSTGRES_DB: gestion_escolar
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - gestion-escolar-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gestion-escolar-backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://gestionscolar:gestionscolar2024@postgres:5432/gestion_escolar
+      JWT_SECRET: mi_secreto_jwt_super_seguro_2024
+      JWT_EXPIRES_IN: 7d
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+    networks:
+      - gestion-escolar-network
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gestion-escolar-frontend
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - gestion-escolar-network
+    command: npm run dev -- --host 0.0.0.0
+
+networks:
+  gestion-escolar-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+

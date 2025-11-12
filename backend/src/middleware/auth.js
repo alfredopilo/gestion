@@ -1,0 +1,181 @@
+import jwt from 'jsonwebtoken';
+import prisma from '../config/database.js';
+
+/**
+ * Middleware para verificar el token JWT
+ */
+export const authenticate = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        error: 'No autorizado. Token no proporcionado.' 
+      });
+    }
+
+    const token = authHeader.substring(7); // Remover "Bearer "
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Verificar que el usuario existe y está activo
+      const userRecord = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+          rol: true,
+          estado: true,
+          institucionId: true,
+          institucion: {
+            select: {
+              id: true,
+              nombre: true,
+              activa: true,
+            },
+          },
+          userInstitutions: {
+            select: {
+              institucionId: true,
+              institucion: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  activa: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!userRecord || userRecord.estado !== 'ACTIVO') {
+        return res.status(401).json({ 
+          error: 'Usuario inactivo o no encontrado.' 
+        });
+      }
+
+      const instituciones = [];
+      if (userRecord.institucion) {
+        instituciones.push({
+          id: userRecord.institucion.id,
+          nombre: userRecord.institucion.nombre,
+          activa: userRecord.institucion.activa,
+        });
+      }
+
+      if (userRecord.userInstitutions?.length) {
+        for (const ui of userRecord.userInstitutions) {
+          const inst = ui.institucion ?? null;
+          const instId = inst?.id || ui.institucionId;
+          if (!instId) continue;
+          if (!instituciones.some(existing => existing.id === instId)) {
+            instituciones.push({
+              id: instId,
+              nombre: inst?.nombre ?? null,
+              activa: inst?.activa ?? null,
+            });
+          }
+        }
+      }
+
+      const accessibleInstitutionIds = new Set(
+        instituciones
+          .map(inst => inst?.id)
+          .filter(Boolean)
+      );
+      if (userRecord.institucionId) {
+        accessibleInstitutionIds.add(userRecord.institucionId);
+      }
+
+      req.user = {
+        id: userRecord.id,
+        nombre: userRecord.nombre,
+        apellido: userRecord.apellido,
+        email: userRecord.email,
+        rol: userRecord.rol,
+        estado: userRecord.estado,
+        institucionId: userRecord.institucionId,
+        institucion: userRecord.institucion ?? null,
+        instituciones,
+        accessibleInstitutionIds: Array.from(accessibleInstitutionIds),
+      };
+
+      // Obtener institución activa del sistema
+      const activeInstitution = await prisma.institution.findFirst({
+        where: { activa: true },
+        select: {
+          id: true,
+          nombre: true,
+        },
+      });
+
+      // Verificar si hay una institución seleccionada en el header
+      const selectedInstitutionId = req.headers['x-institution-id'];
+      
+      // Prioridad: institución del header > institución del usuario > institución activa
+      if (selectedInstitutionId) {
+        // Verificar que el usuario tiene acceso a esta institución
+        if (
+          req.user.rol === 'ADMIN' ||
+          accessibleInstitutionIds.has(selectedInstitutionId) ||
+          selectedInstitutionId === activeInstitution?.id
+        ) {
+          req.institutionId = selectedInstitutionId;
+        } else {
+          // Si no tiene acceso, usar la del usuario o activa
+          req.institutionId =
+            req.user.institucionId ||
+            req.user.accessibleInstitutionIds?.[0] ||
+            activeInstitution?.id ||
+            null;
+        }
+      } else {
+        // Si no hay header, usar la del usuario o activa
+        req.institutionId =
+          req.user.institucionId ||
+          req.user.accessibleInstitutionIds?.[0] ||
+          activeInstitution?.id ||
+          null;
+      }
+      
+      req.activeInstitution = activeInstitution;
+
+      next();
+    } catch (error) {
+      return res.status(401).json({ 
+        error: 'Token inválido o expirado.' 
+      });
+    }
+  } catch (error) {
+    console.error('Error en autenticación:', error);
+    return res.status(500).json({ 
+      error: 'Error en el servidor de autenticación.' 
+    });
+  }
+};
+
+/**
+ * Middleware para verificar roles
+ */
+export const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ 
+        error: 'Usuario no autenticado.' 
+      });
+    }
+
+    if (!roles.includes(req.user.rol)) {
+      return res.status(403).json({ 
+        error: 'No tienes permisos para realizar esta acción.' 
+      });
+    }
+
+    next();
+  };
+};
+

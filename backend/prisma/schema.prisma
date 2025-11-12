@@ -1,0 +1,375 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Attendance {
+  id            String           @id
+  estudianteId  String           @map("estudiante_id")
+  fecha         DateTime
+  estado        EstadoAsistencia
+  justificacion String?
+  observaciones String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @map("updated_at")
+  estudiante    Student          @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+
+  @@unique([estudianteId, fecha])
+  @@map("attendance")
+}
+
+model CourseSubjectAssignment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  materiaId String   @map("materia_id")
+  cursoId   String   @map("curso_id")
+  docenteId String   @map("docente_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  curso     Course   @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  docente   Teacher  @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  materia   Subject  @relation("SubjectToCourseSubjectAssignment", fields: [materiaId], references: [id], onDelete: Cascade)
+
+  @@unique([materiaId, cursoId])
+  @@map("course_subject_assignments")
+}
+
+model Course {
+  id                         String                    @id @default(dbgenerated("gen_random_uuid()::text"))
+  nombre                     String
+  nivel                      String
+  paralelo                   String?
+  docenteId                  String?                   @map("docente_id")
+  periodoId                  String?                   @map("periodo_id")
+  capacidad                  Int?                      @default(30)
+  createdAt                  DateTime                  @default(now()) @map("created_at")
+  updatedAt                  DateTime                  @updatedAt @map("updated_at")
+  cursoSiguienteId           String?                   @map("curso_siguiente_id")
+  anioLectivoId              String                    @map("anio_lectivo_id")
+  sortOrder                  Int?                      @default(0) @map("sort_order")
+  course_subject_assignments CourseSubjectAssignment[]
+  anioLectivo                SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
+  cursoSiguiente             Course?                   @relation("coursesTocourses", fields: [cursoSiguienteId], references: [id])
+  other_courses              Course[]                  @relation("coursesTocourses")
+  docente                    Teacher?                  @relation(fields: [docenteId], references: [id])
+  periodo                    Period?                   @relation(fields: [periodoId], references: [id])
+  estudiantes                Student[]
+
+  @@map("courses")
+}
+
+model Documento {
+  id           String        @id
+  estudianteId String        @map("estudiante_id")
+  tipo         TipoDocumento
+  nombre       String
+  ruta         String
+  descripcion  String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @map("updated_at")
+  estudiante   Student       @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+
+  @@map("documentos")
+}
+
+model Grade {
+  id             String     @id
+  estudianteId   String     @map("estudiante_id")
+  materiaId      String     @map("materia_id")
+  parcial        String?
+  calificacion   Float
+  observaciones  String?
+  fechaRegistro  DateTime   @default(now()) @map("fecha_registro")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @map("updated_at")
+  subPeriodoId   String?    @map("sub_periodo_id")
+  descripcion    String?
+  tipoEvaluacion String?    @map("tipo_evaluacion")
+  estudiante     Student    @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  materia        Subject    @relation("SubjectToGrade", fields: [materiaId], references: [id], onDelete: Cascade)
+  subPeriodo     SubPeriod? @relation(fields: [subPeriodoId], references: [id])
+
+  @@unique([estudianteId, materiaId, parcial])
+  @@index([estudianteId, materiaId])
+  @@index([estudianteId, materiaId, subPeriodoId])
+  @@map("grades")
+}
+
+model Institution {
+  id               String            @id
+  nombre           String
+  codigo           String?           @unique
+  logo             String?
+  direccion        String?
+  telefono         String?
+  email            String?
+  rector           String?
+  activa           Boolean           @default(true)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @map("updated_at")
+  aniosLectivos    SchoolYear[]      @relation("InstitutionSchoolYears")
+  materias         Subject[]
+  userInstitutions UserInstitution[]
+  usuarios         User[]            @relation("InstitutionUsuarios")
+
+  @@map("institutions")
+}
+
+model Mensaje {
+  id         String   @id
+  emisorId   String   @map("emisor_id")
+  receptorId String   @map("receptor_id")
+  asunto     String
+  cuerpo     String
+  leido      Boolean  @default(false)
+  fechaEnvio DateTime @default(now()) @map("fecha_envio")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @map("updated_at")
+  emisor     User     @relation("mensajes_emisor_idTousers", fields: [emisorId], references: [id], onDelete: Cascade)
+  receptor   User     @relation("mensajes_receptor_idTousers", fields: [receptorId], references: [id], onDelete: Cascade)
+
+  @@map("mensajes")
+}
+
+model Payment {
+  id               String     @id
+  estudianteId     String     @map("estudiante_id")
+  concepto         String
+  monto            Float
+  descuento        Float?     @default(0)
+  fechaPago        DateTime?  @map("fecha_pago")
+  fechaVencimiento DateTime?  @map("fecha_vencimiento")
+  estado           EstadoPago @default(PENDIENTE)
+  observaciones    String?
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @map("updated_at")
+  estudiante       Student    @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Period {
+  id                 String      @id
+  nombre             String
+  fechaInicio        DateTime    @map("fecha_inicio")
+  fechaFin           DateTime    @map("fecha_fin")
+  activo             Boolean     @default(true)
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @map("updated_at")
+  anioEscolar        String      @map("anio_escolar")
+  calificacionMinima Float?      @default(7.0) @map("calificacion_minima")
+  orden              Int?
+  ponderacion        Float?      @default(50.0)
+  anioLectivoId      String?     @map("anio_lectivo_id")
+  courses            Course[]
+  anioLectivo        SchoolYear? @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
+  subPeriodos        SubPeriod[]
+
+  @@map("periods")
+}
+
+model Representante {
+  id         String    @id
+  userId     String    @unique @map("user_id")
+  parentesco String?
+  ocupacion  String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students   Student[]
+
+  @@map("representantes")
+}
+
+model SchoolYear {
+  id            String      @id
+  institucionId String      @map("institucion_id")
+  nombre        String
+  fechaInicio   DateTime    @map("fecha_inicio")
+  fechaFin      DateTime    @map("fecha_fin")
+  activo        Boolean     @default(false)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @map("updated_at")
+  courses       Course[]
+  periods       Period[]
+  institucion   Institution @relation("InstitutionSchoolYears", fields: [institucionId], references: [id], onDelete: Cascade)
+  materias      Subject[]
+
+  @@unique([institucionId, nombre])
+  @@map("school_years")
+}
+
+model Secretaria {
+  id           String   @id
+  userId       String   @unique @map("user_id")
+  departamento String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("secretarias")
+}
+
+model Setting {
+  id          String   @id
+  clave       String   @unique
+  valor       String
+  descripcion String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+
+  @@map("settings")
+}
+
+model Student {
+  id              String         @id @default(dbgenerated("gen_random_uuid()::text"))
+  userId          String         @unique @map("user_id")
+  representanteId String?        @map("representante_id")
+  fechaNacimiento DateTime       @map("fecha_nacimiento")
+  lugarNacimiento String?        @map("lugar_nacimiento")
+  nacionalidad    String?        @default("Ecuatoriana")
+  genero          String?
+  grupoId         String?        @map("grupo_id")
+  matricula       String?        @unique
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at")
+  asistencias     Attendance[]
+  documentos      Documento[]
+  calificaciones  Grade[]
+  pagos           Payment[]
+  grupo           Course?        @relation(fields: [grupoId], references: [id])
+  representante   Representante? @relation(fields: [representanteId], references: [id])
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("students")
+}
+
+model SubPeriod {
+  id          String    @id
+  periodoId   String    @map("periodo_id")
+  nombre      String
+  ponderacion Float
+  orden       Int
+  fechaInicio DateTime? @map("fecha_inicio")
+  fechaFin    DateTime? @map("fecha_fin")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @map("updated_at")
+  grades      Grade[]
+  periodo     Period    @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+
+  @@unique([periodoId, nombre])
+  @@map("sub_periods")
+}
+
+model Subject {
+  id             String                    @id @default(uuid())
+  nombre         String
+  codigo         String
+  creditos       Int?                      @default(1)
+  horas          Int?
+  institucionId  String                    @map("institucion_id")
+  anioLectivoId  String                    @map("anio_lectivo_id")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  asignaciones   CourseSubjectAssignment[] @relation("SubjectToCourseSubjectAssignment")
+  calificaciones Grade[]                   @relation("SubjectToGrade")
+  anioLectivo    SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
+  institucion    Institution               @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+
+  @@unique([codigo, institucionId, anioLectivoId])
+  @@map("subjects")
+}
+
+model Teacher {
+  id                         String                    @id @default(uuid())
+  userId                     String                    @unique @map("user_id")
+  especialidad               String?
+  titulo                     String?
+  experiencia                String?
+  createdAt                  DateTime                  @default(now()) @map("created_at")
+  updatedAt                  DateTime                  @map("updated_at")
+  course_subject_assignments CourseSubjectAssignment[]
+  courses                    Course[]
+  user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("teachers")
+}
+
+model UserInstitution {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  institucionId String      @map("institucion_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+  institucion   Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, institucionId])
+  @@map("user_institutions")
+}
+
+model User {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()::text"))
+  nombre               String
+  apellido             String
+  email                String            @unique
+  passwordHash         String            @map("password_hash")
+  rol                  Rol
+  estado               EstadoUsuario     @default(ACTIVO)
+  telefono             String?
+  direccion            String?
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @default(now()) @updatedAt @map("updated_at")
+  institucionId        String            @map("institucion_id")
+  numeroIdentificacion String?           @map("numero_identificacion")
+  mensajesEnviados     Mensaje[]         @relation("mensajes_emisor_idTousers")
+  mensajesRecibidos    Mensaje[]         @relation("mensajes_receptor_idTousers")
+  representante        Representante?
+  secretaria           Secretaria?
+  student              Student?
+  teacher              Teacher?
+  userInstitutions     UserInstitution[]
+  institucion          Institution       @relation("InstitutionUsuarios", fields: [institucionId], references: [id], onDelete: Cascade)
+
+  @@unique([numeroIdentificacion, institucionId])
+  @@map("users")
+}
+
+enum EstadoAsistencia {
+  ASISTENCIA
+  FALTA
+  JUSTIFICADA
+  TARDE
+}
+
+enum EstadoPago {
+  PENDIENTE
+  PAGADO
+  VENCIDO
+  CANCELADO
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum Rol {
+  ADMIN
+  PROFESOR
+  ESTUDIANTE
+  REPRESENTANTE
+  SECRETARIA
+}
+
+enum TipoDocumento {
+  CEDULA
+  CERTIFICADO_MEDICO
+  CERTIFICADO_ACADEMICO
+  OTRO
+}
