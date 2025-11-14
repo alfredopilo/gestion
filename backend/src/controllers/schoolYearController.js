@@ -105,7 +105,8 @@ export const createSchoolYear = async (req, res, next) => {
     
     // Primero validar los datos básicos sin institucionId
     const basicData = {
-      nombre: req.body.nombre,
+      ano: req.body.ano,
+      nombre: req.body.nombre, // Opcional, se generará automáticamente
       fechaInicio: req.body.fechaInicio,
       fechaFin: req.body.fechaFin,
       activo: req.body.activo || false,
@@ -115,6 +116,11 @@ export const createSchoolYear = async (req, res, next) => {
 
     // Validar primero los datos básicos (sin institucionId)
     let validatedBasicData = createSchoolYearBasicSchema.parse(basicData);
+    
+    // Generar nombre automáticamente desde el año si no se proporciona
+    if (!validatedBasicData.nombre) {
+      validatedBasicData.nombre = `${validatedBasicData.ano}-${validatedBasicData.ano + 1}`;
+    }
     
     console.log('Datos básicos validados:', JSON.stringify(validatedBasicData, null, 2));
 
@@ -279,6 +285,14 @@ export const updateSchoolYear = async (req, res, next) => {
       return res.status(404).json({
         error: 'Año lectivo no encontrado.',
       });
+    }
+
+    // Si se está cambiando el año, generar el nombre automáticamente
+    if (validatedData.ano && validatedData.ano !== schoolYear.ano) {
+      validatedData.nombre = `${validatedData.ano}-${validatedData.ano + 1}`;
+    } else if (validatedData.ano && !validatedData.nombre) {
+      // Si solo se proporciona el año sin nombre, generar el nombre
+      validatedData.nombre = `${validatedData.ano}-${validatedData.ano + 1}`;
     }
 
     // Si se está cambiando el nombre, verificar que no exista otro con el mismo nombre

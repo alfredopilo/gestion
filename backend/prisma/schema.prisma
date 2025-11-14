@@ -52,6 +52,7 @@ model Course {
   anioLectivoId              String                    @map("anio_lectivo_id")
   sortOrder                  Int?                      @default(0) @map("sort_order")
   course_subject_assignments CourseSubjectAssignment[]
+  insumos                    Insumo[]
   anioLectivo                SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
   cursoSiguiente             Course?                   @relation("coursesTocourses", fields: [cursoSiguienteId], references: [id])
   other_courses              Course[]                  @relation("coursesTocourses")
@@ -80,22 +81,26 @@ model Grade {
   id             String     @id
   estudianteId   String     @map("estudiante_id")
   materiaId      String     @map("materia_id")
+  insumoId       String?    @map("insumo_id")
   parcial        String?
   calificacion   Float
   observaciones  String?
   fechaRegistro  DateTime   @default(now()) @map("fecha_registro")
   createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @map("updated_at")
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at")
   subPeriodoId   String?    @map("sub_periodo_id")
   descripcion    String?
   tipoEvaluacion String?    @map("tipo_evaluacion")
   estudiante     Student    @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
   materia        Subject    @relation("SubjectToGrade", fields: [materiaId], references: [id], onDelete: Cascade)
   subPeriodo     SubPeriod? @relation(fields: [subPeriodoId], references: [id])
+  insumo         Insumo?    @relation(fields: [insumoId], references: [id], onDelete: Cascade)
 
   @@unique([estudianteId, materiaId, parcial])
+  @@unique([estudianteId, insumoId])
   @@index([estudianteId, materiaId])
   @@index([estudianteId, materiaId, subPeriodoId])
+  @@index([estudianteId, insumoId])
   @@map("grades")
 }
 
@@ -188,6 +193,7 @@ model Representante {
 model SchoolYear {
   id            String      @id
   institucionId String      @map("institucion_id")
+  ano           Int         @map("ano")
   nombre        String
   fechaInicio   DateTime    @map("fecha_inicio")
   fechaFin      DateTime    @map("fecha_fin")
@@ -259,10 +265,33 @@ model SubPeriod {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @map("updated_at")
   grades      Grade[]
+  insumos     Insumo[]
   periodo     Period    @relation(fields: [periodoId], references: [id], onDelete: Cascade)
 
   @@unique([periodoId, nombre])
   @@map("sub_periods")
+}
+
+model Insumo {
+  id                String     @id @default(uuid())
+  cursoId           String     @map("curso_id")
+  materiaId         String     @map("materia_id")
+  subPeriodoId      String     @map("sub_periodo_id")
+  nombre            String
+  descripcion       String?
+  fechaDeber        DateTime   @map("fecha_deber")
+  fechaEntrega      DateTime?  @map("fecha_entrega")
+  activo            Boolean    @default(true)
+  orden              Int?
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+  curso             Course     @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  materia           Subject    @relation(fields: [materiaId], references: [id], onDelete: Cascade)
+  subPeriodo        SubPeriod  @relation(fields: [subPeriodoId], references: [id], onDelete: Cascade)
+  calificaciones    Grade[]
+
+  @@unique([cursoId, materiaId, subPeriodoId, nombre])
+  @@map("insumos")
 }
 
 model Subject {
@@ -277,6 +306,7 @@ model Subject {
   updatedAt      DateTime                  @updatedAt @map("updated_at")
   asignaciones   CourseSubjectAssignment[] @relation("SubjectToCourseSubjectAssignment")
   calificaciones Grade[]                   @relation("SubjectToGrade")
+  insumos        Insumo[]
   anioLectivo    SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
   institucion    Institution               @relation(fields: [institucionId], references: [id], onDelete: Cascade)
 

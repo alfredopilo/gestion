@@ -351,12 +351,16 @@ export const getAttendanceInstitutionFilter = async (req, prisma) => {
  * A través de user -> institucionId
  */
 export const getTeacherInstitutionFilter = (req) => {
+  // Prioridad: header x-institution-id > req.institutionId > accessibleInstitutionIds
   const selectedInstitutionId =
     req?.headers?.['x-institution-id']?.toString() ||
+    req?.institutionId ||
     getInstitutionFilter(req);
+  
   if (selectedInstitutionId) {
     return {
       user: {
+        estado: 'ACTIVO',
         OR: [
           { institucionId: selectedInstitutionId },
           {
@@ -371,14 +375,26 @@ export const getTeacherInstitutionFilter = (req) => {
     };
   }
 
+  // Si no hay institución seleccionada, usar las instituciones accesibles
   const institutionIds = getAccessibleInstitutionIds(req);
   if (!institutionIds || institutionIds.length === 0) {
-    if (req.user?.rol === 'ADMIN') return {};
-    return { userId: { in: [] } };
+    // Si es ADMIN y no hay institución seleccionada, mostrar todos los docentes activos
+    if (req.user?.rol === 'ADMIN') {
+      return {
+        user: {
+          estado: 'ACTIVO',
+        },
+      };
+    }
+    // Si no es ADMIN y no tiene instituciones accesibles, no mostrar nada
+    // Usar un filtro que no devuelva resultados de manera segura
+    return { id: '00000000-0000-0000-0000-000000000000' };
   }
 
+  // Filtrar por las instituciones accesibles
   return {
     user: {
+      estado: 'ACTIVO',
       OR: [
         { institucionId: { in: institutionIds } },
         {

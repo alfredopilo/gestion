@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "school_years" ADD COLUMN "ano" INTEGER NOT NULL DEFAULT 2025;
+

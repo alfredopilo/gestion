@@ -1,6 +1,7 @@
+import { randomUUID } from 'crypto';
 import prisma from '../config/database.js';
 import { createPeriodSchema, updatePeriodSchema } from '../utils/validators.js';
-import { getPeriodInstitutionFilter, verifyPeriodBelongsToInstitution } from '../utils/institutionFilter.js';
+import { getPeriodInstitutionFilter, verifyPeriodBelongsToInstitution, getActiveSchoolYear } from '../utils/institutionFilter.js';
 
 /**
  * Obtener todos los períodos
@@ -135,43 +136,58 @@ export const createPeriod = async (req, res, next) => {
       validatedData.fechaFin = new Date(validatedData.fechaFin);
     }
 
-    // Verificar que el año lectivo existe
-    const schoolYear = await prisma.schoolYear.findUnique({
-      where: { id: validatedData.anioLectivoId },
-      include: {
-        institucion: true,
-      },
-    });
-
-    if (!schoolYear) {
-      return res.status(404).json({
-        error: 'Año lectivo no encontrado.',
-      });
-    }
-
-    // Si no se proporciona anioEscolar, usar el nombre del año lectivo
-    if (!validatedData.anioEscolar) {
-      validatedData.anioEscolar = schoolYear.nombre;
-    }
-
-    // Verificar que solo haya un período activo por año lectivo
-    if (validatedData.activo) {
-      const activePeriod = await prisma.period.findFirst({
-        where: {
-          anioLectivoId: validatedData.anioLectivoId,
-          activo: true,
+    // Si no se proporciona anioLectivoId (null, undefined o no presente), obtener el año escolar activo automáticamente
+    let schoolYear;
+    if (!validatedData.anioLectivoId || validatedData.anioLectivoId === null || validatedData.anioLectivoId === undefined) {
+      schoolYear = await getActiveSchoolYear(req, prisma);
+      if (!schoolYear) {
+        return res.status(400).json({
+          error: 'No hay un año escolar activo configurado. Por favor, crea y activa un año escolar primero.',
+        });
+      }
+      validatedData.anioLectivoId = schoolYear.id;
+    } else {
+      // Verificar que el año lectivo existe si se proporciona
+      schoolYear = await prisma.schoolYear.findUnique({
+        where: { id: validatedData.anioLectivoId },
+        include: {
+          institucion: true,
         },
       });
 
-      if (activePeriod) {
-        return res.status(400).json({
-          error: `Ya existe un período activo para este año lectivo. Solo puede haber un período activo por año lectivo.`,
+      if (!schoolYear) {
+        return res.status(404).json({
+          error: 'Año lectivo no encontrado.',
         });
       }
     }
 
+    // Si no se proporciona anioEscolar (null, undefined o no presente), usar el nombre del año lectivo
+    if (!validatedData.anioEscolar || validatedData.anioEscolar === null || validatedData.anioEscolar === undefined) {
+      validatedData.anioEscolar = schoolYear.nombre;
+    }
+
+    // Si se está creando un período activo, desactivar automáticamente los demás períodos activos del mismo año lectivo
+    if (validatedData.activo) {
+      await prisma.period.updateMany({
+        where: {
+          anioLectivoId: validatedData.anioLectivoId,
+          activo: true,
+        },
+        data: { activo: false },
+      });
+    }
+
+    // Generar ID para el período
+    const periodData = {
+      id: randomUUID(),
+      ...validatedData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
     const period = await prisma.period.create({
-      data: validatedData,
+      data: periodData,
       include: {
         subPeriodos: true,
       },

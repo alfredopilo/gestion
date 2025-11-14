@@ -107,6 +107,7 @@ export const login = async (req, res, next) => {
         apellido: user.apellido,
         email: user.email,
         rol: user.rol,
+        institucionId: user.institucionId,
         ...additionalInfo,
       },
     });

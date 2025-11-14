@@ -160,6 +160,7 @@ export const authenticate = async (req, res, next) => {
 
 /**
  * Middleware para verificar roles
+ * Acepta múltiples argumentos o un array de roles
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
@@ -169,7 +170,12 @@ export const authorize = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.rol)) {
+    // Aplanar roles en caso de que se pase un array
+    const rolesArray = roles.length === 1 && Array.isArray(roles[0]) 
+      ? roles[0] 
+      : roles;
+
+    if (!rolesArray.includes(req.user.rol)) {
       return res.status(403).json({ 
         error: 'No tienes permisos para realizar esta acción.' 
       });

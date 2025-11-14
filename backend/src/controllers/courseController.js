@@ -133,7 +133,13 @@ export const getCourseById = async (req, res, next) => {
                 nombre: true,
                 apellido: true,
                 email: true,
+                numeroIdentificacion: true,
               },
+            },
+          },
+          orderBy: {
+            user: {
+              apellido: 'asc',
             },
           },
         },

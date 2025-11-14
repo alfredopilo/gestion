@@ -8,12 +8,15 @@ const Periods = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showSubPeriodModal, setShowSubPeriodModal] = useState(false);
+  const [showInsumoModal, setShowInsumoModal] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
   const [editingSubPeriod, setEditingSubPeriod] = useState(null);
+  const [editingInsumo, setEditingInsumo] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
+  const [selectedSubPeriod, setSelectedSubPeriod] = useState(null);
+  const [insumos, setInsumos] = useState([]);
   const [formData, setFormData] = useState({
     nombre: '',
-    anioEscolar: '',
     fechaInicio: '',
     fechaFin: '',
     calificacionMinima: 7.0,
@@ -27,6 +30,12 @@ const Periods = () => {
     orden: 1,
     fechaInicio: '',
     fechaFin: '',
+  });
+  const [insumoFormData, setInsumoFormData] = useState({
+    nombre: '',
+    descripcion: '',
+    activo: true,
+    orden: 1,
   });
 
   useEffect(() => {
@@ -49,10 +58,14 @@ const Periods = () => {
     e.preventDefault();
     try {
       const data = {
-        ...formData,
+        nombre: formData.nombre,
+        fechaInicio: formData.fechaInicio,
+        fechaFin: formData.fechaFin,
         calificacionMinima: parseFloat(formData.calificacionMinima),
         ponderacion: parseFloat(formData.ponderacion),
         orden: parseInt(formData.orden),
+        activo: formData.activo,
+        // No enviar anioEscolar ni anioLectivoId, el backend lo obtendrá automáticamente
       };
 
       // Convertir fechas a formato ISO datetime si tienen valor
@@ -133,7 +146,6 @@ const Periods = () => {
     setEditingPeriod(period);
     setFormData({
       nombre: period.nombre || '',
-      anioEscolar: period.anioEscolar || '',
       fechaInicio: period.fechaInicio ? new Date(period.fechaInicio).toISOString().split('T')[0] : '',
       fechaFin: period.fechaFin ? new Date(period.fechaFin).toISOString().split('T')[0] : '',
       calificacionMinima: period.calificacionMinima || 7.0,
@@ -198,7 +210,6 @@ const Periods = () => {
   const resetForm = () => {
     setFormData({
       nombre: '',
-      anioEscolar: '',
       fechaInicio: '',
       fechaFin: '',
       calificacionMinima: 7.0,
@@ -233,6 +244,101 @@ const Periods = () => {
     setEditingSubPeriod(null);
     setSelectedPeriod(period); // Establecer el período después de resetear
     setShowSubPeriodModal(true);
+  };
+
+  const fetchInsumos = async (subPeriodoId) => {
+    try {
+      const response = await api.get(`/insumos?subPeriodoId=${subPeriodoId}`);
+      const insumosList = response.data.data || [];
+      setInsumos(insumosList);
+      return insumosList;
+    } catch (error) {
+      console.error('Error al cargar insumos:', error);
+      toast.error('Error al cargar insumos');
+      return [];
+    }
+  };
+
+  const openInsumoModal = async (subPeriod, period) => {
+    setSelectedSubPeriod(subPeriod);
+    setSelectedPeriod(period);
+    const insumosData = await fetchInsumos(subPeriod.id);
+    const insumosList = insumosData || [];
+    setInsumoFormData({
+      nombre: '',
+      descripcion: '',
+      activo: true,
+      orden: (insumosList.length || 0) + 1,
+    });
+    setEditingInsumo(null);
+    setShowInsumoModal(true);
+  };
+
+  const handleInsumoSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedSubPeriod) return;
+
+    try {
+      const data = {
+        subPeriodoId: selectedSubPeriod.id,
+        nombre: insumoFormData.nombre.trim(),
+        descripcion: insumoFormData.descripcion.trim() || null,
+        activo: insumoFormData.activo,
+        orden: parseInt(insumoFormData.orden) || undefined,
+      };
+
+      if (editingInsumo && editingInsumo.id !== 'new') {
+        await api.put(`/insumos/${editingInsumo.id}`, data);
+        toast.success('Insumo actualizado exitosamente');
+      } else {
+        await api.post('/insumos', data);
+        toast.success('Insumo creado exitosamente');
+      }
+
+      setShowInsumoModal(false);
+      resetInsumoForm();
+      await fetchInsumos(selectedSubPeriod.id);
+      fetchData(); // Refrescar períodos para actualizar la vista
+    } catch (error) {
+      console.error('Error al guardar insumo:', error);
+      toast.error(error.response?.data?.error || 'Error al guardar insumo');
+    }
+  };
+
+  const handleEditInsumo = (insumo) => {
+    setEditingInsumo(insumo);
+    setInsumoFormData({
+      nombre: insumo.nombre || '',
+      descripcion: insumo.descripcion || '',
+      activo: insumo.activo ?? true,
+      orden: insumo.orden || 1,
+    });
+  };
+
+  const handleDeleteInsumo = async (id) => {
+    if (!window.confirm('¿Estás seguro de eliminar este insumo?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/insumos/${id}`);
+      toast.success('Insumo eliminado exitosamente');
+      await fetchInsumos(selectedSubPeriod.id);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al eliminar insumo');
+    }
+  };
+
+  const resetInsumoForm = () => {
+    setInsumoFormData({
+      nombre: '',
+      descripcion: '',
+      activo: true,
+      orden: 1,
+    });
+    setEditingInsumo(null);
+    setSelectedSubPeriod(null);
   };
 
   if (loading) {
@@ -300,7 +406,7 @@ const Periods = () => {
                         >
                           {period.subPeriodos?.length || 0} subperíodos
                           {sumaPonderacionSub !== 100 && sumaPonderacionSub > 0 && (
-                            <span className="ml-1 text-red-500" title={`Suma: ${sumaPonderacionSub.toFixed(1)}%`}>⚠</span>
+                            <span className="ml-1 text-red-500" title={`Suma: ${sumaPonderacionSub.toFixed(2)}%`}>⚠</span>
                           )}
                         </button>
                       </td>
@@ -349,12 +455,18 @@ const Periods = () => {
                                 <div key={sp.id} className="bg-white p-2 rounded border text-sm">
                                   <div className="font-medium">{sp.nombre}</div>
                                   <div className="text-xs text-gray-500">Ponderación: {sp.ponderacion}%</div>
-                                  <div className="mt-1">
+                                  <div className="mt-1 flex flex-wrap gap-1">
                                     <button
                                       onClick={() => handleEditSubPeriod(sp, period)}
-                                      className="text-xs text-primary-600 hover:text-primary-900 mr-2"
+                                      className="text-xs text-primary-600 hover:text-primary-900"
                                     >
                                       Editar
+                                    </button>
+                                    <button
+                                      onClick={() => openInsumoModal(sp, period)}
+                                      className="text-xs text-blue-600 hover:text-blue-900"
+                                    >
+                                      Insumos
                                     </button>
                                     <button
                                       onClick={() => handleDeleteSubPeriod(sp.id)}
@@ -388,33 +500,21 @@ const Periods = () => {
               {editingPeriod ? 'Editar Período' : 'Nuevo Período'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Nombre <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.nombre}
-                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="Ej: Primer Quimestre"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Año Escolar <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.anioEscolar}
-                    onChange={(e) => setFormData({ ...formData, anioEscolar: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="Ej: 2025-2026"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Nombre <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="Ej: Primer Quimestre"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  El período se asociará automáticamente al año escolar activo
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -452,7 +552,7 @@ const Periods = () => {
                     required
                     min="0"
                     max="10"
-                    step="0.1"
+                    step="0.01"
                     value={formData.calificacionMinima}
                     onChange={(e) => setFormData({ ...formData, calificacionMinima: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
@@ -467,7 +567,7 @@ const Periods = () => {
                     required
                     min="0"
                     max="100"
-                    step="0.1"
+                    step="0.01"
                     value={formData.ponderacion}
                     onChange={(e) => setFormData({ ...formData, ponderacion: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
@@ -554,13 +654,13 @@ const Periods = () => {
                     required
                     min="0"
                     max="100"
-                    step="0.1"
+                    step="0.01"
                     value={subPeriodFormData.ponderacion}
                     onChange={(e) => setSubPeriodFormData({ ...subPeriodFormData, ponderacion: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Suma actual: {selectedPeriod.subPeriodos?.reduce((sum, sp) => sum + (sp.id === editingSubPeriod?.id ? 0 : sp.ponderacion), 0).toFixed(1) || 0}%
+                    Suma actual: {selectedPeriod.subPeriodos?.reduce((sum, sp) => sum + (sp.id === editingSubPeriod?.id ? 0 : sp.ponderacion), 0).toFixed(2) || 0}%
                   </p>
                 </div>
                 <div>
@@ -616,6 +716,167 @@ const Periods = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Insumos */}
+      {showInsumoModal && selectedSubPeriod && selectedPeriod && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">
+              Gestión de Insumos
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Subperíodo: <strong>{selectedSubPeriod.nombre}</strong> - Período: <strong>{selectedPeriod.nombre}</strong>
+            </p>
+
+            {/* Lista de Insumos */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-semibold">Insumos</h3>
+                <button
+                  onClick={() => {
+                    resetInsumoForm();
+                    setEditingInsumo({ id: 'new' }); // Usar un objeto temporal para mostrar el formulario
+                  }}
+                  className="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                >
+                  + Nuevo Insumo
+                </button>
+              </div>
+              {insumos.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay insumos configurados</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {insumos.map((insumo) => (
+                    <div key={insumo.id} className="bg-gray-50 p-3 rounded border text-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-medium">{insumo.nombre}</div>
+                          {insumo.descripcion && (
+                            <div className="text-xs text-gray-500 mt-1">{insumo.descripcion}</div>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-xs px-2 py-0.5 rounded ${insumo.activo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {insumo.activo ? 'Activo' : 'Inactivo'}
+                            </span>
+                            {insumo.orden && (
+                              <span className="text-xs text-gray-500">Orden: {insumo.orden}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 ml-2">
+                          <button
+                            onClick={() => handleEditInsumo(insumo)}
+                            className="text-xs text-primary-600 hover:text-primary-900"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInsumo(insumo.id)}
+                            className="text-xs text-red-600 hover:text-red-900"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Formulario de Insumo */}
+            {editingInsumo && (
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-semibold mb-4">
+                  {editingInsumo.id === 'new' ? 'Nuevo Insumo' : 'Editar Insumo'}
+                </h3>
+                <form onSubmit={handleInsumoSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Nombre <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={insumoFormData.nombre}
+                      onChange={(e) => setInsumoFormData({ ...insumoFormData, nombre: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                      placeholder="Ej: Tarea, Examen, Proyecto"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Descripción
+                    </label>
+                    <textarea
+                      value={insumoFormData.descripcion}
+                      onChange={(e) => setInsumoFormData({ ...insumoFormData, descripcion: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                      rows="3"
+                      placeholder="Descripción del insumo (opcional)"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Orden
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={insumoFormData.orden}
+                        onChange={(e) => setInsumoFormData({ ...insumoFormData, orden: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={insumoFormData.activo}
+                          onChange={(e) => setInsumoFormData({ ...insumoFormData, activo: e.target.checked })}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Activo</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetInsumoForm();
+                        setEditingInsumo(null);
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      {editingInsumo?.id === 'new' ? 'Ocultar' : 'Cancelar'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                    >
+                      {editingInsumo?.id === 'new' ? 'Crear Insumo' : 'Actualizar'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setShowInsumoModal(false);
+                  resetInsumoForm();
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

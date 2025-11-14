@@ -9,6 +9,7 @@ const GeneralSettings = () => {
   const [showSchoolYearModal, setShowSchoolYearModal] = useState(false);
   const [editingSchoolYear, setEditingSchoolYear] = useState(null);
   const [formData, setFormData] = useState({
+    ano: new Date().getFullYear(),
     nombre: '',
     fechaInicio: '',
     fechaFin: '',
@@ -74,8 +75,15 @@ const GeneralSettings = () => {
         return;
       }
 
+      // Validar que el año esté presente
+      if (!formData.ano) {
+        toast.error('Por favor ingresa el año');
+        return;
+      }
+
       const data = {
-        nombre: formData.nombre.trim(),
+        ano: parseInt(formData.ano),
+        nombre: formData.nombre.trim() || undefined, // Opcional, se generará automáticamente
         fechaInicio: formData.fechaInicio, // Enviar como YYYY-MM-DD, el backend lo manejará
         fechaFin: formData.fechaFin, // Enviar como YYYY-MM-DD, el backend lo manejará
       };
@@ -127,6 +135,7 @@ const GeneralSettings = () => {
   const handleEdit = (schoolYear) => {
     setEditingSchoolYear(schoolYear);
     setFormData({
+      ano: schoolYear.ano || new Date().getFullYear(),
       nombre: schoolYear.nombre || '',
       fechaInicio: schoolYear.fechaInicio 
         ? new Date(schoolYear.fechaInicio).toISOString().split('T')[0]
@@ -155,6 +164,7 @@ const GeneralSettings = () => {
 
   const resetForm = () => {
     setFormData({
+      ano: new Date().getFullYear(),
       nombre: '',
       fechaInicio: '',
       fechaFin: '',
@@ -377,19 +387,41 @@ const GeneralSettings = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
+                  Año <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="2000"
+                  max="2100"
+                  value={formData.ano}
+                  onChange={(e) => {
+                    const ano = parseInt(e.target.value) || new Date().getFullYear();
+                    const nombre = `${ano}-${ano + 1}`;
+                    setFormData({ ...formData, ano, nombre });
+                  }}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="Ej: 2025"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Ingresa el año del año escolar (ej: 2025)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
                   Nombre del Año Escolar <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  minLength={4}
+                  readOnly
                   value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                  placeholder="Ej: 2025-2026"
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50"
+                  placeholder="Se genera automáticamente"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Ingresa el nombre del año escolar (mínimo 4 caracteres, ej: 2025-2026)
+                  El nombre se genera automáticamente desde el año (ej: 2025-2026)
                 </p>
               </div>
 

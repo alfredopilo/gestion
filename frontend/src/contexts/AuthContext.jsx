@@ -46,6 +46,15 @@ export const AuthProvider = ({ children }) => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
       
+      // Establecer automáticamente la institución del usuario si existe
+      if (user.institucionId) {
+        const currentSelected = localStorage.getItem('selectedInstitutionId');
+        if (!currentSelected || currentSelected !== user.institucionId) {
+          localStorage.setItem('selectedInstitutionId', user.institucionId);
+          setSelectedInstitutionId(user.institucionId);
+        }
+      }
+      
       toast.success('¡Bienvenido!');
       return { success: true };
     } catch (error) {

@@ -144,17 +144,53 @@ export const importStudentsSchema = z.object({
   students: z.array(importStudentSchema).min(1, 'Debes proporcionar al menos un estudiante'),
 });
 
+const importTeacherSchema = z.object({
+  nombre: z.string().min(2, 'El nombre es obligatorio'),
+  apellido: z.string().min(2, 'El apellido es obligatorio'),
+  numeroIdentificacion: z.string().min(3, 'El número de identificación es obligatorio'),
+  email: z
+    .string()
+    .email('Email inválido')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  telefono: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  direccion: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  especialidad: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  titulo: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  password: z
+    .string()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+});
+
+export const importTeachersSchema = z.object({
+  teachers: z.array(importTeacherSchema).min(1, 'Debes proporcionar al menos un profesor'),
+  instituciones: z.array(z.string().uuid()).min(1, 'Debes seleccionar al menos una institución'),
+});
+
 export const createPeriodSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  anioLectivoId: z.string().uuid('ID de año lectivo inválido'),
-  anioEscolar: z.string().min(4, 'El año escolar debe tener al menos 4 caracteres').optional(),
+  anioLectivoId: z.string().uuid('ID de año lectivo inválido').optional().nullable(), // Opcional, se obtendrá automáticamente
+  anioEscolar: z.string().min(4, 'El año escolar debe tener al menos 4 caracteres').optional().nullable(), // Opcional, se generará automáticamente
   fechaInicio: z.union([z.string().datetime(), z.date()]),
   fechaFin: z.union([z.string().datetime(), z.date()]),
   calificacionMinima: z.number().min(0).max(10).default(7.0),
   ponderacion: z.number().min(0).max(100).optional(),
   activo: z.boolean().default(true),
   orden: z.number().int().positive().optional(),
-});
+}).passthrough(); // Permitir campos adicionales que no están en el schema
 
 export const updatePeriodSchema = z.object({
   nombre: z.string().min(2).optional(),
@@ -205,7 +241,8 @@ const dateStringSchema = z.string()
 
 // Schema base sin institucionId (para validación inicial)
 const createSchoolYearBaseSchema = z.object({
-  nombre: z.string().min(1, 'El nombre es requerido').min(4, 'El nombre debe tener al menos 4 caracteres (ej: 2025-2026)'),
+  ano: z.number().int().min(2000).max(2100, 'El año debe ser un valor válido'),
+  nombre: z.string().optional(), // El nombre se generará automáticamente desde el año
   fechaInicio: dateStringSchema,
   fechaFin: dateStringSchema,
   activo: z.boolean().optional().default(false),
@@ -236,6 +273,7 @@ export const createSchoolYearSchema = createSchoolYearBaseSchema.extend({
 });
 
 export const updateSchoolYearSchema = z.object({
+  ano: z.number().int().min(2000).max(2100).optional(),
   nombre: z.string().min(4).optional(),
   fechaInicio: dateStringSchema.optional(),
   fechaFin: dateStringSchema.optional(),
@@ -259,17 +297,67 @@ export const updateSubPeriodSchema = z.object({
   fechaFin: z.union([z.string().datetime(), z.date()]).optional(),
 });
 
+// Esquemas para Insumo
+export const createInsumoSchema = z.object({
+  cursoId: z.string().uuid('ID de curso inválido'),
+  materiaId: z.string().uuid('ID de materia inválido'),
+  subPeriodoId: z.string().uuid('ID de subperíodo inválido'),
+  nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  descripcion: z.string().optional().nullable(),
+  fechaDeber: z.union([z.string().datetime(), z.date()]).refine(
+    (val) => {
+      const date = val instanceof Date ? val : new Date(val);
+      return !isNaN(date.getTime());
+    },
+    { message: 'Fecha del deber inválida' }
+  ),
+  fechaEntrega: z.union([z.string().datetime(), z.date()]).optional().nullable().refine(
+    (val) => {
+      if (!val) return true; // Es opcional
+      const date = val instanceof Date ? val : new Date(val);
+      return !isNaN(date.getTime());
+    },
+    { message: 'Fecha de entrega inválida' }
+  ),
+  activo: z.boolean().optional().default(true),
+  orden: z.number().int().positive().optional(),
+});
+
+export const updateInsumoSchema = z.object({
+  nombre: z.string().min(2).optional(),
+  descripcion: z.string().optional().nullable(),
+  fechaDeber: z.union([z.string().datetime(), z.date()]).optional().refine(
+    (val) => {
+      if (!val) return true; // Es opcional en actualización
+      const date = val instanceof Date ? val : new Date(val);
+      return !isNaN(date.getTime());
+    },
+    { message: 'Fecha del deber inválida' }
+  ),
+  fechaEntrega: z.union([z.string().datetime(), z.date()]).optional().nullable().refine(
+    (val) => {
+      if (!val) return true; // Es opcional
+      const date = val instanceof Date ? val : new Date(val);
+      return !isNaN(date.getTime());
+    },
+    { message: 'Fecha de entrega inválida' }
+  ),
+  activo: z.boolean().optional(),
+  orden: z.number().int().positive().optional(),
+});
+
 export const createGradeSchema = z.object({
   estudianteId: z.string().uuid(),
   materiaId: z.string().uuid(),
+  insumoId: z.string().uuid().optional(),
   subPeriodoId: z.string().uuid().optional(),
   parcial: z.string().optional(), // Mantener para compatibilidad
   tipoEvaluacion: z.string().optional(), // Ej: "Tarea", "Examen", "Proyecto"
   descripcion: z.string().optional(), // Descripción de la evaluación
   calificacion: z.number().min(0).max(10),
-  observaciones: z.string().optional(),
-}).refine(data => data.subPeriodoId || data.parcial, {
-  message: 'Debe proporcionar subPeriodoId o parcial',
+  observaciones: z.string().optional().nullable(),
+}).refine(data => data.subPeriodoId || data.parcial || data.insumoId, {
+  message: 'Debe proporcionar subPeriodoId, parcial o insumoId',
   path: ['subPeriodoId'],
 });
 
@@ -278,7 +366,7 @@ export const createAttendanceSchema = z.object({
   fecha: z.string().or(z.date()),
   estado: z.enum(['ASISTENCIA', 'FALTA', 'JUSTIFICADA', 'TARDE']),
   justificacion: z.string().optional(),
-  observaciones: z.string().optional(),
+  observaciones: z.string().optional().nullable(),
 });
 
 export const createPaymentSchema = z.object({
@@ -289,6 +377,6 @@ export const createPaymentSchema = z.object({
   fechaPago: z.string().or(z.date()).optional(),
   fechaVencimiento: z.string().or(z.date()).optional(),
   estado: z.enum(['PENDIENTE', 'PAGADO', 'VENCIDO', 'CANCELADO']).optional(),
-  observaciones: z.string().optional(),
+  observaciones: z.string().optional().nullable(),
 });
 

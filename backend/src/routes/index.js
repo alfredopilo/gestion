@@ -11,6 +11,8 @@ import attendanceRoutes from './attendanceRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
 import periodRoutes from './periodRoutes.js';
 import subPeriodRoutes from './subPeriodRoutes.js';
+import insumoRoutes from './insumoRoutes.js';
+import reportRoutes from './reportRoutes.js';
 import institutionRoutes from './institutionRoutes.js';
 import schoolYearRoutes from './schoolYearRoutes.js';
 
@@ -28,6 +30,8 @@ router.use('/attendance', attendanceRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/periods', periodRoutes);
 router.use('/sub-periods', subPeriodRoutes);
+router.use('/insumos', insumoRoutes);
+router.use('/reports', reportRoutes);
 router.use('/institutions', institutionRoutes);
 router.use('/school-years', schoolYearRoutes);
 

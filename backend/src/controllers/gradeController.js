@@ -2,13 +2,14 @@ import prisma from '../config/database.js';
 import { createGradeSchema } from '../utils/validators.js';
 import { calculateWeightedAverage, truncate } from '../utils/gradeCalculations.js';
 import { getGradeInstitutionFilter } from '../utils/institutionFilter.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Obtener calificaciones
  */
 export const getGrades = async (req, res, next) => {
   try {
-    const { estudianteId, materiaId, cursoId, parcial, subPeriodoId, page = 1, limit = 50 } = req.query;
+    const { estudianteId, materiaId, cursoId, parcial, subPeriodoId, insumoId, page = 1, limit = 50 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -35,6 +36,7 @@ export const getGrades = async (req, res, next) => {
     if (materiaId) where.materiaId = materiaId;
     if (parcial) where.parcial = parcial;
     if (subPeriodoId) where.subPeriodoId = subPeriodoId;
+    if (insumoId) where.insumoId = insumoId;
 
     // Si se filtra por curso, obtener las materias del curso desde asignaciones
     if (cursoId) {
@@ -96,6 +98,13 @@ export const getGrades = async (req, res, next) => {
                   anioEscolar: true,
                 },
               },
+            },
+          },
+          insumo: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
             },
           },
         },
@@ -279,21 +288,45 @@ export const upsertGrade = async (req, res, next) => {
   try {
     const validatedData = createGradeSchema.parse(req.body);
 
-    // Validar que se proporcione subPeriodoId o parcial
-    if (!validatedData.subPeriodoId && !validatedData.parcial) {
+    // Validar que se proporcione subPeriodoId, parcial o insumoId
+    if (!validatedData.subPeriodoId && !validatedData.parcial && !validatedData.insumoId) {
       return res.status(400).json({
-        error: 'Debe proporcionar subPeriodoId o parcial.',
+        error: 'Debe proporcionar subPeriodoId, parcial o insumoId.',
       });
     }
 
-    // Truncar calificación a 2 decimales
-    validatedData.calificacion = Math.floor(validatedData.calificacion * 100) / 100;
+    // NO truncar las calificaciones individuales, mantener el valor exacto
+    // Solo se truncará el promedio en el cálculo
 
     let grade;
-    if (validatedData.subPeriodoId) {
-      // Usar subperíodo (método nuevo) - Crear nueva calificación (permite múltiples)
-      grade = await prisma.grade.create({
-        data: validatedData,
+    if (validatedData.insumoId) {
+      // Usar insumo - Upsert basado en estudiante e insumo (único por insumo)
+      // Preparar datos para create, excluyendo campos que no deben estar
+      const createData = {
+        id: randomUUID(),
+        estudianteId: validatedData.estudianteId,
+        materiaId: validatedData.materiaId,
+        insumoId: validatedData.insumoId,
+        subPeriodoId: validatedData.subPeriodoId || null,
+        calificacion: validatedData.calificacion,
+        observaciones: validatedData.observaciones || null,
+        parcial: validatedData.parcial || null,
+        tipoEvaluacion: validatedData.tipoEvaluacion || null,
+        descripcion: validatedData.descripcion || null,
+      };
+      
+      grade = await prisma.grade.upsert({
+        where: {
+          estudianteId_insumoId: {
+            estudianteId: validatedData.estudianteId,
+            insumoId: validatedData.insumoId,
+          },
+        },
+        update: {
+          calificacion: validatedData.calificacion,
+          observaciones: validatedData.observaciones || null,
+        },
+        create: createData,
         include: {
           estudiante: {
             include: {
@@ -318,23 +351,32 @@ export const upsertGrade = async (req, res, next) => {
               },
             },
           },
-        },
-      });
-    } else {
-      // Usar parcial (método legacy para compatibilidad) - Mantener upsert para compatibilidad
-      grade = await prisma.grade.upsert({
-        where: {
-          estudianteId_materiaId_parcial: {
-            estudianteId: validatedData.estudianteId,
-            materiaId: validatedData.materiaId,
-            parcial: validatedData.parcial,
+          insumo: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+            },
           },
         },
-        update: {
-          calificacion: validatedData.calificacion,
-          observaciones: validatedData.observaciones,
-        },
-        create: validatedData,
+      });
+    } else if (validatedData.subPeriodoId) {
+      // Usar subperíodo (método nuevo) - Crear nueva calificación (permite múltiples)
+      const createData = {
+        id: randomUUID(),
+        estudianteId: validatedData.estudianteId,
+        materiaId: validatedData.materiaId,
+        subPeriodoId: validatedData.subPeriodoId,
+        calificacion: validatedData.calificacion,
+        observaciones: validatedData.observaciones || null,
+        parcial: validatedData.parcial || null,
+        tipoEvaluacion: validatedData.tipoEvaluacion || null,
+        descripcion: validatedData.descripcion || null,
+        insumoId: validatedData.insumoId || null,
+      };
+      
+      grade = await prisma.grade.create({
+        data: createData,
         include: {
           estudiante: {
             include: {
@@ -347,6 +389,74 @@ export const upsertGrade = async (req, res, next) => {
             },
           },
           materia: true,
+          subPeriodo: {
+            include: {
+              periodo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  anioEscolar: true,
+                  calificacionMinima: true,
+                },
+              },
+            },
+          },
+          insumo: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+            },
+          },
+        },
+      });
+    } else {
+      // Usar parcial (método legacy para compatibilidad) - Mantener upsert para compatibilidad
+      const createData = {
+        id: randomUUID(),
+        estudianteId: validatedData.estudianteId,
+        materiaId: validatedData.materiaId,
+        parcial: validatedData.parcial,
+        calificacion: validatedData.calificacion,
+        observaciones: validatedData.observaciones || null,
+        subPeriodoId: validatedData.subPeriodoId || null,
+        tipoEvaluacion: validatedData.tipoEvaluacion || null,
+        descripcion: validatedData.descripcion || null,
+        insumoId: validatedData.insumoId || null,
+      };
+      
+      grade = await prisma.grade.upsert({
+        where: {
+          estudianteId_materiaId_parcial: {
+            estudianteId: validatedData.estudianteId,
+            materiaId: validatedData.materiaId,
+            parcial: validatedData.parcial,
+          },
+        },
+        update: {
+          calificacion: validatedData.calificacion,
+          observaciones: validatedData.observaciones || null,
+        },
+        create: createData,
+        include: {
+          estudiante: {
+            include: {
+              user: {
+                select: {
+                  nombre: true,
+                  apellido: true,
+                },
+              },
+            },
+          },
+          materia: true,
+          insumo: {
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+            },
+          },
         },
       });
     }
@@ -391,7 +501,8 @@ export const updateGrade = async (req, res, next) => {
     // Truncar calificación a 2 decimales si se proporciona
     const updateData = {};
     if (calificacion !== undefined) {
-      updateData.calificacion = Math.floor(calificacion * 100) / 100;
+      // NO truncar las calificaciones individuales, mantener el valor exacto
+      updateData.calificacion = calificacion;
     }
     if (observaciones !== undefined) updateData.observaciones = observaciones;
     if (tipoEvaluacion !== undefined) updateData.tipoEvaluacion = tipoEvaluacion;
@@ -485,12 +596,11 @@ export const bulkCreateGrades = async (req, res, next) => {
     // Usar transacción para insertar todas
     const results = await prisma.$transaction(
       calificaciones.map(cal => {
-        // Truncar calificación
-        const calificacionTruncada = Math.floor(cal.calificacion * 100) / 100;
+        // NO truncar las calificaciones individuales, mantener el valor exacto
         return prisma.grade.create({
           data: {
             ...cal,
-            calificacion: calificacionTruncada,
+            calificacion: cal.calificacion,
           },
         });
       })

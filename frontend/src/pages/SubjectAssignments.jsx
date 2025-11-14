@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 const SubjectAssignments = () => {
+  const { selectedInstitutionId } = useAuth();
   const [assignments, setAssignments] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -17,11 +19,21 @@ const SubjectAssignments = () => {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (selectedInstitutionId) {
+      fetchData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInstitutionId]);
 
   const fetchData = async () => {
+    if (!selectedInstitutionId) {
+      console.warn('No hay institución seleccionada, no se pueden cargar los datos');
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log('Cargando datos para institución:', selectedInstitutionId);
       const [assignmentsRes, subjectsRes, coursesRes, teachersRes] = await Promise.all([
         api.get('/assignments?limit=100'),
         api.get('/subjects?limit=100'),

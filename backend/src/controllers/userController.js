@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
-import { createUserSchema, updateUserSchema } from '../utils/validators.js';
+import { createUserSchema, updateUserSchema, importTeachersSchema } from '../utils/validators.js';
 import { getUserInstitutionFilter } from '../utils/institutionFilter.js';
 
 /**
@@ -313,11 +313,17 @@ export const createUser = async (req, res, next) => {
         await prisma.teacher.create({
           data: {
             userId: user.id,
+            createdAt: new Date(),
+            updatedAt: new Date(),
           },
         });
         console.log('Registro Teacher creado');
       } catch (teacherError) {
         console.error('Error al crear Teacher:', teacherError);
+        // Si el Teacher ya existe, no es un error crítico
+        if (!teacherError.message.includes('Unique constraint')) {
+          throw teacherError;
+        }
       }
     }
     
@@ -545,5 +551,286 @@ export const deleteUser = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+/**
+ * Importar profesores desde un archivo CSV
+ */
+export const importTeachers = async (req, res, next) => {
+  try {
+    const { teachers, instituciones } = importTeachersSchema.parse(req.body);
+
+    if (!instituciones || instituciones.length === 0) {
+      return res.status(400).json({
+        error: 'Debes seleccionar al menos una institución.',
+      });
+    }
+
+    // Verificar que todas las instituciones existan
+    const existingInstitutions = await prisma.institution.findMany({
+      where: {
+        id: { in: instituciones },
+      },
+      select: { id: true },
+    });
+
+    if (existingInstitutions.length !== instituciones.length) {
+      return res.status(404).json({
+        error: 'Una o más instituciones no existen.',
+      });
+    }
+
+    const primaryInstitutionId = instituciones[0];
+    const results = {
+      procesados: teachers.length,
+      nuevos: [],
+      actualizados: [],
+      omitidos: [],
+      errores: [],
+    };
+
+    for (let index = 0; index < teachers.length; index += 1) {
+      const rawTeacher = teachers[index];
+      const rowNumber = index + 2; // Asumiendo encabezados en la primera fila
+
+      try {
+        const nombre = rawTeacher.nombre.trim();
+        const apellido = rawTeacher.apellido.trim();
+        const numeroIdentificacion = rawTeacher.numeroIdentificacion.trim();
+        const email = rawTeacher.email?.trim().toLowerCase() || null;
+        const telefono = rawTeacher.telefono?.trim() || null;
+        const direccion = rawTeacher.direccion?.trim() || null;
+        const especialidad = rawTeacher.especialidad?.trim() || null;
+        const titulo = rawTeacher.titulo?.trim() || null;
+        const passwordPlano = rawTeacher.password?.trim() || numeroIdentificacion || 'profesor123';
+
+        // Buscar usuario existente por email o número de identificación
+        const searchConditions = [];
+        if (email) {
+          searchConditions.push({ email });
+        }
+        if (numeroIdentificacion) {
+          searchConditions.push({ numeroIdentificacion });
+        }
+
+        let user = null;
+        if (searchConditions.length > 0) {
+          user = await prisma.user.findFirst({
+            where: {
+              OR: searchConditions,
+            },
+          });
+        }
+
+        let createdPassword = null;
+        let wasCreated = false;
+
+        if (!user) {
+          // Crear nuevo usuario
+          const finalEmail = email || `${numeroIdentificacion}@gestionescolar.edu`;
+          
+          // Verificar que el email no exista
+          const existingEmail = await prisma.user.findUnique({
+            where: { email: finalEmail },
+          });
+
+          if (existingEmail) {
+            results.omitidos.push({
+              fila: rowNumber,
+              nombreCompleto: `${nombre} ${apellido}`,
+              motivo: `El email ${finalEmail} ya está en uso.`,
+            });
+            continue;
+          }
+
+          // Verificar que el número de identificación no exista en la institución
+          const existingById = await prisma.user.findFirst({
+            where: {
+              numeroIdentificacion,
+              institucionId: primaryInstitutionId,
+            },
+          });
+
+          if (existingById) {
+            results.omitidos.push({
+              fila: rowNumber,
+              nombreCompleto: `${nombre} ${apellido}`,
+              motivo: `El número de identificación ${numeroIdentificacion} ya existe en esta institución.`,
+            });
+            continue;
+          }
+
+          const passwordHash = await bcrypt.hash(passwordPlano, 10);
+          createdPassword = passwordPlano;
+
+          user = await prisma.user.create({
+            data: {
+              nombre,
+              apellido,
+              email: finalEmail,
+              numeroIdentificacion,
+              passwordHash,
+              rol: 'PROFESOR',
+              estado: 'ACTIVO',
+              telefono,
+              direccion,
+              institucionId: primaryInstitutionId,
+            },
+          });
+
+          // Crear relaciones con todas las instituciones
+          await prisma.userInstitution.createMany({
+            data: instituciones.map(institucionId => ({
+              userId: user.id,
+              institucionId,
+            })),
+          });
+
+          wasCreated = true;
+        } else {
+          // Actualizar usuario existente si es necesario
+          const updateData = {};
+          if (nombre && nombre !== user.nombre) updateData.nombre = nombre;
+          if (apellido && apellido !== user.apellido) updateData.apellido = apellido;
+          if (telefono && telefono !== user.telefono) updateData.telefono = telefono;
+          if (direccion && direccion !== user.direccion) updateData.direccion = direccion;
+
+          if (Object.keys(updateData).length > 0) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: updateData,
+            });
+          }
+
+          // Actualizar relaciones con instituciones
+          await prisma.userInstitution.deleteMany({
+            where: { userId: user.id },
+          });
+
+          await prisma.userInstitution.createMany({
+            data: instituciones.map(institucionId => ({
+              userId: user.id,
+              institucionId,
+            })),
+          });
+        }
+
+        // Crear o actualizar registro Teacher
+        const existingTeacher = await prisma.teacher.findUnique({
+          where: { userId: user.id },
+        });
+
+        if (!existingTeacher) {
+          await prisma.teacher.create({
+            data: {
+              userId: user.id,
+              especialidad,
+              titulo,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
+        } else if (especialidad || titulo) {
+          await prisma.teacher.update({
+            where: { id: existingTeacher.id },
+            data: {
+              especialidad: especialidad || existingTeacher.especialidad,
+              titulo: titulo || existingTeacher.titulo,
+              updatedAt: new Date(),
+            },
+          });
+        }
+
+        if (wasCreated) {
+          results.nuevos.push({
+            fila: rowNumber,
+            nombreCompleto: `${nombre} ${apellido}`,
+            email: user.email,
+            password: createdPassword,
+          });
+        } else {
+          results.actualizados.push({
+            fila: rowNumber,
+            nombreCompleto: `${nombre} ${apellido}`,
+            email: user.email,
+          });
+        }
+      } catch (error) {
+        results.errores.push({
+          fila: rowNumber,
+          nombreCompleto: `${rawTeacher.nombre || ''} ${rawTeacher.apellido || ''}`,
+          error: error.message || 'Error desconocido al importar este profesor.',
+        });
+      }
+    }
+
+    res.json({
+      message: 'Importación de profesores procesada correctamente.',
+      resumen: {
+        procesados: results.procesados,
+        nuevos: results.nuevos.length,
+        actualizados: results.actualizados.length,
+        omitidos: results.omitidos.length,
+        errores: results.errores.length,
+      },
+      nuevos: results.nuevos,
+      actualizados: results.actualizados,
+      omitidos: results.omitidos,
+      errores: results.errores,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Descargar plantilla CSV para importación de profesores
+ */
+export const getImportTeachersTemplate = (req, res) => {
+  const headers = [
+    'nombre',
+    'apellido',
+    'numeroIdentificacion',
+    'email',
+    'telefono',
+    'direccion',
+    'especialidad',
+    'titulo',
+    'password',
+  ];
+
+  const sampleRows = [
+    [
+      'Juan',
+      'Pérez',
+      '0102030405',
+      'juan.perez@gestionescolar.edu',
+      '0987654321',
+      'Av. Principal 123',
+      'Matemáticas',
+      'Licenciado en Matemáticas',
+      'profesor123',
+    ],
+    [
+      'Ana',
+      'Martínez',
+      '0605040302',
+      'ana.martinez@gestionescolar.edu',
+      '',
+      '',
+      'Lengua y Literatura',
+      'Licenciada en Lengua y Literatura',
+      '',
+    ],
+  ];
+
+  const csvContent = [
+    headers.join(','),
+    ...sampleRows.map(row => row.map(value => `"${value}"`).join(',')),
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="plantilla_importacion_profesores.csv"');
+  res.status(200).send(csvContent);
 };
 

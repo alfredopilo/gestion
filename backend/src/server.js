@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './config/database.js';
 import routes from './routes/index.js';
@@ -55,34 +56,17 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 // ============================================
 // CORS - DEBE SER EL PRIMER MIDDLEWARE
 // ============================================
-// Configuración CORS simplificada y permisiva para desarrollo
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // En desarrollo, permitir cualquier origen localhost (case-insensitive)
-  if (origin) {
-    const normalizedOrigin = origin.toLowerCase();
-    if (normalizedOrigin.includes('localhost') || 
-        normalizedOrigin.includes('127.0.0.1') ||
-        process.env.NODE_ENV !== 'production') {
-      res.header('Access-Control-Allow-Origin', origin);
-    }
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
-  }
-  
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-institution-id');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400');
-  
-  // Responder inmediatamente a OPTIONS (preflight) - CRÍTICO
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  
-  next();
-});
+// Configuración CORS muy permisiva para desarrollo
+app.use(cors({
+  origin: true, // Permitir cualquier origen en desarrollo
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-institution-id', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+}));
 
 // Middlewares adicionales
 // Helmet configurado para no interferir con CORS

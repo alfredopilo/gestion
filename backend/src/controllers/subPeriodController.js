@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { createSubPeriodSchema, updateSubPeriodSchema } from '../utils/validators.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Obtener todos los subperíodos
@@ -23,14 +24,13 @@ export const getSubPeriods = async (req, res, next) => {
         },
         _count: {
           select: {
-            calificaciones: true,
+            grades: true,
           },
         },
       },
-      orderBy: [
-        { periodo: { orden: 'asc' } },
-        { orden: 'asc' },
-      ],
+      orderBy: {
+        orden: 'asc',
+      },
     });
 
     res.json({
@@ -54,7 +54,7 @@ export const getSubPeriodById = async (req, res, next) => {
         periodo: true,
         _count: {
           select: {
-            calificaciones: true,
+            grades: true,
           },
         },
       },
@@ -129,8 +129,16 @@ export const createSubPeriod = async (req, res, next) => {
       });
     }
 
+    // Generar ID y agregar campos de fecha si no existen
+    const subPeriodData = {
+      ...validatedData,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
     const subPeriod = await prisma.subPeriod.create({
-      data: validatedData,
+      data: subPeriodData,
       include: {
         periodo: {
           select: {
@@ -257,7 +265,7 @@ export const deleteSubPeriod = async (req, res, next) => {
       include: {
         _count: {
           select: {
-            calificaciones: true,
+            grades: true,
           },
         },
       },
@@ -269,7 +277,7 @@ export const deleteSubPeriod = async (req, res, next) => {
       });
     }
 
-    if (subPeriod._count.calificaciones > 0) {
+    if (subPeriod._count.grades > 0) {
       return res.status(400).json({
         error: 'No se puede eliminar un subperíodo que tiene calificaciones asociadas.',
       });

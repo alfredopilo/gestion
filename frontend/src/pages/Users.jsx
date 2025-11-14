@@ -26,6 +26,14 @@ const Users = () => {
     instituciones: [], // Array de IDs de instituciones (al menos 1 requerida)
   });
   const [institutions, setInstitutions] = useState([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [importSummary, setImportSummary] = useState(null);
+  const [importDetails, setImportDetails] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importInstitutions, setImportInstitutions] = useState([]);
 
   useEffect(() => {
     fetchUsers();
@@ -166,6 +174,165 @@ const Users = () => {
     resetForm();
   };
 
+  const resetImportState = () => {
+    setImportPreview([]);
+    setImportFileName('');
+    setImportSummary(null);
+    setImportDetails(null);
+    setImportError('');
+    setImportLoading(false);
+    setImportInstitutions([]);
+  };
+
+  const handleOpenImportModal = () => {
+    resetImportState();
+    setShowImportModal(true);
+  };
+
+  const handleCloseImportModal = () => {
+    resetImportState();
+    setShowImportModal(false);
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setImportError('');
+    try {
+      const text = await file.text();
+      const lines = text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      if (lines.length < 2) {
+        throw new Error('El archivo debe incluir encabezados y al menos una fila de datos.');
+      }
+
+      const headerMap = {
+        nombre: 'nombre',
+        apellido: 'apellido',
+        email: 'email',
+        telefono: 'telefono',
+        direccion: 'direccion',
+        numeroidentificacion: 'numeroIdentificacion',
+        'numero identificacion': 'numeroIdentificacion',
+        numero_identificacion: 'numeroIdentificacion',
+        especialidad: 'especialidad',
+        titulo: 'titulo',
+        password: 'password',
+      };
+
+      const rawHeaders = lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
+      const headers = rawHeaders.map(header => headerMap[header.toLowerCase()] ?? header);
+
+      const requiredHeaders = ['nombre', 'apellido', 'numeroIdentificacion'];
+      const missingHeaders = requiredHeaders.filter(required => !headers.includes(required));
+      if (missingHeaders.length > 0) {
+        throw new Error(`Faltan las columnas obligatorias: ${missingHeaders.join(', ')}`);
+      }
+
+      const parsedTeachers = [];
+      for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+        const values = lines[lineIndex].split(',').map(value => value.trim().replace(/"/g, ''));
+        if (values.length === 1 && values[0] === '') {
+          continue;
+        }
+        const record = {};
+        headers.forEach((header, columnIndex) => {
+          if (!header) return;
+          const value = values[columnIndex] ?? '';
+          if (value !== '') {
+            record[header] = value;
+          }
+        });
+        if (Object.keys(record).length > 0) {
+          parsedTeachers.push(record);
+        }
+      }
+
+      if (parsedTeachers.length === 0) {
+        throw new Error('No se encontraron registros válidos en el archivo.');
+      }
+
+      setImportPreview(parsedTeachers);
+      setImportFileName(file.name);
+      setImportSummary(null);
+      setImportDetails(null);
+    } catch (error) {
+      console.error('Error al procesar el archivo CSV:', error);
+      setImportPreview([]);
+      setImportFileName('');
+      setImportSummary(null);
+      setImportDetails(null);
+      setImportError(error.message || 'No se pudo procesar el archivo. Verifica el formato.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await api.get('/users/import-teachers/template', {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'plantilla_importacion_profesores.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Plantilla descargada exitosamente');
+    } catch (error) {
+      console.error('Error al descargar plantilla:', error);
+      toast.error('Error al descargar la plantilla');
+    }
+  };
+
+  const handleImportSubmit = async () => {
+    if (importPreview.length === 0) {
+      setImportError('Debes seleccionar un archivo con al menos un profesor.');
+      return;
+    }
+
+    if (importInstitutions.length === 0) {
+      setImportError('Debes seleccionar al menos una institución.');
+      return;
+    }
+
+    setImportLoading(true);
+    setImportError('');
+    try {
+      const response = await api.post('/users/import-teachers', {
+        teachers: importPreview,
+        instituciones: importInstitutions,
+      });
+
+      toast.success(response.data?.message || 'Importación completada exitosamente.');
+      setImportSummary(response.data?.resumen || null);
+      setImportDetails({
+        nuevos: response.data?.nuevos || [],
+        actualizados: response.data?.actualizados || [],
+        omitidos: response.data?.omitidos || [],
+        errores: response.data?.errores || [],
+      });
+      setImportPreview([]);
+      setImportFileName('');
+
+      await fetchUsers();
+    } catch (error) {
+      console.error('Error al importar profesores:', error);
+      setImportError(error.response?.data?.error || 'Error al importar profesores.');
+      toast.error(error.response?.data?.error || 'Error al importar profesores.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   const getRolBadgeColor = (rol) => {
     const colors = {
       ADMIN: 'bg-red-100 text-red-800',
@@ -210,15 +377,26 @@ const Users = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
-        >
-          Nuevo Usuario
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              resetImportState();
+              setShowImportModal(true);
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+          >
+            Importar Profesores
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
+          >
+            Nuevo Usuario
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -537,6 +715,234 @@ const Users = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para importar profesores */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h2 className="text-xl font-bold">Importar Profesores mediante CSV</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Usa la plantilla para asegurar los encabezados correctos:{' '}
+                  <span className="font-mono text-xs">
+                    nombre, apellido, numeroIdentificacion, email, telefono, direccion, especialidad, titulo, password
+                  </span>
+                  . Campos obligatorios: <strong>nombre</strong>, <strong>apellido</strong> y{' '}
+                  <strong>numeroIdentificacion</strong>.
+                </p>
+              </div>
+              <button
+                onClick={handleDownloadTemplate}
+                className="bg-blue-100 text-blue-700 px-3 py-2 rounded-md hover:bg-blue-200 text-sm font-medium"
+              >
+                📄 Descargar plantilla
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Archivo CSV <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleImportFile}
+                  className="w-full text-sm text-gray-700"
+                  disabled={importLoading}
+                />
+                {importFileName && (
+                  <p className="text-xs text-gray-500 mt-1">Archivo seleccionado: {importFileName}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Instituciones <span className="text-red-500">*</span>
+                </label>
+                <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+                  {institutions.length === 0 ? (
+                    <p className="text-sm text-gray-500">No hay instituciones disponibles</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {institutions.map((inst) => (
+                        <label
+                          key={inst.id}
+                          className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={importInstitutions.includes(inst.id)}
+                            onChange={() => {
+                              setImportInstitutions(prev =>
+                                prev.includes(inst.id)
+                                  ? prev.filter(id => id !== inst.id)
+                                  : [...prev, inst.id]
+                              );
+                            }}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-gray-700">
+                            {inst.nombre} {inst.activa && '(Activa)'}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Selecciona al menos una institución para los profesores importados
+                </p>
+              </div>
+
+              {importError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm text-red-800">{importError}</p>
+                </div>
+              )}
+
+              {importPreview.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">
+                    Vista previa ({importPreview.length} profesores)
+                  </h3>
+                  <div className="border border-gray-300 rounded-md overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Nombre</th>
+                          <th className="px-3 py-2 text-left">Apellido</th>
+                          <th className="px-3 py-2 text-left">Número ID</th>
+                          <th className="px-3 py-2 text-left">Email</th>
+                          <th className="px-3 py-2 text-left">Especialidad</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {importPreview.map((teacher, index) => (
+                          <tr key={index}>
+                            <td className="px-3 py-2">{teacher.nombre || '-'}</td>
+                            <td className="px-3 py-2">{teacher.apellido || '-'}</td>
+                            <td className="px-3 py-2">{teacher.numeroIdentificacion || '-'}</td>
+                            <td className="px-3 py-2">{teacher.email || '-'}</td>
+                            <td className="px-3 py-2">{teacher.especialidad || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {importSummary && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                  <h3 className="text-sm font-medium text-green-800 mb-2">Resumen de Importación</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Procesados:</span>
+                      <span className="ml-2 font-semibold">{importSummary.procesados}</span>
+                    </div>
+                    <div>
+                      <span className="text-green-600">Nuevos:</span>
+                      <span className="ml-2 font-semibold">{importSummary.nuevos}</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-600">Actualizados:</span>
+                      <span className="ml-2 font-semibold">{importSummary.actualizados}</span>
+                    </div>
+                    <div>
+                      <span className="text-yellow-600">Omitidos:</span>
+                      <span className="ml-2 font-semibold">{importSummary.omitidos}</span>
+                    </div>
+                    {importSummary.errores > 0 && (
+                      <div className="col-span-2 md:col-span-4">
+                        <span className="text-red-600">Errores:</span>
+                        <span className="ml-2 font-semibold">{importSummary.errores}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {importDetails && (
+                <div className="space-y-3">
+                  {importDetails.nuevos.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-green-700 mb-1">
+                        Nuevos Profesores ({importDetails.nuevos.length})
+                      </h4>
+                      <div className="bg-green-50 border border-green-200 rounded-md p-3 max-h-32 overflow-y-auto">
+                        <ul className="text-xs space-y-1">
+                          {importDetails.nuevos.map((item, idx) => (
+                            <li key={idx}>
+                              {item.nombreCompleto} ({item.email}) - Contraseña: {item.password}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {importDetails.omitidos.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-yellow-700 mb-1">
+                        Omitidos ({importDetails.omitidos.length})
+                      </h4>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 max-h-32 overflow-y-auto">
+                        <ul className="text-xs space-y-1">
+                          {importDetails.omitidos.map((item, idx) => (
+                            <li key={idx}>
+                              Fila {item.fila}: {item.nombreCompleto} - {item.motivo}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {importDetails.errores.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-red-700 mb-1">
+                        Errores ({importDetails.errores.length})
+                      </h4>
+                      <div className="bg-red-50 border border-red-200 rounded-md p-3 max-h-32 overflow-y-auto">
+                        <ul className="text-xs space-y-1">
+                          {importDetails.errores.map((item, idx) => (
+                            <li key={idx}>
+                              Fila {item.fila}: {item.nombreCompleto} - {item.error}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseImportModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                  disabled={importLoading}
+                >
+                  {importSummary ? 'Cerrar' : 'Cancelar'}
+                </button>
+                {!importSummary && (
+                  <button
+                    type="button"
+                    onClick={handleImportSubmit}
+                    disabled={importLoading || importPreview.length === 0 || importInstitutions.length === 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importLoading ? 'Importando...' : 'Importar Profesores'}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
