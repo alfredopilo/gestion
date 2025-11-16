@@ -406,7 +406,7 @@ export const getGradesReport = async (req, res, next) => {
  */
 export const getAveragesReport = async (req, res, next) => {
   try {
-    const { cursoId, materiaId, periodoId } = req.query;
+    const { cursoId, materiaId, periodoId, fechaDesde, fechaHasta } = req.query;
 
     if (!cursoId) {
       return res.status(400).json({
@@ -429,41 +429,48 @@ export const getAveragesReport = async (req, res, next) => {
       });
     }
 
-    // Obtener estudiantes del curso
-    const students = await prisma.student.findMany({
-      where: {
+    // Construir filtros
+    const whereClause = {
+      estudiante: {
         grupoId: cursoId,
       },
-      include: {
-        user: {
-          select: {
-            nombre: true,
-            apellido: true,
-            numeroIdentificacion: true,
-          },
-        },
-      },
-    });
-
-    // Construir filtros para calificaciones
-    const gradeWhereClause = {
-      estudianteId: { in: students.map(s => s.id) },
     };
 
     if (materiaId) {
-      gradeWhereClause.materiaId = materiaId;
+      whereClause.materiaId = materiaId;
     }
 
     if (periodoId) {
-      gradeWhereClause.subPeriodo = {
+      whereClause.subPeriodo = {
         periodoId: periodoId,
       };
     }
 
-    // Obtener todas las calificaciones
+    if (fechaDesde || fechaHasta) {
+      whereClause.fechaRegistro = {};
+      if (fechaDesde) {
+        whereClause.fechaRegistro.gte = new Date(fechaDesde);
+      }
+      if (fechaHasta) {
+        whereClause.fechaRegistro.lte = new Date(fechaHasta);
+      }
+    }
+
+    // Obtener todas las calificaciones con relaciones necesarias
     const grades = await prisma.grade.findMany({
-      where: gradeWhereClause,
+      where: whereClause,
       include: {
+        estudiante: {
+          include: {
+            user: {
+              select: {
+                nombre: true,
+                apellido: true,
+                numeroIdentificacion: true,
+              },
+            },
+          },
+        },
         materia: {
           select: {
             id: true,
@@ -474,58 +481,254 @@ export const getAveragesReport = async (req, res, next) => {
           select: {
             id: true,
             nombre: true,
+            subPeriodo: {
+              select: {
+                id: true,
+                nombre: true,
+                orden: true,
+                ponderacion: true,
+                periodo: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    orden: true,
+                    ponderacion: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        subPeriodo: {
+          select: {
+            id: true,
+            nombre: true,
+            orden: true,
+            ponderacion: true,
+            periodo: {
+              select: {
+                id: true,
+                nombre: true,
+                orden: true,
+                ponderacion: true,
+              },
+            },
           },
         },
       },
+      orderBy: [
+        { estudiante: { user: { apellido: 'asc' } } },
+        { materia: { nombre: 'asc' } },
+        { fechaRegistro: 'desc' },
+      ],
     });
 
-    // Agrupar por estudiante y materia
-    const averagesMap = {};
-    students.forEach(student => {
-      const studentGrades = grades.filter(g => g.estudianteId === student.id);
-      const byMateria = {};
-
-      studentGrades.forEach(grade => {
-        const materiaId = grade.materiaId;
-        if (!byMateria[materiaId]) {
-          byMateria[materiaId] = {
-            materia: grade.materia.nombre,
-            calificaciones: [],
-          };
-        }
-        byMateria[materiaId].calificaciones.push(grade.calificacion);
-      });
-
-      Object.keys(byMateria).forEach(materiaId => {
-        const materiaData = byMateria[materiaId];
-        const promedio = materiaData.calificaciones.length > 0
-          ? Math.floor((materiaData.calificaciones.reduce((a, b) => a + b, 0) / materiaData.calificaciones.length) * 100) / 100
-          : 0;
-
-        const key = `${student.id}-${materiaId}`;
-        averagesMap[key] = {
-          estudiante: `${student.user.nombre} ${student.user.apellido}`,
-          identificacion: student.user.numeroIdentificacion || '-',
-          curso: course.nombre,
-          materia: materiaData.materia,
-          promedio: promedio,
-          estado: promedio >= 7 ? 'Aprobado' : 'Reprobado',
+    // Crear estructura de datos similar a getGradesReport pero sin insumos
+    const pivotData = {};
+    
+    grades.forEach(grade => {
+      const estudianteId = grade.estudianteId;
+      const materiaId = grade.materiaId;
+      const estudianteNombre = `${grade.estudiante.user.nombre} ${grade.estudiante.user.apellido}`;
+      const identificacion = grade.estudiante.user.numeroIdentificacion || '-';
+      const materiaNombre = grade.materia.nombre;
+      
+      // Obtener información del subperíodo y período
+      const usedSubPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
+      const usedPeriodo = usedSubPeriodo?.periodo;
+      
+      const periodoNombre = usedPeriodo?.nombre;
+      const subPeriodoNombre = usedSubPeriodo?.nombre;
+      
+      // Si falta información esencial, omitir
+      if (!periodoNombre || !subPeriodoNombre) {
+        return;
+      }
+      
+      // Crear clave única para estudiante + materia
+      const rowKey = `${estudianteId}_${materiaId}`;
+      
+      if (!pivotData[rowKey]) {
+        pivotData[rowKey] = {
+          estudiante: estudianteNombre,
+          identificacion: identificacion,
+          materia: materiaNombre,
+          estudianteId: estudianteId,
+          materiaId: materiaId,
+          // Estructuras para calcular promedios
+          subPeriodoGrades: {}, // { subPeriodoId: [calificaciones] }
+          periodoGrades: {}, // { periodoId: [calificaciones] }
         };
+      }
+      
+      // Acumular calificaciones por subperíodo y período para calcular promedios
+      const subPeriodoId = usedSubPeriodo?.id;
+      const periodoId = usedPeriodo?.id;
+      
+      if (subPeriodoId) {
+        if (!pivotData[rowKey].subPeriodoGrades[subPeriodoId]) {
+          pivotData[rowKey].subPeriodoGrades[subPeriodoId] = [];
+        }
+        pivotData[rowKey].subPeriodoGrades[subPeriodoId].push(grade.calificacion);
+      }
+      
+      if (periodoId) {
+        if (!pivotData[rowKey].periodoGrades[periodoId]) {
+          pivotData[rowKey].periodoGrades[periodoId] = [];
+        }
+        pivotData[rowKey].periodoGrades[periodoId].push(grade.calificacion);
+      }
+    });
+
+    // Calcular promedios y crear estructura final
+    const averages = [];
+    const subPeriodsMap = new Map();
+    const periodsMap = new Map();
+
+    Object.values(pivotData).forEach(row => {
+      const promediosSubPeriodo = {};
+      const promediosPeriodo = {};
+      
+      // Calcular promedios por subperíodo
+      Object.keys(row.subPeriodoGrades).forEach(subPeriodoId => {
+        const calificaciones = row.subPeriodoGrades[subPeriodoId];
+        if (calificaciones.length > 0) {
+          const promedio = calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length;
+          const promedioTruncado = Math.floor(promedio * 100) / 100;
+          
+          // Obtener información del subperíodo para ponderación
+          const grade = grades.find(g => {
+            const subPeriodo = g.subPeriodo || g.insumo?.subPeriodo;
+            return subPeriodo?.id === subPeriodoId;
+          });
+          
+          const subPeriodo = grade?.subPeriodo || grade?.insumo?.subPeriodo;
+          const periodo = subPeriodo?.periodo;
+          
+          if (subPeriodo) {
+            const ponderacion = subPeriodo.ponderacion || 0;
+            const promedioPonderado = promedioTruncado * (ponderacion / 100);
+            
+            promediosSubPeriodo[subPeriodoId] = {
+              promedio: promedioTruncado,
+              promedioPonderado: Math.floor(promedioPonderado * 100) / 100,
+              subPeriodoNombre: subPeriodo.nombre,
+              subPeriodoOrden: subPeriodo.orden ?? 999,
+            };
+            
+            // Guardar información del subperíodo para estructura de períodos
+            if (!subPeriodsMap.has(subPeriodoId)) {
+              subPeriodsMap.set(subPeriodoId, {
+                subPeriodoId,
+                subPeriodoNombre: subPeriodo.nombre,
+                subPeriodoOrden: subPeriodo.orden ?? 999,
+                subPeriodoPonderacion: ponderacion,
+                periodoId: periodo?.id,
+                periodoNombre: periodo?.nombre,
+                periodoOrden: periodo?.orden ?? 999,
+                periodoPonderacion: periodo?.ponderacion ?? 0,
+              });
+            }
+          }
+        }
+      });
+      
+      // Calcular promedios por período
+      Object.keys(row.periodoGrades).forEach(periodoId => {
+        const calificaciones = row.periodoGrades[periodoId];
+        if (calificaciones.length > 0) {
+          const promedio = calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length;
+          const promedioTruncado = Math.floor(promedio * 100) / 100;
+          
+          // Obtener información del período para ponderación
+          const grade = grades.find(g => {
+            const periodo = (g.subPeriodo || g.insumo?.subPeriodo)?.periodo;
+            return periodo?.id === periodoId;
+          });
+          
+          const periodo = (grade?.subPeriodo || grade?.insumo?.subPeriodo)?.periodo;
+          
+          if (periodo) {
+            const ponderacion = periodo.ponderacion || 0;
+            const promedioPonderado = promedioTruncado * (ponderacion / 100);
+            
+            promediosPeriodo[periodoId] = {
+              promedio: promedioTruncado,
+              promedioPonderado: Math.floor(promedioPonderado * 100) / 100,
+              nombre: periodo.nombre,
+            };
+            
+            // Guardar información del período
+            if (!periodsMap.has(periodoId)) {
+              periodsMap.set(periodoId, {
+                periodoId,
+                periodoNombre: periodo.nombre,
+                periodoOrden: periodo.orden ?? 999,
+                periodoPonderacion: ponderacion,
+              });
+            }
+          }
+        }
+      });
+      
+      // Calcular promedio general (promedio de todos los períodos)
+      const periodAverages = Object.values(promediosPeriodo).map(p => p.promedio);
+      const promedioGeneral = periodAverages.length > 0
+        ? Math.floor((periodAverages.reduce((a, b) => a + b, 0) / periodAverages.length) * 100) / 100
+        : null;
+      
+      averages.push({
+        ...row,
+        promediosSubPeriodo,
+        promediosPeriodo,
+        promedioGeneral,
       });
     });
 
-    const averages = Object.values(averagesMap);
+    // Crear estructura periodsGrouped (similar a getGradesReport pero sin columnas de insumos)
+    const periodsGrouped = [];
+    const periodsByPeriod = {};
+    
+    subPeriodsMap.forEach(subPeriodData => {
+      const periodoId = subPeriodData.periodoId;
+      if (!periodsByPeriod[periodoId]) {
+        periodsByPeriod[periodoId] = {
+          periodoId,
+          periodoNombre: subPeriodData.periodoNombre,
+          periodoOrden: subPeriodData.periodoOrden,
+          periodoPonderacion: subPeriodData.periodoPonderacion,
+          subPeriods: [],
+        };
+      }
+      
+      periodsByPeriod[periodoId].subPeriods.push({
+        subPeriodoId: subPeriodData.subPeriodoId,
+        subPeriodoNombre: subPeriodData.subPeriodoNombre,
+        subPeriodoOrden: subPeriodData.subPeriodoOrden,
+        subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
+        columns: [], // Sin columnas de insumos
+      });
+    });
+    
+    // Ordenar subperíodos dentro de cada período
+    Object.values(periodsByPeriod).forEach(period => {
+      period.subPeriods.sort((a, b) => a.subPeriodoOrden - b.subPeriodoOrden);
+    });
+    
+    // Convertir a array y ordenar por orden de período
+    periodsGrouped.push(...Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden));
 
     // Generar datos para gráfico
     const chartData = [
-      { rango: '0-4.99', cantidad: averages.filter(a => a.promedio >= 0 && a.promedio < 5).length },
-      { rango: '5-6.99', cantidad: averages.filter(a => a.promedio >= 5 && a.promedio < 7).length },
-      { rango: '7-8.99', cantidad: averages.filter(a => a.promedio >= 7 && a.promedio < 9).length },
-      { rango: '9-10', cantidad: averages.filter(a => a.promedio >= 9).length },
+      { rango: '0-4.99', cantidad: averages.filter(a => a.promedioGeneral !== null && a.promedioGeneral >= 0 && a.promedioGeneral < 5).length },
+      { rango: '5-6.99', cantidad: averages.filter(a => a.promedioGeneral !== null && a.promedioGeneral >= 5 && a.promedioGeneral < 7).length },
+      { rango: '7-8.99', cantidad: averages.filter(a => a.promedioGeneral !== null && a.promedioGeneral >= 7 && a.promedioGeneral < 9).length },
+      { rango: '9-10', cantidad: averages.filter(a => a.promedioGeneral !== null && a.promedioGeneral >= 9).length },
     ];
 
     res.json({
       averages,
+      periodsGrouped,
       chartData,
       total: averages.length,
       curso: course.nombre,
@@ -777,4 +980,5 @@ export const exportToPDF = async (req, res, next) => {
     next(error);
   }
 };
+
 

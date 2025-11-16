@@ -68,6 +68,51 @@ const Reports = () => {
       .filter((section) => section.rows.length > 0);
   }, [reportData, subjectsInReport]);
 
+  // Para reporte de promedios
+  const subjectsInAveragesReport = useMemo(() => {
+    if (!reportData?.averages) return [];
+
+    const map = new Map();
+    reportData.averages.forEach((row) => {
+      const key = row.materiaId || row.materia;
+      if (!key) return;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          materiaId: row.materiaId || null,
+          nombre: row.materia || 'Materia',
+          registros: 0,
+        });
+      }
+
+      const current = map.get(key);
+      current.registros = (current.registros || 0) + 1;
+      map.set(key, current);
+    });
+
+    return Array.from(map.values());
+  }, [reportData]);
+
+  const averagesSubjectSections = useMemo(() => {
+    if (!reportData?.averages) return [];
+
+    return subjectsInAveragesReport
+      .map((subject) => {
+        const subjectKey = subject.materiaId || subject.key || subject.nombre;
+        const rows = reportData.averages.filter((row) => {
+          const rowKey = row.materiaId || row.materia;
+          return rowKey === subjectKey;
+        });
+
+        return {
+          ...subject,
+          rows,
+        };
+      })
+      .filter((section) => section.rows.length > 0);
+  }, [reportData, subjectsInAveragesReport]);
+
   useEffect(() => {
     fetchInitialData();
     fetchInstitution();
@@ -167,6 +212,7 @@ const Reports = () => {
       }
 
       const response = await api.get(endpoint, { params });
+      console.log('Report data received:', response.data);
       setReportData(response.data);
       toast.success('Reporte generado exitosamente');
     } catch (error) {
@@ -231,7 +277,11 @@ const Reports = () => {
           }
           break;
         case 'averages':
-          worksheetData = generateAveragesExcel(reportData);
+          worksheet = generateAveragesExcel(reportData);
+          if (!worksheet) {
+            toast.error('No hay datos para exportar');
+            return;
+          }
           break;
         case 'attendance':
           worksheetData = generateAttendanceExcel(reportData);
@@ -663,29 +713,335 @@ const Reports = () => {
   };
 
   const generateAveragesExcel = (data) => {
+    if (!data.averages || !data.periodsGrouped) return null;
+
+    const columnTypes = ['identificacion', 'estudiante', 'materia'];
+    const headerRow = ['Identificación', 'Estudiante', 'Materia'];
+
+    data.periodsGrouped.forEach(periodGroup => {
+      periodGroup.subPeriods.forEach(subPeriodGroup => {
+        headerRow.push(`Prom. Sub ${subPeriodGroup.subPeriodoNombre}`);
+        columnTypes.push('subAverage');
+        headerRow.push(`Prom. Pond. Sub ${subPeriodGroup.subPeriodoNombre}`);
+        columnTypes.push('subWeighted');
+      });
+      headerRow.push(`Prom. Período ${periodGroup.periodoNombre}`);
+      columnTypes.push('periodAverage');
+      headerRow.push(`Prom. Pond. Período ${periodGroup.periodoNombre}`);
+      columnTypes.push('periodWeighted');
+    });
+
+    if (data.periodsGrouped.length > 1) {
+      headerRow.push('Promedio General');
+      columnTypes.push('generalAverage');
+    }
+
+    const totalColumns = headerRow.length;
     const worksheetData = [];
-    
-    // Agregar cabecera con nombre de institución
+    const merges = [];
+    const mergedRows = [];
+    const headerRowIndices = [];
+    const dataRowIndices = [];
+    const rowHeights = [];
+
+    const addMergedRow = (value, type) => {
+      const rowIndex = worksheetData.length;
+      worksheetData.push([value]);
+      merges.push({
+        s: { r: rowIndex, c: 0 },
+        e: { r: rowIndex, c: totalColumns - 1 },
+      });
+      mergedRows.push({ row: rowIndex, type });
+      rowHeights[rowIndex] = { hpt: type === 'sectionTitle' ? 24 : type === 'reportTitle' ? 22 : 18 };
+      return rowIndex;
+    };
+
     if (institution) {
-      worksheetData.push([institution.nombre || 'Institución']);
+      addMergedRow(institution.nombre || 'Institución', 'institution');
       worksheetData.push([]);
     }
-    worksheetData.push(['Reporte de Promedios']);
+
+    addMergedRow('Reporte de Promedios', 'reportTitle');
+    addMergedRow(`Total de registros: ${data.total || 0} | Curso: ${data.curso || 'N/A'}`, 'reportSubtitle');
     worksheetData.push([]);
-    worksheetData.push(['Estudiante', 'Identificación', 'Curso', 'Materia', 'Promedio', 'Estado']);
-    if (data.averages) {
-      data.averages.forEach(avg => {
-        worksheetData.push([
-          avg.estudiante,
-          avg.identificacion,
-          avg.curso,
-          avg.materia,
-          parseFloat(avg.promedio.toFixed(2)),
-          avg.estado
-        ]);
+
+    const subjectsMap = new Map();
+    data.averages.forEach(row => {
+      const key = row.materiaId || row.materia || `materia-${subjectsMap.size}`;
+      if (!subjectsMap.has(key)) {
+        subjectsMap.set(key, {
+          key,
+          nombre: row.materia || 'Materia',
+          rows: [],
+        });
+      }
+      subjectsMap.get(key).rows.push(row);
+    });
+    const subjectSections = Array.from(subjectsMap.values());
+
+    subjectSections.forEach((section, index) => {
+      // Filtrar periodsGrouped para esta materia
+      const filteredPeriodsForSection = data.periodsGrouped.map(periodGroup => ({
+        ...periodGroup,
+        subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
+          section.rows.some(row => row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId])
+        )
+      })).filter(p => p.subPeriods.length > 0);
+
+      // Recalcular totalColumns para esta materia
+      let sectionTotalColumns = 3; // Identificación, Estudiante, Materia
+      filteredPeriodsForSection.forEach(periodGroup => {
+        periodGroup.subPeriods.forEach(subPeriodGroup => {
+          sectionTotalColumns += 2; // 2 promedios sub
+        });
+        sectionTotalColumns += 2; // 2 promedios período
       });
-    }
-    return worksheetData;
+      if (filteredPeriodsForSection.length > 1) {
+        sectionTotalColumns += 1; // Promedio General
+      }
+
+      addMergedRow(`Materia ${index + 1} de ${subjectSections.length}: ${section.nombre}`, 'sectionTitle');
+      addMergedRow(`Registros en esta materia: ${section.rows.length}`, 'sectionInfo');
+
+      // Actualizar merges para esta sección
+      const lastMergeIdx = merges.length - 1;
+      merges[lastMergeIdx - 1].e.c = sectionTotalColumns - 1;
+      merges[lastMergeIdx].e.c = sectionTotalColumns - 1;
+
+      const headerRowStart = worksheetData.length;
+      const headerRows = [
+        Array(sectionTotalColumns).fill(''),
+        Array(sectionTotalColumns).fill(''),
+        Array(sectionTotalColumns).fill(''),
+      ];
+
+      ['Identificación', 'Estudiante', 'Materia'].forEach((label, idx) => {
+        headerRows[0][idx] = label;
+        merges.push({
+          s: { r: headerRowStart, c: idx },
+          e: { r: headerRowStart + 2, c: idx },
+        });
+      });
+
+      let currentCol = 3;
+      filteredPeriodsForSection.forEach(periodGroup => {
+        periodGroup.subPeriods.forEach(subPeriodGroup => {
+          headerRows[1][currentCol] = subPeriodGroup.subPeriodoNombre;
+          merges.push({
+            s: { r: headerRowStart + 1, c: currentCol },
+            e: { r: headerRowStart + 1, c: currentCol + 1 },
+          });
+          headerRows[2][currentCol] = 'Prom. Sub';
+          headerRows[2][currentCol + 1] = 'Prom. Pond. Sub';
+          currentCol += 2;
+        });
+        headerRows[2][currentCol] = 'Prom. Período';
+        headerRows[2][currentCol + 1] = 'Prom. Pond. Período';
+        currentCol += 2;
+      });
+
+      if (filteredPeriodsForSection.length > 1) {
+        const generalColIndex = sectionTotalColumns - 1;
+        headerRows[0][generalColIndex] = 'Promedio General';
+        merges.push({
+          s: { r: headerRowStart, c: generalColIndex },
+          e: { r: headerRowStart + 2, c: generalColIndex },
+        });
+      }
+
+      headerRows.forEach((row, offset) => {
+        const rowIndex = worksheetData.length;
+        worksheetData.push(row);
+        headerRowIndices.push(rowIndex);
+        rowHeights[rowIndex] = { hpt: offset === 2 ? 30 : 22 };
+      });
+
+      section.rows.forEach(row => {
+        const rowData = [row.identificacion, row.estudiante, row.materia];
+
+        filteredPeriodsForSection.forEach(periodGroup => {
+          periodGroup.subPeriods.forEach(subPeriodGroup => {
+            const promedioSubPeriodo = row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+            if (promedioSubPeriodo) {
+              rowData.push(parseFloat(promedioSubPeriodo.promedio.toFixed(2)));
+              rowData.push(parseFloat(promedioSubPeriodo.promedioPonderado.toFixed(2)));
+            } else {
+              rowData.push('-', '-');
+            }
+          });
+          const periodoId = periodGroup.periodoId;
+          let promedioPeriodo = null;
+          if (periodoId && row.promediosPeriodo) {
+            promedioPeriodo = row.promediosPeriodo[periodoId];
+          }
+          if (!promedioPeriodo && row.promediosPeriodo) {
+            promedioPeriodo = Object.values(row.promediosPeriodo).find(
+              p => p.nombre === periodGroup.periodoNombre
+            );
+          }
+          if (promedioPeriodo) {
+            rowData.push(parseFloat(promedioPeriodo.promedio.toFixed(2)));
+            rowData.push(parseFloat(promedioPeriodo.promedioPonderado.toFixed(2)));
+          } else {
+            rowData.push('-', '-');
+          }
+        });
+
+        if (filteredPeriodsForSection.length > 1) {
+          rowData.push(
+            row.promedioGeneral !== null && row.promedioGeneral !== undefined
+              ? parseFloat(row.promedioGeneral.toFixed(2))
+              : '-'
+          );
+        }
+
+        const rowIndex = worksheetData.length;
+        worksheetData.push(rowData);
+        dataRowIndices.push(rowIndex);
+        rowHeights[rowIndex] = { hpt: 22 };
+      });
+
+      worksheetData.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+    ws['!merges'] = merges;
+    ws['!rows'] = rowHeights;
+
+    const columnWidthMap = {
+      identificacion: 18,
+      estudiante: 22,
+      materia: 20,
+      subAverage: 13,
+      subWeighted: 15,
+      periodAverage: 13,
+      periodWeighted: 15,
+      generalAverage: 15,
+    };
+    ws['!cols'] = columnTypes.map(type => ({ wch: columnWidthMap[type] || 12 }));
+
+    const borderStyle = {
+      style: 'thin',
+      color: { rgb: 'E5E7EB' },
+    };
+    const baseBorder = {
+      top: borderStyle,
+      bottom: borderStyle,
+      left: borderStyle,
+      right: borderStyle,
+    };
+
+    const columnStyleMap = {
+      identificacion: { headerFill: 'E5E7EB', dataFill: 'F9FAFB', align: 'left' },
+      estudiante: { headerFill: 'E5E7EB', dataFill: 'F9FAFB', align: 'left' },
+      materia: { headerFill: 'E5E7EB', dataFill: 'F9FAFB', align: 'left' },
+      subAverage: { headerFill: 'BFDBFE', dataFill: 'DBEAFE', align: 'center' },
+      subWeighted: { headerFill: '93C5FD', dataFill: 'CFE1FF', align: 'center' },
+      periodAverage: { headerFill: 'DDD6FE', dataFill: 'EDE9FE', align: 'center' },
+      periodWeighted: { headerFill: 'C4B5FD', dataFill: 'DDD6FE', align: 'center' },
+      generalAverage: { headerFill: 'FDE68A', dataFill: 'FEF3C7', align: 'center' },
+    };
+
+    const buildHeaderStyle = (type) => ({
+      font: { bold: true, color: { rgb: '111827' }, sz: 10 },
+      alignment: {
+        horizontal: columnStyleMap[type]?.align || 'center',
+        vertical: 'center',
+        wrapText: true,
+      },
+      border: baseBorder,
+      fill: {
+        patternType: 'solid',
+        fgColor: { rgb: columnStyleMap[type]?.headerFill || 'E5E7EB' },
+      },
+    });
+
+    const buildDataStyle = (type, value) => {
+      const baseStyle = {
+        font: { color: { rgb: '111827' }, sz: 10 },
+        alignment: {
+          horizontal: columnStyleMap[type]?.align || 'center',
+          vertical: 'center',
+          wrapText: true,
+        },
+        border: baseBorder,
+        fill: {
+          patternType: 'solid',
+          fgColor: { rgb: columnStyleMap[type]?.dataFill || 'FFFFFF' },
+        },
+      };
+
+      const isScoreColumn = ['subAverage', 'subWeighted', 'periodAverage', 'periodWeighted', 'generalAverage'].includes(type);
+      if (isScoreColumn && typeof value === 'number') {
+        let color = '111827';
+        if (value >= 7) color = '15803D';
+        else if (value >= 5) color = 'B45309';
+        else color = 'B91C1C';
+        baseStyle.font = { ...baseStyle.font, bold: true, color: { rgb: color } };
+      }
+
+      return baseStyle;
+    };
+
+    const applyStyle = (rowIndex, colIndex, style) => {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+      if (!ws[address]) return;
+      ws[address].s = style;
+    };
+
+    headerRowIndices.forEach(rowIndex => {
+      columnTypes.forEach((type, colIndex) => {
+        applyStyle(rowIndex, colIndex, buildHeaderStyle(type));
+      });
+    });
+
+    dataRowIndices.forEach(rowIndex => {
+      columnTypes.forEach((type, colIndex) => {
+        const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+        const cell = ws[cellAddress];
+        if (!cell) return;
+        const numericValue = cell.t === 'n' ? cell.v : null;
+        applyStyle(rowIndex, colIndex, buildDataStyle(type, numericValue));
+      });
+    });
+
+    const mergedRowStyles = {
+      institution: {
+        font: { bold: true, sz: 14, color: { rgb: '111827' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+      },
+      reportTitle: {
+        font: { bold: true, sz: 13, color: { rgb: '111827' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+      },
+      reportSubtitle: {
+        font: { sz: 11, color: { rgb: '374151' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+      },
+      sectionTitle: {
+        font: { bold: true, sz: 12, color: { rgb: '111827' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        fill: { patternType: 'solid', fgColor: { rgb: 'F3F4F6' } },
+        border: baseBorder,
+      },
+      sectionInfo: {
+        font: { sz: 10, color: { rgb: '4B5563' } },
+        alignment: { horizontal: 'left', vertical: 'center' },
+        fill: { patternType: 'solid', fgColor: { rgb: 'F9FAFB' } },
+        border: baseBorder,
+      },
+    };
+
+    mergedRows.forEach(({ row, type }) => {
+      const address = XLSX.utils.encode_cell({ r: row, c: 0 });
+      if (!ws[address]) return;
+      ws[address].s = mergedRowStyles[type] || {
+        font: { bold: true },
+        alignment: { horizontal: 'left', vertical: 'center' },
+      };
+    });
+
+    return ws;
   };
 
   const generateAttendanceExcel = (data) => {
@@ -982,23 +1338,33 @@ const Reports = () => {
   };
 
   const generateAveragesPDF = async (data) => {
-    if (!data.averages) return;
+    if (!data.averages || !data.periodsGrouped) return;
 
-    const doc = new jsPDF();
-    let yPos = 20;
+    const doc = new jsPDF('landscape', undefined, 'a2');
+    
+    // Márgenes de 0.5 cm
+    const margin = 14.18;
+    const marginLeft = margin;
+    const marginRight = margin;
+    const marginTop = margin;
+    const marginBottom = margin;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const contentWidth = pageWidth - marginLeft - marginRight;
+    
+    let cursorY = marginTop;
 
     // Logo y nombre de la institución
     if (institution) {
-      const logoSize = 18; // Tamaño del logo (18px de alto, proporcional al texto)
-      const logoWidth = 18; // Ancho del logo
-      const logoSpacing = 5; // Espacio entre logo y texto
+      const logoSize = 18;
+      const logoWidth = 18;
+      const logoSpacing = 5;
       
       if (institution.logo) {
         try {
           let imgData = institution.logo;
           let imgFormat = 'PNG';
           
-          // Detectar formato de imagen
           if (institution.logo.startsWith('data:image/')) {
             const matches = institution.logo.match(/data:image\/(\w+);base64,/);
             if (matches) {
@@ -1009,7 +1375,7 @@ const Reports = () => {
             imgData = institution.logo;
           }
           
-          doc.addImage(imgData, imgFormat, marginLeft, yPos, logoWidth, logoSize);
+          doc.addImage(imgData, imgFormat, marginLeft, cursorY, logoWidth, logoSize);
         } catch (error) {
           console.error('Error al cargar logo:', error);
         }
@@ -1017,31 +1383,174 @@ const Reports = () => {
       doc.setFontSize(14);
       doc.setFont(undefined, 'bold');
       const institutionX = institution.logo ? marginLeft + logoWidth + logoSpacing : marginLeft + contentWidth / 2;
-      const textY = yPos + (logoSize / 2) + 2; // Centrar verticalmente con el logo
+      const textY = cursorY + (logoSize / 2) + 2;
       doc.text(institution.nombre || 'Institución', institutionX, textY, { align: institution.logo ? 'left' : 'center' });
-      yPos += Math.max(logoSize, 18) + 5; // Ajustar posición Y según el tamaño del logo o texto
+      cursorY += Math.max(logoSize, 18) + 5;
     }
 
     doc.setFontSize(16);
     doc.setFont(undefined, 'bold');
-    doc.text('Reporte de Promedios', marginLeft + contentWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
+    doc.text('Reporte de Promedios', marginLeft + contentWidth / 2, cursorY, { align: 'center' });
+    cursorY += 8;
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Total de registros: ${data.total || 0} | Curso: ${data.curso || 'N/A'}`, marginLeft + contentWidth / 2, cursorY, { align: 'center' });
+    cursorY += 10;
 
-    const head = [['Estudiante', 'Identificación', 'Curso', 'Materia', 'Promedio', 'Estado']];
-    const body = data.averages.map(avg => [
-      avg.estudiante,
-      avg.identificacion,
-      avg.curso,
-      avg.materia,
-      avg.promedio.toFixed(2),
-      avg.estado
-    ]);
+    const subjectsMap = new Map();
+    data.averages.forEach((row) => {
+      const key = row.materiaId || row.materia || `materia-${subjectsMap.size}`;
+      if (!subjectsMap.has(key)) {
+        subjectsMap.set(key, {
+          key,
+          nombre: row.materia || 'Materia',
+          rows: [],
+        });
+      }
+      subjectsMap.get(key).rows.push(row);
+    });
+    const subjectSections = Array.from(subjectsMap.values()).filter((section) => section.rows.length > 0);
 
-    autoTable(doc, {
-      head: head,
-      body: body,
-      startY: yPos,
-      margin: { left: marginLeft, right: marginRight, top: yPos, bottom: marginBottom },
+    if (subjectSections.length === 0) {
+      doc.setFontSize(12);
+      doc.text('No existen promedios para los filtros seleccionados.', marginLeft, cursorY);
+      doc.save(`reporte_promedios_${new Date().toISOString().split('T')[0]}.pdf`);
+      return;
+    }
+
+    const buildHeadRows = (periodGroup, showGeneralColumn) => {
+      const headRows = [];
+      const periodColumns = periodGroup.subPeriods.reduce((sum, sub) => sum + 2, 0) + 2; // 2 promedios sub + 2 promedios período
+
+      const firstRow = [
+        { content: 'Identificación', rowSpan: 3, styles: { fillColor: [209, 213, 219] } },
+        { content: 'Estudiante', rowSpan: 3, styles: { fillColor: [209, 213, 219] } },
+        { content: 'Materia', rowSpan: 3, styles: { fillColor: [209, 213, 219] } },
+        { content: periodGroup.periodoNombre, colSpan: periodColumns, styles: { fillColor: [156, 163, 175] } },
+      ];
+
+      if (showGeneralColumn) {
+        firstRow.push({
+          content: 'Prom. General',
+          rowSpan: 3,
+          styles: { fillColor: [253, 224, 71] },
+        });
+      }
+
+      headRows.push(firstRow);
+
+      const secondRow = periodGroup.subPeriods.map((subPeriodGroup) => ({
+        content: subPeriodGroup.subPeriodoNombre,
+        colSpan: 2,
+        styles: { fillColor: [229, 231, 235] },
+      }));
+      secondRow.push({
+        content: 'Promedio del período',
+        colSpan: 2,
+        styles: { fillColor: [229, 231, 235] },
+      });
+      headRows.push(secondRow);
+
+      const thirdRow = [];
+      periodGroup.subPeriods.forEach((subPeriodGroup) => {
+        thirdRow.push({ content: 'Prom. Sub', styles: { fillColor: [191, 219, 254] } });
+        thirdRow.push({ content: 'Prom. Pond. Sub', styles: { fillColor: [191, 219, 254] } });
+      });
+      thirdRow.push({ content: 'Prom. Período', styles: { fillColor: [221, 214, 254] } });
+      thirdRow.push({ content: 'Prom. Pond. Período', styles: { fillColor: [221, 214, 254] } });
+      headRows.push(thirdRow);
+
+      return headRows;
+    };
+
+    const buildBodyRow = (row, periodGroup, showGeneralColumn) => {
+      const rowData = [row.identificacion || '-', row.estudiante || '-', row.materia || '-'];
+
+      periodGroup.subPeriods.forEach((subPeriodGroup) => {
+        const promedioSubPeriodo = row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+        rowData.push(promedioSubPeriodo ? promedioSubPeriodo.promedio.toFixed(2) : '-');
+        rowData.push(promedioSubPeriodo ? promedioSubPeriodo.promedioPonderado.toFixed(2) : '-');
+      });
+
+      const periodoId = periodGroup.periodoId;
+      let promedioPeriodo = null;
+      if (periodoId && row.promediosPeriodo) {
+        promedioPeriodo = row.promediosPeriodo[periodoId];
+      }
+      if (!promedioPeriodo && row.promediosPeriodo) {
+        promedioPeriodo = Object.values(row.promediosPeriodo).find(
+          (p) => p.nombre === periodGroup.periodoNombre
+        );
+      }
+      rowData.push(promedioPeriodo ? promedioPeriodo.promedio.toFixed(2) : '-');
+      rowData.push(promedioPeriodo ? promedioPeriodo.promedioPonderado.toFixed(2) : '-');
+
+      if (showGeneralColumn) {
+        rowData.push(
+          row.promedioGeneral !== null && row.promedioGeneral !== undefined
+            ? row.promedioGeneral.toFixed(2)
+            : '-'
+        );
+      }
+
+      return rowData;
+    };
+
+    const ensureSpace = (requiredSpace) => {
+      if (cursorY + requiredSpace > pageHeight - marginBottom) {
+        doc.addPage();
+        cursorY = marginTop;
+      }
+    };
+
+    subjectSections.forEach((section, sectionIndex) => {
+      ensureSpace(20);
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'bold');
+      doc.text(
+        `Materia ${sectionIndex + 1} de ${subjectSections.length}: ${section.nombre}`,
+        marginLeft,
+        cursorY
+      );
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Registros en esta materia: ${section.rows.length}`, marginLeft, cursorY + 5);
+      cursorY += 12;
+
+      // Filtrar periodsGrouped para esta materia
+      const filteredPeriodsForSection = data.periodsGrouped.map(periodGroup => ({
+        ...periodGroup,
+        subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
+          section.rows.some(row => row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId])
+        )
+      })).filter(p => p.subPeriods.length > 0);
+
+      filteredPeriodsForSection.forEach((periodGroup, periodIdx) => {
+        const showGeneralColumn = !selectedPeriod && filteredPeriodsForSection.length > 1;
+        const headRows = buildHeadRows(periodGroup, showGeneralColumn);
+        const bodyRows = section.rows.map((row) => buildBodyRow(row, periodGroup, showGeneralColumn));
+
+        autoTable(doc, {
+          head: headRows,
+          body: bodyRows,
+          startY: cursorY,
+          margin: { left: marginLeft, right: marginRight, top: cursorY, bottom: marginBottom },
+          styles: { fontSize: 7 },
+          headStyles: { fontSize: 7, fontStyle: 'bold' },
+          columnStyles: {
+            0: { cellWidth: 30 },
+            1: { cellWidth: 50 },
+            2: { cellWidth: 40 },
+          },
+        });
+
+        cursorY = doc.lastAutoTable.finalY + 5;
+        ensureSpace(15);
+      });
+
+      if (sectionIndex < subjectSections.length - 1) {
+        cursorY += 10;
+      }
     });
 
     doc.save(`reporte_promedios_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -1674,47 +2183,165 @@ const Reports = () => {
           )}
 
           {/* Reporte de Promedios */}
-          {reportType === 'averages' && reportData.averages && (
-            <div className="space-y-6">
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-2xl font-bold mb-4">Reporte de Promedios</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estudiante</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Identificación</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Curso</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Materia</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Promedio</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {reportData.averages.map((avg, index) => (
-                        <tr key={index}>
-                          <td className="px-6 py-4 whitespace-nowrap">{avg.estudiante}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">{avg.identificacion}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">{avg.curso}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">{avg.materia}</td>
-                          <td className={`px-6 py-4 whitespace-nowrap font-semibold ${avg.promedio >= 7 ? 'text-green-600' : 'text-red-600'}`}>
-                            {avg.promedio.toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs rounded-full ${avg.estado === 'Aprobado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {avg.estado}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {reportType === 'averages' && reportData && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-2xl font-bold mb-2">Reporte de Promedios</h2>
+              {reportData.averages && Array.isArray(reportData.periodsGrouped) ? (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Total de registros: <span className="font-semibold">{reportData.total || 0}</span> | Curso: <span className="font-semibold">{reportData.curso || 'N/A'}</span>
+                    {averagesSubjectSections.length > 1 && <> | Materias mostradas: <span className="font-semibold">{averagesSubjectSections.length}</span></>}
+                  </p>
+                  {(!reportData.averages || reportData.averages.length === 0 || !reportData.periodsGrouped || reportData.periodsGrouped.length === 0) ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-lg">No se encontraron promedios para los filtros seleccionados.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {averagesSubjectSections.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-lg">No hay promedios para las materias seleccionadas.</p>
+                        </div>
+                      ) : (
+                        averagesSubjectSections.map((section, sectionIndex) => {
+                          // Filtrar periodsGrouped para esta materia (solo subperíodos con datos)
+                          const filteredPeriodsForSection = reportData.periodsGrouped.map(periodGroup => ({
+                            ...periodGroup,
+                            subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
+                              section.rows.some(row => row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId])
+                            )
+                          })).filter(p => p.subPeriods.length > 0);
+
+                          return (
+                            <div key={section.key || sectionIndex} className="mb-10 last:mb-0">
+                              <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                <p className="text-xs uppercase text-gray-500">Materia {sectionIndex + 1} de {averagesSubjectSections.length}</p>
+                                <p className="text-lg font-semibold text-gray-900">{section.nombre}</p>
+                                <p className="text-xs text-gray-500">Registros en esta materia: {section.rows.length}</p>
+                              </div>
+                              <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-gray-300 rounded-lg">
+                                <table className="min-w-full border-collapse">
+                                  <thead className="bg-gray-100 sticky top-0 z-20">
+                                    <tr>
+                                      <th rowSpan="3" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 sticky left-0 bg-gray-100 z-30 min-w-[140px] shadow-sm">Identificación</th>
+                                      <th rowSpan="3" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 sticky left-[140px] bg-gray-100 z-30 min-w-[180px] shadow-sm">Estudiante</th>
+                                      <th rowSpan="3" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 sticky left-[320px] bg-gray-100 z-30 min-w-[150px] shadow-sm">Materia</th>
+                                      {filteredPeriodsForSection && filteredPeriodsForSection.map((periodGroup, periodIdx) => {
+                                        const totalColumns = periodGroup.subPeriods.reduce((sum, subPeriod) => sum + 2, 0) + 2;
+                                        return (
+                                          <th key={periodIdx} rowSpan="1" colSpan={totalColumns} className="px-3 py-2 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-200">
+                                            {periodGroup.periodoNombre}
+                                          </th>
+                                        );
+                                      })}
+                                      {(!selectedPeriod || selectedPeriod === '') && filteredPeriodsForSection && filteredPeriodsForSection.length > 1 && (
+                                        <th rowSpan="3" className="px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-300">Promedio General</th>
+                                      )}
+                                    </tr>
+                                    <tr>
+                                      {filteredPeriodsForSection && filteredPeriodsForSection.map((periodGroup, periodIdx) => (
+                                        <React.Fragment key={`period-${periodIdx}`}>
+                                          {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
+                                            return (
+                                              <React.Fragment key={`${periodIdx}-${subPeriodIdx}`}>
+                                                <th colSpan="2" className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase border-r border-gray-300 bg-gray-100">
+                                                  {subPeriodGroup.subPeriodoNombre}
+                                                </th>
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                          <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-50" title="Promedio del período">Prom. Período</th>
+                                          <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-100" title={`Promedio ponderado del período (${periodGroup.periodoPonderacion}%)`}>Prom. Pond. Período</th>
+                                        </React.Fragment>
+                                      ))}
+                                    </tr>
+                                    <tr>
+                                      {filteredPeriodsForSection && filteredPeriodsForSection.map((periodGroup, periodIdx) => (
+                                        <React.Fragment key={`period-header-${periodIdx}`}>
+                                          {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => (
+                                            <React.Fragment key={`subperiod-header-${periodIdx}-${subPeriodIdx}`}>
+                                              <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-50">Prom. Sub</th>
+                                              <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-100">Prom. Pond. Sub</th>
+                                            </React.Fragment>
+                                          ))}
+                                        </React.Fragment>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="bg-white">
+                                    {section.rows.map((row, index) => (
+                                      <tr key={index} className={`hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                        <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-0 bg-white z-10 text-sm shadow-sm">{row.identificacion}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-[140px] bg-white z-10 font-medium text-sm shadow-sm">{row.estudiante}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-[320px] bg-white z-10 font-medium text-sm shadow-sm">{row.materia}</td>
+                                        {filteredPeriodsForSection && filteredPeriodsForSection.map((periodGroup, periodIdx) => (
+                                          <React.Fragment key={`period-data-${periodIdx}`}>
+                                            {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
+                                              const promedioSubPeriodo = row.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+                                              return (
+                                                <React.Fragment key={`subperiod-data-${periodIdx}-${subPeriodIdx}`}>
+                                                  <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-50">
+                                                    {promedioSubPeriodo ? (<span className={`font-bold text-sm ${promedioSubPeriodo.promedio >= 7 ? 'text-green-600' : promedioSubPeriodo.promedio >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{promedioSubPeriodo.promedio.toFixed(2)}</span>) : (<span className="text-gray-300 text-xs">-</span>)}
+                                                  </td>
+                                                  <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-100">
+                                                    {promedioSubPeriodo ? (<span className={`font-bold text-sm ${promedioSubPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioSubPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{promedioSubPeriodo.promedioPonderado.toFixed(2)}</span>) : (<span className="text-gray-300 text-xs">-</span>)}
+                                                  </td>
+                                                </React.Fragment>
+                                              );
+                                            })}
+                                            {(() => {
+                                              const periodoId = periodGroup.periodoId;
+                                              let promedioPeriodo = null;
+                                              if (periodoId && row.promediosPeriodo) {
+                                                promedioPeriodo = row.promediosPeriodo[periodoId];
+                                              }
+                                              if (!promedioPeriodo && row.promediosPeriodo) {
+                                                const periodoEncontrado = Object.values(row.promediosPeriodo).find(
+                                                  p => p.nombre === periodGroup.periodoNombre
+                                                );
+                                                if (periodoEncontrado) {
+                                                  promedioPeriodo = periodoEncontrado;
+                                                }
+                                              }
+                                              return (
+                                                <>
+                                                  <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-50">
+                                                    {promedioPeriodo ? (<span className={`font-bold text-sm ${promedioPeriodo.promedio >= 7 ? 'text-green-600' : promedioPeriodo.promedio >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{promedioPeriodo.promedio.toFixed(2)}</span>) : (<span className="text-gray-300 text-xs">-</span>)}
+                                                  </td>
+                                                  <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-100">
+                                                    {promedioPeriodo ? (<span className={`font-bold text-sm ${promedioPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{promedioPeriodo.promedioPonderado.toFixed(2)}</span>) : (<span className="text-gray-300 text-xs">-</span>)}
+                                                  </td>
+                                                </>
+                                              );
+                                            })()}
+                                          </React.Fragment>
+                                        ))}
+                                        {(!selectedPeriod || selectedPeriod === '') && filteredPeriodsForSection && filteredPeriodsForSection.length > 1 && (
+                                          <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-50">
+                                            {row.promedioGeneral !== null && row.promedioGeneral !== undefined ? (<span className={`font-bold text-base ${row.promedioGeneral >= 7 ? 'text-green-600' : row.promedioGeneral >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{row.promedioGeneral.toFixed(2)}</span>) : (<span className="text-gray-300 text-sm">-</span>)}
+                                          </td>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p className="text-lg">No se pudo cargar el reporte. Por favor, intente nuevamente.</p>
                 </div>
-              </div>
+              )}
 
               {/* Gráfico de distribución de promedios */}
               {reportData.chartData && (
-                <div className="bg-white shadow rounded-lg p-6">
+                <div className="bg-white shadow rounded-lg p-6 mt-6">
                   <h3 className="text-xl font-semibold mb-4">Distribución de Promedios</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={reportData.chartData}>
