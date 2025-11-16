@@ -18,9 +18,11 @@ const Reports = () => {
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [periods, setPeriods] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -149,26 +151,88 @@ const Reports = () => {
     } else {
       setSubjects([]);
     }
-  }, [selectedCourse]);
+  }, [selectedCourse, selectedTeacher]);
+
+  useEffect(() => {
+    if (selectedTeacher && (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA')) {
+      fetchTeacherCoursesAndSubjects(selectedTeacher);
+      setSelectedCourse('');
+      setSelectedSubject('');
+    } else if (!selectedTeacher && (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA')) {
+      // Si se deselecciona el docente, recargar todos los cursos
+      const reloadCourses = async () => {
+        try {
+          const response = await api.get('/courses?limit=1000');
+          setCourses(response.data.data || []);
+        } catch (error) {
+          console.error('Error al recargar cursos:', error);
+        }
+      };
+      reloadCourses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTeacher]);
 
   const fetchInitialData = async () => {
     try {
-      const [coursesRes, periodsRes] = await Promise.all([
+      const promises = [
         api.get('/courses?limit=1000'),
         api.get('/periods?limit=1000'),
-      ]);
-      setCourses(coursesRes.data.data || []);
-      setPeriods(periodsRes.data.data || []);
+      ];
+      
+      // Solo obtener docentes si es ADMIN o SECRETARIA
+      if (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA') {
+        promises.push(api.get('/teachers?limit=1000'));
+      }
+      
+      const results = await Promise.all(promises);
+      setCourses(results[0].data.data || []);
+      setPeriods(results[1].data.data || []);
+      
+      if (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA') {
+        setTeachers(results[2].data.data || []);
+      }
+      
+      // Si es PROFESOR, establecer automáticamente su docenteId
+      if (user?.rol === 'PROFESOR' && user?.teacher?.id) {
+        setSelectedTeacher(user.teacher.id);
+        // Filtrar cursos y materias del profesor
+        await fetchTeacherCoursesAndSubjects(user.teacher.id);
+      }
     } catch (error) {
       console.error('Error al cargar datos iniciales:', error);
       toast.error('Error al cargar datos');
     }
   };
 
+  const fetchTeacherCoursesAndSubjects = async (teacherId) => {
+    try {
+      const response = await api.get(`/assignments?docenteId=${teacherId}&limit=1000`);
+      const assignments = response.data.data || [];
+      
+      // Obtener cursos únicos del profesor
+      const teacherCourses = [...new Map(assignments.map(a => [a.curso.id, a.curso])).values()];
+      setCourses(teacherCourses);
+      
+      // Si hay un curso seleccionado, actualizar materias
+      if (selectedCourse) {
+        const courseAssignments = assignments.filter(a => a.curso.id === selectedCourse);
+        const subjectsList = [...new Map(courseAssignments.map(a => [a.materia.id, a.materia])).values()];
+        setSubjects(subjectsList);
+      }
+    } catch (error) {
+      console.error('Error al cargar cursos y materias del profesor:', error);
+    }
+  };
+
   const fetchSubjects = async () => {
     if (!selectedCourse) return;
     try {
-      const response = await api.get(`/assignments?cursoId=${selectedCourse}`);
+      let url = `/assignments?cursoId=${selectedCourse}`;
+      if (selectedTeacher) {
+        url += `&docenteId=${selectedTeacher}`;
+      }
+      const response = await api.get(url);
       const assignments = response.data.data || [];
       const subjectsList = [...new Map(assignments.map(a => [a.materia.id, a.materia])).values()];
       setSubjects(subjectsList);
@@ -189,6 +253,7 @@ const Reports = () => {
         cursoId: selectedCourse,
         materiaId: selectedSubject || undefined,
         periodoId: selectedPeriod || undefined,
+        docenteId: selectedTeacher || undefined,
         fechaDesde: dateFrom || undefined,
         fechaHasta: dateTo || undefined,
       };
@@ -1746,6 +1811,31 @@ const Reports = () => {
       <div className="bg-white shadow rounded-lg p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Filtros</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Filtro de Docente - Solo para ADMIN y SECRETARIA */}
+          {(user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Docente
+              </label>
+              <select
+                value={selectedTeacher}
+                onChange={(e) => {
+                  setSelectedTeacher(e.target.value);
+                  setSelectedCourse('');
+                  setSelectedSubject('');
+                }}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+              >
+                <option value="">Todos los docentes</option>
+                {teachers.map(teacher => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.user?.nombre} {teacher.user?.apellido}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Curso <span className="text-red-500">*</span>

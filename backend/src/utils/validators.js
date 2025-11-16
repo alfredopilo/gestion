@@ -38,6 +38,7 @@ export const updateUserSchema = z.object({
   estado: z.enum(['ACTIVO', 'INACTIVO', 'SUSPENDIDO']).optional(),
   institucionId: z.string().uuid().optional(),
   instituciones: z.array(z.string().uuid()).optional(), // Array de IDs de instituciones adicionales
+  password: z.string().min(6).optional(), // Contraseña opcional para actualización
 });
 
 // Schema para actualizar perfil del usuario autenticado (no puede cambiar estado ni institucionId)

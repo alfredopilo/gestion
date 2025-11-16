@@ -6,7 +6,7 @@ import { getCourseInstitutionFilter } from '../utils/institutionFilter.js';
  */
 export const getGradesReport = async (req, res, next) => {
   try {
-    const { cursoId, materiaId, periodoId, fechaDesde, fechaHasta } = req.query;
+    const { cursoId, materiaId, periodoId, fechaDesde, fechaHasta, docenteId } = req.query;
 
     if (!cursoId) {
       return res.status(400).json({
@@ -29,6 +29,43 @@ export const getGradesReport = async (req, res, next) => {
       });
     }
 
+    // Si es PROFESOR y no se proporciona docenteId, usar su propio ID
+    let finalDocenteId = docenteId;
+    if (!finalDocenteId && req.user?.rol === 'PROFESOR') {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user.id },
+        select: { id: true },
+      });
+      if (teacher) {
+        finalDocenteId = teacher.id;
+      }
+    }
+
+    // Si hay docenteId, filtrar por las materias asignadas a ese docente en el curso
+    let materiaIdsFilter = null;
+    if (finalDocenteId) {
+      const assignments = await prisma.courseSubjectAssignment.findMany({
+        where: {
+          cursoId: cursoId,
+          docenteId: finalDocenteId,
+        },
+        select: { materiaId: true },
+      });
+      const assignedMateriaIds = assignments.map(a => a.materiaId);
+      
+      if (assignedMateriaIds.length === 0) {
+        // Si el docente no tiene asignaciones en este curso, devolver vacío
+        return res.json({
+          grades: [],
+          periodsGrouped: [],
+          total: 0,
+          curso: course.nombre,
+        });
+      }
+      
+      materiaIdsFilter = assignedMateriaIds;
+    }
+
     // Construir filtros
     const whereClause = {
       estudiante: {
@@ -38,6 +75,18 @@ export const getGradesReport = async (req, res, next) => {
 
     if (materiaId) {
       whereClause.materiaId = materiaId;
+      // Si hay filtro de docente, verificar que la materia esté asignada al docente
+      if (materiaIdsFilter && !materiaIdsFilter.includes(materiaId)) {
+        return res.json({
+          grades: [],
+          periodsGrouped: [],
+          total: 0,
+          curso: course.nombre,
+        });
+      }
+    } else if (materiaIdsFilter) {
+      // Si hay filtro de docente pero no materia específica, filtrar por todas las materias del docente
+      whereClause.materiaId = { in: materiaIdsFilter };
     }
 
     if (periodoId) {
@@ -406,7 +455,7 @@ export const getGradesReport = async (req, res, next) => {
  */
 export const getAveragesReport = async (req, res, next) => {
   try {
-    const { cursoId, materiaId, periodoId, fechaDesde, fechaHasta } = req.query;
+    const { cursoId, materiaId, periodoId, fechaDesde, fechaHasta, docenteId } = req.query;
 
     if (!cursoId) {
       return res.status(400).json({
@@ -429,6 +478,44 @@ export const getAveragesReport = async (req, res, next) => {
       });
     }
 
+    // Si es PROFESOR y no se proporciona docenteId, usar su propio ID
+    let finalDocenteId = docenteId;
+    if (!finalDocenteId && req.user?.rol === 'PROFESOR') {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user.id },
+        select: { id: true },
+      });
+      if (teacher) {
+        finalDocenteId = teacher.id;
+      }
+    }
+
+    // Si hay docenteId, filtrar por las materias asignadas a ese docente en el curso
+    let materiaIdsFilter = null;
+    if (finalDocenteId) {
+      const assignments = await prisma.courseSubjectAssignment.findMany({
+        where: {
+          cursoId: cursoId,
+          docenteId: finalDocenteId,
+        },
+        select: { materiaId: true },
+      });
+      const assignedMateriaIds = assignments.map(a => a.materiaId);
+      
+      if (assignedMateriaIds.length === 0) {
+        // Si el docente no tiene asignaciones en este curso, devolver vacío
+        return res.json({
+          averages: [],
+          periodsGrouped: [],
+          chartData: [],
+          total: 0,
+          curso: course.nombre,
+        });
+      }
+      
+      materiaIdsFilter = assignedMateriaIds;
+    }
+
     // Construir filtros
     const whereClause = {
       estudiante: {
@@ -438,6 +525,19 @@ export const getAveragesReport = async (req, res, next) => {
 
     if (materiaId) {
       whereClause.materiaId = materiaId;
+      // Si hay filtro de docente, verificar que la materia esté asignada al docente
+      if (materiaIdsFilter && !materiaIdsFilter.includes(materiaId)) {
+        return res.json({
+          averages: [],
+          periodsGrouped: [],
+          chartData: [],
+          total: 0,
+          curso: course.nombre,
+        });
+      }
+    } else if (materiaIdsFilter) {
+      // Si hay filtro de docente pero no materia específica, filtrar por todas las materias del docente
+      whereClause.materiaId = { in: materiaIdsFilter };
     }
 
     if (periodoId) {

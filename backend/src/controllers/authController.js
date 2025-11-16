@@ -63,7 +63,7 @@ export const login = async (req, res, next) => {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: user.id },
         include: {
-          cursos: {
+          courses: {
             include: { periodo: true },
           },
           course_subject_assignments: {
@@ -161,7 +161,7 @@ export const getProfile = async (req, res, next) => {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: user.id },
         include: {
-          cursos: {
+          courses: {
             include: { periodo: true },
           },
           course_subject_assignments: {

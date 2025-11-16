@@ -464,6 +464,12 @@ export const updateUser = async (req, res, next) => {
       userData.institucionId = primaryInstitutionIdFromList;
     }
 
+    // Si se proporciona contraseña, hashearla
+    if (userData.password) {
+      userData.passwordHash = await bcrypt.hash(userData.password, 10);
+      delete userData.password;
+    }
+
     // Actualizar el usuario (solo campos que no sean undefined)
     const updateData = {};
     Object.keys(userData).forEach(key => {

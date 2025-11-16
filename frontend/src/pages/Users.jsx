@@ -71,12 +71,11 @@ const Users = () => {
     e.preventDefault();
     try {
       if (editingUser) {
-        // Actualizar usuario (sin contraseña si no se proporciona)
+        // Actualizar usuario (incluir contraseña solo si se proporciona)
         const updateData = { ...formData };
-        if (!updateData.password) {
+        if (!updateData.password || updateData.password.trim() === '') {
           delete updateData.password;
         }
-        delete updateData.password; // No se puede actualizar la contraseña desde aquí
         await api.put(`/users/${editingUser.id}`, updateData);
         toast.success('Usuario actualizado exitosamente');
       } else {
@@ -618,23 +617,23 @@ const Users = () => {
                 </div>
               </div>
 
-              {!editingUser && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Contraseña <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    required={!editingUser}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="Mínimo 6 caracteres"
-                    minLength={6}
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Mínimo 6 caracteres</p>
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {editingUser ? 'Nueva Contraseña' : 'Contraseña'} {!editingUser && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder={editingUser ? "Dejar vacío para mantener la contraseña actual" : "Mínimo 6 caracteres"}
+                  minLength={editingUser ? 0 : 6}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {editingUser ? "Dejar vacío para mantener la contraseña actual" : "Mínimo 6 caracteres"}
+                </p>
+              </div>
 
               {editingUser && (
                 <div>

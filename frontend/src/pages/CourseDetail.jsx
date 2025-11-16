@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { selectedInstitutionId } = useAuth();
+  const { selectedInstitutionId, user } = useAuth();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -52,11 +52,12 @@ const CourseDetail = () => {
   }, [id, selectedInstitutionId]);
 
   useEffect(() => {
-    if (course?.id) {
+    // Solo cargar estudiantes disponibles si el usuario es ADMIN o SECRETARIA
+    if (course?.id && (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA')) {
       fetchAvailableStudents();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [course?.id]);
+  }, [course?.id, user?.rol]);
 
   const fetchCourse = async () => {
     try {
@@ -81,6 +82,11 @@ const CourseDetail = () => {
   const fetchAvailableStudents = async () => {
     if (!course?.id) return;
     
+    // Solo permitir a ADMIN y SECRETARIA cargar estudiantes disponibles
+    if (user?.rol !== 'ADMIN' && user?.rol !== 'SECRETARIA') {
+      return;
+    }
+    
     try {
       // Incluir el cursoId para excluir estudiantes que ya están en este curso
       // Ya no necesitamos período, se usa el año escolar activo
@@ -90,7 +96,10 @@ const CourseDetail = () => {
       setFilteredStudents(students);
     } catch (error) {
       console.error('Error al cargar estudiantes disponibles:', error);
-      toast.error('Error al cargar estudiantes disponibles');
+      // Solo mostrar error si no es 403 (permisos)
+      if (error.response?.status !== 403) {
+        toast.error('Error al cargar estudiantes disponibles');
+      }
     }
   };
 
@@ -526,25 +535,27 @@ const handleDownloadTemplate = async () => {
               <h2 className="text-xl font-semibold">
                 Estudiantes ({course.estudiantes?.length || 0}{course.capacidad ? ` / ${course.capacidad}` : ''})
               </h2>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleOpenImportModal}
-                  className="bg-blue-100 text-blue-700 px-4 py-2 rounded-md hover:bg-blue-200 text-sm"
-                  disabled={importLoading}
-                >
-                  📥 Importar estudiantes
-                </button>
-                <button
-                  onClick={async () => {
-                    await fetchAvailableStudents();
-                    setShowStudentModal(true);
-                  }}
-                  className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 text-sm"
-                  disabled={course.capacidad && (course.estudiantes?.length || 0) >= course.capacidad}
-                >
-                  + Agregar Estudiante
-                </button>
-              </div>
+              {(user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA') && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleOpenImportModal}
+                    className="bg-blue-100 text-blue-700 px-4 py-2 rounded-md hover:bg-blue-200 text-sm"
+                    disabled={importLoading}
+                  >
+                    📥 Importar estudiantes
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await fetchAvailableStudents();
+                      setShowStudentModal(true);
+                    }}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 text-sm"
+                    disabled={course.capacidad && (course.estudiantes?.length || 0) >= course.capacidad}
+                  >
+                    + Agregar Estudiante
+                  </button>
+                </div>
+              )}
             </div>
             {course.estudiantes && course.estudiantes.length > 0 ? (
               <div className="overflow-x-auto">
