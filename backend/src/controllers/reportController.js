@@ -79,6 +79,22 @@ export const getGradesReport = async (req, res, next) => {
           select: {
             nombre: true,
             orden: true,
+            subPeriodo: {
+              select: {
+                id: true,
+                nombre: true,
+                orden: true,
+                ponderacion: true,
+                periodo: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    orden: true,
+                    ponderacion: true,
+                  },
+                },
+              },
+            },
           },
         },
         subPeriodo: {
@@ -111,13 +127,24 @@ export const getGradesReport = async (req, res, next) => {
       const estudianteNombre = `${grade.estudiante.user.nombre} ${grade.estudiante.user.apellido}`;
       const identificacion = grade.estudiante.user.numeroIdentificacion || '-';
       const materiaNombre = grade.materia.nombre;
-      const periodoNombre = grade.subPeriodo?.periodo?.nombre || '-';
-      const subPeriodoNombre = grade.subPeriodo?.nombre || '-';
       const insumoNombre = grade.insumo?.nombre || '-';
       
+      // Obtener información del subperíodo y período (usando fallback desde el insumo)
+      const insumoSubPeriodo = grade.insumo?.subPeriodo || null;
+      const usedSubPeriodo = grade.subPeriodo || insumoSubPeriodo || null;
+      const usedPeriodo = usedSubPeriodo?.periodo || grade.subPeriodo?.periodo || insumoSubPeriodo?.periodo || null;
+      
+      const periodoNombre = usedPeriodo?.nombre || null;
+      const subPeriodoNombre = usedSubPeriodo?.nombre || null;
+      
+      // Si falta información esencial (período, subperíodo o insumo), omitir esta columna
+      if (!periodoNombre || !subPeriodoNombre || !insumoNombre || insumoNombre === '-') {
+        return;
+      }
+      
       // Obtener valores de orden (usar valores por defecto si son null)
-      const periodoOrden = grade.subPeriodo?.periodo?.orden ?? 999;
-      const subPeriodoOrden = grade.subPeriodo?.orden ?? 999;
+      const periodoOrden = usedPeriodo?.orden ?? 999;
+      const subPeriodoOrden = usedSubPeriodo?.orden ?? 999;
       const insumoOrden = grade.insumo?.orden ?? 999;
       
       // Crear clave única para estudiante + materia
@@ -127,8 +154,8 @@ export const getGradesReport = async (req, res, next) => {
       const colKey = `${periodoNombre}|${subPeriodoNombre}|${insumoNombre}`;
       
       // Obtener ponderaciones
-      const subPeriodoPonderacion = grade.subPeriodo?.ponderacion ?? 0;
-      const periodoPonderacion = grade.subPeriodo?.periodo?.ponderacion ?? 0;
+      const subPeriodoPonderacion = usedSubPeriodo?.ponderacion ?? 0;
+      const periodoPonderacion = usedPeriodo?.ponderacion ?? 0;
       
       // Guardar información de orden y ponderación para esta columna
       if (!columnsMap.has(colKey)) {
@@ -142,8 +169,8 @@ export const getGradesReport = async (req, res, next) => {
           insumoNombre,
           subPeriodoPonderacion,
           periodoPonderacion,
-          subPeriodoId: grade.subPeriodo?.id,
-          periodoId: grade.subPeriodo?.periodo?.id,
+          subPeriodoId: usedSubPeriodo?.id,
+          periodoId: usedPeriodo?.id,
         });
       }
       
@@ -169,9 +196,9 @@ export const getGradesReport = async (req, res, next) => {
       };
       
       // Acumular calificaciones por subperíodo y período para calcular promedios
-      const subPeriodoId = grade.subPeriodo?.id;
+      const subPeriodoId = usedSubPeriodo?.id;
       // Intentar obtener periodoId de diferentes formas
-      const periodoId = grade.subPeriodo?.periodo?.id || grade.subPeriodo?.periodoId;
+      const periodoId = usedPeriodo?.id || usedSubPeriodo?.periodoId;
       
       if (subPeriodoId) {
         if (!pivotData[rowKey].subPeriodoGrades[subPeriodoId]) {
@@ -279,25 +306,32 @@ export const getGradesReport = async (req, res, next) => {
       return a.materia.localeCompare(b.materia);
     });
     
-    // Ordenar columnas por orden: primero periodo, luego subperíodo, luego insumo
-    const sortedColumnsData = Array.from(columnsMap.values()).sort((a, b) => {
-      // Primero por orden del periodo
-      if (a.periodoOrden !== b.periodoOrden) {
-        return a.periodoOrden - b.periodoOrden;
-      }
-      // Luego por orden del subperíodo
-      if (a.subPeriodoOrden !== b.subPeriodoOrden) {
-        return a.subPeriodoOrden - b.subPeriodoOrden;
-      }
-      // Finalmente por orden del insumo
-      if (a.insumoOrden !== b.insumoOrden) {
-        return a.insumoOrden - b.insumoOrden;
-      }
-      // Si todos los órdenes son iguales, ordenar alfabéticamente
-      return a.key.localeCompare(b.key);
+    // Filtrar columnas: solo incluir aquellas que tienen al menos una calificación
+    const columnsWithData = Array.from(columnsMap.keys()).filter(colKey => {
+      return pivotRows.some(row => row.calificaciones[colKey]);
     });
-
-    const sortedColumns = sortedColumnsData.map(col => col.key);
+    
+    // Ordenar columnas por orden: primero periodo, luego subperíodo, luego insumo
+    // Solo incluir columnas que tienen datos
+    const sortedColumnsData = columnsWithData
+      .map(colKey => columnsMap.get(colKey))
+      .filter(col => col !== undefined)
+      .sort((a, b) => {
+        // Primero por orden del periodo
+        if (a.periodoOrden !== b.periodoOrden) {
+          return a.periodoOrden - b.periodoOrden;
+        }
+        // Luego por orden del subperíodo
+        if (a.subPeriodoOrden !== b.subPeriodoOrden) {
+          return a.subPeriodoOrden - b.subPeriodoOrden;
+        }
+        // Finalmente por orden del insumo
+        if (a.insumoOrden !== b.insumoOrden) {
+          return a.insumoOrden - b.insumoOrden;
+        }
+        // Si todos los órdenes son iguales, ordenar alfabéticamente
+        return a.key.localeCompare(b.key);
+      });
 
     // Agrupar columnas por período y subperíodo para el frontend
     const columnsByPeriod = {};
@@ -318,8 +352,11 @@ export const getGradesReport = async (req, res, next) => {
       }
       
       // Agrupar por subperíodo dentro del período
-      if (!columnsByPeriod[col.periodoNombre].subPeriods[col.subPeriodoNombre]) {
-        columnsByPeriod[col.periodoNombre].subPeriods[col.subPeriodoNombre] = {
+      // Usar subPeriodoId como clave única para evitar duplicados, o el nombre si no hay ID
+      const subPeriodKey = col.subPeriodoId || col.subPeriodoNombre;
+      
+      if (!columnsByPeriod[col.periodoNombre].subPeriods[subPeriodKey]) {
+        columnsByPeriod[col.periodoNombre].subPeriods[subPeriodKey] = {
           subPeriodoNombre: col.subPeriodoNombre,
           subPeriodoOrden: col.subPeriodoOrden,
           subPeriodoId: col.subPeriodoId,
@@ -327,7 +364,10 @@ export const getGradesReport = async (req, res, next) => {
           columns: [],
         };
       }
-      columnsByPeriod[col.periodoNombre].subPeriods[col.subPeriodoNombre].columns.push(col.key);
+      // Solo agregar la columna si no está ya incluida
+      if (!columnsByPeriod[col.periodoNombre].subPeriods[subPeriodKey].columns.includes(col.key)) {
+        columnsByPeriod[col.periodoNombre].subPeriods[subPeriodKey].columns.push(col.key);
+      }
     });
 
     // Convertir a array y ordenar por orden del período
@@ -336,16 +376,23 @@ export const getGradesReport = async (req, res, next) => {
     });
 
     // Convertir subperíodos a arrays ordenados dentro de cada período
+    // Ya están filtrados porque solo incluimos columnas con datos
     periodsGrouped.forEach(period => {
-      period.subPeriods = Object.values(period.subPeriods).sort((a, b) => {
-        return a.subPeriodoOrden - b.subPeriodoOrden;
-      });
+      period.subPeriods = Object.values(period.subPeriods)
+        .filter(subPeriod => subPeriod.columns.length > 0) // Eliminar subperíodos sin columnas con datos
+        .sort((a, b) => {
+          return a.subPeriodoOrden - b.subPeriodoOrden;
+        });
     });
+    
+    // Filtrar períodos que no tienen subperíodos con datos
+    const filteredPeriodsGrouped = periodsGrouped.filter(period => 
+      period.subPeriods && period.subPeriods.length > 0
+    );
 
     res.json({
       grades: pivotRows,
-      columns: sortedColumns,
-      periodsGrouped: periodsGrouped,
+      periodsGrouped: filteredPeriodsGrouped,
       total: pivotRows.length,
       curso: course.nombre,
     });
