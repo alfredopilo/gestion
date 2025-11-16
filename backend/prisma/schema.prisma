@@ -124,6 +124,31 @@ model Grade {
   @@map("grades")
 }
 
+model GradeScale {
+  id          String              @id @default(dbgenerated("gen_random_uuid()::text"))
+  nombre      String
+  institucionId String            @map("institucion_id")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @default(now()) @updatedAt @map("updated_at")
+  institucion Institution         @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  detalles    GradeScaleDetail[]
+
+  @@map("grade_scales")
+}
+
+model GradeScaleDetail {
+  id            String      @id @default(dbgenerated("gen_random_uuid()::text"))
+  gradeScaleId  String      @map("grade_scale_id")
+  titulo        String
+  valor         Float
+  orden         Int?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+  gradeScale    GradeScale  @relation(fields: [gradeScaleId], references: [id], onDelete: Cascade)
+
+  @@map("grade_scale_details")
+}
+
 model Institution {
   id               String            @id
   nombre           String
@@ -140,6 +165,7 @@ model Institution {
   materias         Subject[]
   userInstitutions UserInstitution[]
   usuarios         User[]            @relation("InstitutionUsuarios")
+  gradeScales      GradeScale[]
 
   @@map("institutions")
 }

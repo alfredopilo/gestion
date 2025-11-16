@@ -17,6 +17,7 @@ import reportCardRoutes from './reportCardRoutes.js';
 import institutionRoutes from './institutionRoutes.js';
 import schoolYearRoutes from './schoolYearRoutes.js';
 import scheduleRoutes from './scheduleRoutes.js';
+import gradeScaleRoutes from './gradeScaleRoutes.js';
 
 const router = express.Router();
 
@@ -38,6 +39,7 @@ router.use('/report-cards', reportCardRoutes);
 router.use('/institutions', institutionRoutes);
 router.use('/school-years', schoolYearRoutes);
 router.use('/schedules', scheduleRoutes);
+router.use('/grade-scales', gradeScaleRoutes);
 
 export default router;
 

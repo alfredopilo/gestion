@@ -34,14 +34,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Solo manejar errores 401 si hay una respuesta del servidor
+    // Si es un error de red o CORS, no redirigir
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      // Solo redirigir a login si no estamos ya en la página de login
-      // Esto evita bucles infinitos de redirección
+      // Solo limpiar el token si no estamos en la página de login
       if (window.location.pathname !== '/login') {
+        localStorage.removeItem('token');
+        delete api.defaults.headers.common['Authorization'];
+        // Solo redirigir si no estamos ya en la página de login
         window.location.href = '/login';
       }
     }
+    // Para errores de CORS o red, no hacer nada especial, dejar que el componente maneje el error
     return Promise.reject(error);
   }
 );
