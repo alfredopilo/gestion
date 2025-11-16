@@ -51,6 +51,7 @@ export const getAssignments = async (req, res, next) => {
               user: true,
             },
           },
+          horarios: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -97,6 +98,7 @@ export const getAssignmentById = async (req, res, next) => {
             user: true,
           },
         },
+        horarios: true,
       },
     });
 
@@ -191,10 +193,20 @@ export const createAssignment = async (req, res, next) => {
     }
 
     // Crear la asignación
+    const { horarios, ...assignmentData } = validatedData;
+    
     const assignment = await prisma.courseSubjectAssignment.create({
       data: {
-        ...validatedData,
+        ...assignmentData,
         updatedAt: new Date(),
+        horarios: horarios ? {
+          create: horarios.flatMap(h => 
+            h.diasSemana.map(dia => ({
+              hora: h.hora,
+              diaSemana: dia,
+            }))
+          ),
+        } : undefined,
       },
       include: {
         materia: true,
@@ -209,6 +221,7 @@ export const createAssignment = async (req, res, next) => {
             user: true,
           },
         },
+        horarios: true,
       },
     });
 
@@ -265,13 +278,38 @@ export const updateAssignment = async (req, res, next) => {
       });
     }
 
-    // Solo se puede actualizar el docente, no la materia ni el curso
+    // Se puede actualizar el docente y horarios, pero no la materia ni el curso
+    const updateData = {
+      updatedAt: new Date(),
+    };
+    
+    if (validatedData.docenteId) {
+      updateData.docenteId = validatedData.docenteId;
+    }
+    
+    // Si se proporcionan horarios, eliminar los existentes y crear los nuevos
+    if (validatedData.horarios !== undefined) {
+      // Eliminar horarios existentes
+      await prisma.assignmentSchedule.deleteMany({
+        where: { assignmentId: id },
+      });
+      
+      // Crear nuevos horarios
+      if (validatedData.horarios.length > 0) {
+        updateData.horarios = {
+          create: validatedData.horarios.flatMap(h => 
+            h.diasSemana.map(dia => ({
+              hora: h.hora,
+              diaSemana: dia,
+            }))
+          ),
+        };
+      }
+    }
+    
     const updatedAssignment = await prisma.courseSubjectAssignment.update({
       where: { id },
-      data: {
-        docenteId: validatedData.docenteId,
-        updatedAt: new Date(),
-      },
+      data: updateData,
       include: {
         materia: true,
         curso: {

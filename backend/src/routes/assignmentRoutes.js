@@ -15,8 +15,8 @@ router.use(authenticate);
 router.get('/', getAssignments);
 router.get('/:id', getAssignmentById);
 
-router.post('/', authorize('ADMIN', 'SECRETARIA'), createAssignment);
-router.put('/:id', authorize('ADMIN', 'SECRETARIA'), updateAssignment);
+router.post('/', authorize('ADMIN', 'SECRETARIA', 'PROFESOR'), createAssignment);
+router.put('/:id', authorize('ADMIN', 'SECRETARIA', 'PROFESOR'), updateAssignment);
 router.delete('/:id', authorize('ADMIN'), deleteAssignment);
 
 export default router;

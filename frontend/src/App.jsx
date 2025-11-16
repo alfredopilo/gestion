@@ -25,6 +25,7 @@ import InstitutionSettings from './pages/InstitutionSettings';
 import GeneralSettings from './pages/GeneralSettings';
 import Insumos from './pages/Insumos';
 import Reports from './pages/Reports';
+import Schedule from './pages/Schedule';
 
 // Componente que renderiza el dashboard según el rol
 function DashboardByRole() {
@@ -77,6 +78,7 @@ function App() {
             <Route path="insumos" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Insumos /></ProtectedRoute>} />
             <Route path="reports" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Reports /></ProtectedRoute>} />
             <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+            <Route path="schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="general-settings" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GeneralSettings /></ProtectedRoute>} />
             <Route path="institution-settings" element={<ProtectedRoute requiredRole={['ADMIN']}><InstitutionSettings /></ProtectedRoute>} />

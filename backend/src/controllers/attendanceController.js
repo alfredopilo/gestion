@@ -53,25 +53,40 @@ export const getAttendance = async (req, res, next) => {
         where,
         skip,
         take: parseInt(limit),
-        include: {
-          estudiante: {
-            include: {
-              user: {
-                select: {
-                  nombre: true,
-                  apellido: true,
+          include: {
+            estudiante: {
+              include: {
+                user: {
+                  select: {
+                    nombre: true,
+                    apellido: true,
+                  },
                 },
-              },
-              grupo: {
-                select: {
-                  nombre: true,
-                  nivel: true,
-                  paralelo: true,
+                grupo: {
+                  select: {
+                    nombre: true,
+                    nivel: true,
+                    paralelo: true,
+                  },
                 },
               },
             },
+            curso: {
+              select: {
+                id: true,
+                nombre: true,
+                nivel: true,
+                paralelo: true,
+              },
+            },
+            materia: {
+              select: {
+                id: true,
+                nombre: true,
+                codigo: true,
+              },
+            },
           },
-        },
         orderBy: { fecha: 'desc' },
       }),
       prisma.attendance.count({ where }),
@@ -103,12 +118,18 @@ export const createAttendance = async (req, res, next) => {
       validatedData.fecha = new Date(validatedData.fecha);
     }
 
+    // Construir clave única según campos disponibles
+    const whereClause = {
+      estudianteId: validatedData.estudianteId,
+      fecha: validatedData.fecha,
+      cursoId: validatedData.cursoId || null,
+      materiaId: validatedData.materiaId || null,
+      hora: validatedData.hora || null,
+    };
+
     const attendance = await prisma.attendance.upsert({
       where: {
-        estudianteId_fecha: {
-          estudianteId: validatedData.estudianteId,
-          fecha: validatedData.fecha,
-        },
+        estudianteId_fecha_cursoId_materiaId_hora: whereClause,
       },
       update: {
         estado: validatedData.estado,
@@ -162,13 +183,18 @@ export const bulkCreateAttendance = async (req, res, next) => {
 
     // Usar transacción
     const results = await prisma.$transaction(
-      asistencia.map(att =>
-        prisma.attendance.upsert({
+      asistencia.map(att => {
+        const fecha = typeof att.fecha === 'string' ? new Date(att.fecha) : att.fecha;
+        const whereClause = {
+          estudianteId: att.estudianteId,
+          fecha: fecha,
+          cursoId: att.cursoId || null,
+          materiaId: att.materiaId || null,
+          hora: att.hora || null,
+        };
+        return prisma.attendance.upsert({
           where: {
-            estudianteId_fecha: {
-              estudianteId: att.estudianteId,
-              fecha: att.fecha,
-            },
+            estudianteId_fecha_cursoId_materiaId_hora: whereClause,
           },
           update: {
             estado: att.estado,
@@ -176,8 +202,8 @@ export const bulkCreateAttendance = async (req, res, next) => {
             observaciones: att.observaciones,
           },
           create: att,
-        })
-      )
+        });
+      })
     );
 
     res.json({
@@ -235,6 +261,95 @@ export const getAttendanceSummary = async (req, res, next) => {
       },
       registros: attendance,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Obtener clases de un curso para una fecha específica
+ */
+export const getCourseClassesForDate = async (req, res, next) => {
+  try {
+    const { cursoId, fecha } = req.query;
+
+    if (!cursoId || !fecha) {
+      return res.status(400).json({
+        error: 'Debe proporcionar cursoId y fecha.',
+      });
+    }
+
+    // Obtener el día de la semana de la fecha (usar solo fecha, sin hora para evitar problemas de zona horaria)
+    const fechaStr = fecha.split('T')[0]; // Asegurar formato YYYY-MM-DD
+    const [year, month, day] = fechaStr.split('-').map(Number);
+    const fechaObj = new Date(year, month - 1, day); // month - 1 porque Date usa 0-indexed months
+    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const diaSemana = diasSemana[fechaObj.getDay()];
+
+    // Construir filtro de asignaciones
+    const whereClause = {
+      cursoId,
+    };
+
+    // Si es PROFESOR, filtrar solo sus asignaciones
+    if (req.user.rol === 'PROFESOR') {
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: req.user.id },
+        select: { id: true },
+      });
+      
+      if (teacher) {
+        whereClause.docenteId = teacher.id;
+      } else {
+        // Si no es profesor válido, retornar vacío
+        return res.json({ data: [] });
+      }
+    }
+
+    // Obtener asignaciones del curso con horarios para ese día
+    const assignments = await prisma.courseSubjectAssignment.findMany({
+      where: whereClause,
+      include: {
+        materia: true,
+        docente: {
+          include: {
+            user: true,
+          },
+        },
+        horarios: {
+          where: {
+            diaSemana: diaSemana,
+          },
+          orderBy: {
+            hora: 'asc',
+          },
+        },
+      },
+    });
+
+    // Filtrar solo las que tienen horarios para ese día
+    const classes = assignments
+      .filter(a => a.horarios.length > 0)
+      .flatMap(assignment =>
+        assignment.horarios.map(horario => ({
+          assignmentId: assignment.id,
+          materia: {
+            id: assignment.materia.id,
+            nombre: assignment.materia.nombre,
+            codigo: assignment.materia.codigo,
+          },
+          docente: {
+            id: assignment.docente.id,
+            nombre: assignment.docente.user?.nombre,
+            apellido: assignment.docente.user?.apellido,
+          },
+          hora: horario.hora,
+          diaSemana: horario.diaSemana,
+        }))
+      )
+      .sort((a, b) => a.hora - b.hora);
+
+    res.json({ data: classes });
   } catch (error) {
     next(error);
   }

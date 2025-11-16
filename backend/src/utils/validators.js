@@ -104,10 +104,18 @@ export const createCourseSubjectAssignmentSchema = z.object({
   materiaId: z.string().uuid(),
   cursoId: z.string().uuid(),
   docenteId: z.string().uuid(),
+  horarios: z.array(z.object({
+    hora: z.number().int().min(1).max(8),
+    diasSemana: z.array(z.enum(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'])),
+  })).optional(),
 });
 
 export const updateCourseSubjectAssignmentSchema = z.object({
-  docenteId: z.string().uuid(),
+  docenteId: z.string().uuid().optional(),
+  horarios: z.array(z.object({
+    hora: z.number().int().min(1).max(8),
+    diasSemana: z.array(z.enum(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'])),
+  })).optional(),
 });
 
 const importStudentSchema = z.object({
@@ -364,6 +372,9 @@ export const createGradeSchema = z.object({
 
 export const createAttendanceSchema = z.object({
   estudianteId: z.string().uuid(),
+  cursoId: z.string().uuid().optional(),
+  materiaId: z.string().uuid().optional(),
+  hora: z.number().int().min(1).max(8).optional(),
   fecha: z.string().or(z.date()),
   estado: z.enum(['ASISTENCIA', 'FALTA', 'JUSTIFICADA', 'TARDE']),
   justificacion: z.string().optional(),

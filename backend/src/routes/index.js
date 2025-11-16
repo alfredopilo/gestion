@@ -15,6 +15,7 @@ import insumoRoutes from './insumoRoutes.js';
 import reportRoutes from './reportRoutes.js';
 import institutionRoutes from './institutionRoutes.js';
 import schoolYearRoutes from './schoolYearRoutes.js';
+import scheduleRoutes from './scheduleRoutes.js';
 
 const router = express.Router();
 
@@ -34,6 +35,7 @@ router.use('/insumos', insumoRoutes);
 router.use('/reports', reportRoutes);
 router.use('/institutions', institutionRoutes);
 router.use('/school-years', schoolYearRoutes);
+router.use('/schedules', scheduleRoutes);
 
 export default router;
 

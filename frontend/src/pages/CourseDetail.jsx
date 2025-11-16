@@ -26,6 +26,7 @@ const CourseDetail = () => {
   const [assignmentFormData, setAssignmentFormData] = useState({
     materiaId: '',
     docenteId: '',
+    horarios: [], // Array de { hora: number, diasSemana: string[] }
   });
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPreview, setImportPreview] = useState([]);
@@ -354,6 +355,7 @@ const handleDownloadTemplate = async () => {
     setAssignmentFormData({
       materiaId: '',
       docenteId: '',
+      horarios: [],
     });
     fetchSubjectsAndTeachers();
     setShowSubjectModal(true);
@@ -361,29 +363,89 @@ const handleDownloadTemplate = async () => {
 
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
+    
+    // Convertir horarios de la base de datos al formato del formulario
+    const horariosFormatted = [];
+    if (assignment.horarios && assignment.horarios.length > 0) {
+      // Agrupar por hora
+      const horariosPorHora = {};
+      assignment.horarios.forEach(h => {
+        if (!horariosPorHora[h.hora]) {
+          horariosPorHora[h.hora] = [];
+        }
+        horariosPorHora[h.hora].push(h.diaSemana);
+      });
+      
+      // Convertir a formato del formulario
+      Object.keys(horariosPorHora).forEach(hora => {
+        horariosFormatted.push({
+          hora: parseInt(hora),
+          diasSemana: horariosPorHora[hora],
+        });
+      });
+    }
+    
     setAssignmentFormData({
       materiaId: assignment.materiaId,
       docenteId: assignment.docenteId,
+      horarios: horariosFormatted,
     });
     fetchSubjectsAndTeachers();
     setShowSubjectModal(true);
   };
 
+  const addHorario = () => {
+    setAssignmentFormData({
+      ...assignmentFormData,
+      horarios: [...assignmentFormData.horarios, { hora: 1, diasSemana: [] }],
+    });
+  };
+
+  const removeHorario = (index) => {
+    setAssignmentFormData({
+      ...assignmentFormData,
+      horarios: assignmentFormData.horarios.filter((_, i) => i !== index),
+    });
+  };
+
+  const updateHorarioHora = (index, hora) => {
+    const newHorarios = [...assignmentFormData.horarios];
+    newHorarios[index].hora = parseInt(hora);
+    setAssignmentFormData({ ...assignmentFormData, horarios: newHorarios });
+  };
+
+  const toggleDiaSemana = (horarioIndex, dia) => {
+    const newHorarios = [...assignmentFormData.horarios];
+    const diasSemana = newHorarios[horarioIndex].diasSemana || [];
+    if (diasSemana.includes(dia)) {
+      newHorarios[horarioIndex].diasSemana = diasSemana.filter(d => d !== dia);
+    } else {
+      newHorarios[horarioIndex].diasSemana = [...diasSemana, dia];
+    }
+    setAssignmentFormData({ ...assignmentFormData, horarios: newHorarios });
+  };
+
   const handleSubmitAssignment = async (e) => {
     e.preventDefault();
     try {
+      const requestData = {
+        docenteId: assignmentFormData.docenteId,
+      };
+      
+      if (assignmentFormData.horarios && assignmentFormData.horarios.length > 0) {
+        requestData.horarios = assignmentFormData.horarios.filter(h => h.diasSemana && h.diasSemana.length > 0);
+      }
+      
       if (editingAssignment) {
-        // Actualizar asignación (solo docente)
-        await api.put(`/assignments/${editingAssignment.id}`, {
-          docenteId: assignmentFormData.docenteId,
-        });
+        // Actualizar asignación existente
+        await api.put(`/assignments/${editingAssignment.id}`, requestData);
         toast.success('Asignación actualizada exitosamente');
       } else {
         // Crear nueva asignación
         await api.post('/assignments', {
           cursoId: id,
           materiaId: assignmentFormData.materiaId,
-          docenteId: assignmentFormData.docenteId,
+          ...requestData,
         });
         toast.success('Materia asignada al curso exitosamente');
       }
@@ -898,13 +960,78 @@ const handleDownloadTemplate = async () => {
                 </select>
               </div>
 
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Horarios
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addHorario}
+                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-md hover:bg-blue-200"
+                  >
+                    + Agregar Hora
+                  </button>
+                </div>
+                
+                {assignmentFormData.horarios.length === 0 ? (
+                  <p className="text-sm text-gray-500 mb-2">No hay horarios agregados. Haz clic en "+ Agregar Hora" para comenzar.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {assignmentFormData.horarios.map((horario, index) => (
+                      <div key={index} className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-medium text-gray-700">
+                            Hora:
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => removeHorario(index)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                        <select
+                          value={horario.hora}
+                          onChange={(e) => updateHorarioHora(index, e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 mb-2"
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map(h => (
+                            <option key={h} value={h}>Hora {h}</option>
+                          ))}
+                        </select>
+                        <div>
+                          <label className="text-sm font-medium text-gray-700 mb-1 block">
+                            Días de la Semana:
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map(dia => (
+                              <label key={dia} className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={(horario.diasSemana || []).includes(dia)}
+                                  onChange={() => toggleDiaSemana(index, dia)}
+                                  className="mr-1"
+                                />
+                                <span className="text-sm">{dia}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowSubjectModal(false);
                     setEditingAssignment(null);
-                    setAssignmentFormData({ materiaId: '', docenteId: '' });
+                    setAssignmentFormData({ materiaId: '', docenteId: '', horarios: [] });
                   }}
                   className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                 >

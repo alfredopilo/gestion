@@ -9,33 +9,52 @@ datasource db {
 }
 
 model Attendance {
-  id            String           @id
+  id            String           @id @default(dbgenerated("gen_random_uuid()::text"))
   estudianteId  String           @map("estudiante_id")
+  cursoId       String?          @map("curso_id")
+  materiaId     String?          @map("materia_id")
+  hora          Int?
   fecha         DateTime
   estado        EstadoAsistencia
   justificacion String?
   observaciones String?
   createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @map("updated_at")
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at")
   estudiante    Student          @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  curso         Course?          @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  materia       Subject?         @relation(fields: [materiaId], references: [id], onDelete: Cascade)
 
-  @@unique([estudianteId, fecha])
+  @@unique([estudianteId, fecha, cursoId, materiaId, hora])
   @@map("attendance")
 }
 
 model CourseSubjectAssignment {
-  id        String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  materiaId String   @map("materia_id")
-  cursoId   String   @map("curso_id")
-  docenteId String   @map("docente_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
-  curso     Course   @relation(fields: [cursoId], references: [id], onDelete: Cascade)
-  docente   Teacher  @relation(fields: [docenteId], references: [id], onDelete: Cascade)
-  materia   Subject  @relation("SubjectToCourseSubjectAssignment", fields: [materiaId], references: [id], onDelete: Cascade)
+  id        String              @id @default(dbgenerated("gen_random_uuid()::text"))
+  materiaId String              @map("materia_id")
+  cursoId   String              @map("curso_id")
+  docenteId String              @map("docente_id")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at")
+  curso     Course              @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  docente   Teacher             @relation(fields: [docenteId], references: [id], onDelete: Cascade)
+  materia   Subject             @relation("SubjectToCourseSubjectAssignment", fields: [materiaId], references: [id], onDelete: Cascade)
+  horarios  AssignmentSchedule[]
 
   @@unique([materiaId, cursoId])
   @@map("course_subject_assignments")
+}
+
+model AssignmentSchedule {
+  id        String                  @id @default(dbgenerated("gen_random_uuid()::text"))
+  assignmentId String               @map("assignment_id")
+  hora      Int
+  diaSemana String
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @default(now()) @updatedAt @map("updated_at")
+  assignment CourseSubjectAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, hora, diaSemana])
+  @@map("assignment_schedules")
 }
 
 model Course {
@@ -53,6 +72,7 @@ model Course {
   sortOrder                  Int?                      @default(0) @map("sort_order")
   course_subject_assignments CourseSubjectAssignment[]
   insumos                    Insumo[]
+  attendance                 Attendance[]
   anioLectivo                SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
   cursoSiguiente             Course?                   @relation("coursesTocourses", fields: [cursoSiguienteId], references: [id])
   other_courses              Course[]                  @relation("coursesTocourses")
@@ -307,6 +327,7 @@ model Subject {
   asignaciones   CourseSubjectAssignment[] @relation("SubjectToCourseSubjectAssignment")
   calificaciones Grade[]                   @relation("SubjectToGrade")
   insumos        Insumo[]
+  attendance     Attendance[]
   anioLectivo    SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
   institucion    Institution               @relation(fields: [institucionId], references: [id], onDelete: Cascade)
 

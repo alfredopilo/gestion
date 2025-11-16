@@ -149,6 +149,7 @@ export const getCourseById = async (req, res, next) => {
             docente: {
               include: { user: true },
             },
+            horarios: true,
           },
         },
         cursoSiguiente: {
