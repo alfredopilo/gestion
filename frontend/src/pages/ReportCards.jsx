@@ -305,8 +305,11 @@ const ReportCards = () => {
 
         filteredPeriodsGrouped.forEach((periodGroup) => {
           periodGroup.subPeriods.forEach((subPeriodGroup) => {
-            const promedioSubPeriodo = materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
-            rowData.push(promedioSubPeriodo ? promedioSubPeriodo.promedio.toFixed(2) : '-');
+        const promedioSubPeriodo = materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+        const promedioSubText = promedioSubPeriodo 
+          ? formatAverageText(promedioSubPeriodo.promedio, promedioSubPeriodo.equivalente)
+          : '-';
+            rowData.push(promedioSubText);
             rowData.push(promedioSubPeriodo ? promedioSubPeriodo.promedioPonderado.toFixed(2) : '-');
           });
 
@@ -320,16 +323,18 @@ const ReportCards = () => {
               (p) => p.periodoNombre === periodGroup.periodoNombre
             );
           }
-          rowData.push(promedioPeriodo ? promedioPeriodo.promedio.toFixed(2) : '-');
+          const promedioPeriodoText = promedioPeriodo 
+            ? formatAverageText(promedioPeriodo.promedio, promedioPeriodo.equivalente)
+            : '-';
+          rowData.push(promedioPeriodoText);
           rowData.push(promedioPeriodo ? promedioPeriodo.promedioPonderado.toFixed(2) : '-');
         });
 
         if (showGeneralColumn) {
-          rowData.push(
-            materia.promedioGeneral !== null && materia.promedioGeneral !== undefined
-              ? materia.promedioGeneral.toFixed(2)
-              : '-'
-          );
+          const promedioGeneralText = materia.promedioGeneral !== null && materia.promedioGeneral !== undefined
+            ? formatAverageText(materia.promedioGeneral, materia.equivalenteGeneral)
+            : '-';
+          rowData.push(promedioGeneralText);
         }
 
         return rowData;
@@ -444,6 +449,40 @@ const ReportCards = () => {
     if (promedio >= 7) return 'text-blue-600';
     if (promedio >= 5) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  const getNumericColorClass = (valor) => {
+    if (valor === null || valor === undefined) return 'text-gray-500';
+    if (valor >= 9) return 'text-green-600';
+    if (valor >= 7) return 'text-blue-600';
+    if (valor >= 5) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const renderAverageDisplay = (valor, equivalente) => {
+    if (valor === null || valor === undefined) {
+      return <span className="text-gray-300 text-xs">-</span>;
+    }
+    const colorClass = getNumericColorClass(valor);
+    if (equivalente) {
+      return (
+        <div className="flex flex-col items-center leading-tight">
+          <span className={`text-sm font-bold ${colorClass}`}>{equivalente}</span>
+          <span className="text-xs text-gray-600">({valor.toFixed(2)})</span>
+        </div>
+      );
+    }
+    return (
+      <span className={`font-bold text-sm ${colorClass}`}>
+        {valor.toFixed(2)}
+      </span>
+    );
+  };
+
+  const formatAverageText = (valor, equivalente) => {
+    if (valor === null || valor === undefined) return '-';
+    const base = valor.toFixed(2);
+    return equivalente ? `${equivalente} (${base})` : base;
   };
 
   return (
@@ -657,12 +696,9 @@ const ReportCards = () => {
                                   return (
                                     <React.Fragment key={`subperiod-data-${periodIdx}-${subPeriodIdx}`}>
                                       <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-50">
-                                        {promedioSubPeriodo ? (
-                                          <span className={`font-bold text-sm ${promedioSubPeriodo.promedio >= 7 ? 'text-green-600' : promedioSubPeriodo.promedio >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {promedioSubPeriodo.promedio.toFixed(2)}
-                                          </span>
-                                        ) : (
-                                          <span className="text-gray-300 text-xs">-</span>
+                                        {renderAverageDisplay(
+                                          promedioSubPeriodo?.promedio ?? null,
+                                          promedioSubPeriodo?.equivalente
                                         )}
                                       </td>
                                       <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-100">
@@ -694,12 +730,9 @@ const ReportCards = () => {
                                   return (
                                     <>
                                       <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-50">
-                                        {promedioPeriodo ? (
-                                          <span className={`font-bold text-sm ${promedioPeriodo.promedio >= 7 ? 'text-green-600' : promedioPeriodo.promedio >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {promedioPeriodo.promedio.toFixed(2)}
-                                          </span>
-                                        ) : (
-                                          <span className="text-gray-300 text-xs">-</span>
+                                        {renderAverageDisplay(
+                                          promedioPeriodo?.promedio ?? null,
+                                          promedioPeriodo?.equivalente
                                         )}
                                       </td>
                                       <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-100">
@@ -718,12 +751,9 @@ const ReportCards = () => {
                             ))}
                             {showGeneralColumn && (
                               <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-50">
-                                {materia.promedioGeneral !== null && materia.promedioGeneral !== undefined ? (
-                                  <span className={`font-bold text-base ${materia.promedioGeneral >= 7 ? 'text-green-600' : materia.promedioGeneral >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                    {materia.promedioGeneral.toFixed(2)}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-300 text-sm">-</span>
+                                {renderAverageDisplay(
+                                  materia.promedioGeneral,
+                                  materia.equivalenteGeneral
                                 )}
                               </td>
                             )}

@@ -104,6 +104,7 @@ export const createCourseSubjectAssignmentSchema = z.object({
   materiaId: z.string().uuid(),
   cursoId: z.string().uuid(),
   docenteId: z.string().uuid(),
+  gradeScaleId: z.string().uuid('Debe seleccionar una escala de calificación válida'),
   horarios: z.array(z.object({
     hora: z.number().int().min(1).max(8),
     diasSemana: z.array(z.enum(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'])),
@@ -112,6 +113,7 @@ export const createCourseSubjectAssignmentSchema = z.object({
 
 export const updateCourseSubjectAssignmentSchema = z.object({
   docenteId: z.string().uuid().optional(),
+  gradeScaleId: z.string().uuid('Debe seleccionar una escala de calificación válida'),
   horarios: z.array(z.object({
     hora: z.number().int().min(1).max(8),
     diasSemana: z.array(z.enum(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'])),

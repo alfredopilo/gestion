@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution } from '../utils/institutionFilter.js';
-import { calculateWeightedAverage, truncate } from '../utils/gradeCalculations.js';
+import { calculateWeightedAverage, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
 
 /**
  * Obtener boletines de calificaciones para estudiantes de un curso
@@ -63,6 +63,13 @@ export const getReportCards = async (req, res, next) => {
                 codigo: true,
               },
             },
+            gradeScale: {
+              include: {
+                detalles: {
+                  orderBy: { orden: 'asc' },
+                },
+              },
+            },
           },
         },
       },
@@ -74,8 +81,12 @@ export const getReportCards = async (req, res, next) => {
       });
     }
 
-    // Obtener todas las materias del curso
-    const materias = curso.course_subject_assignments.map(a => a.materia);
+    // Obtener todas las materias del curso con sus escalas
+    const materiasConEscala = curso.course_subject_assignments.map(a => ({
+      materia: a.materia,
+      gradeScale: a.gradeScale,
+    }));
+    const materias = materiasConEscala.map(m => m.materia);
 
     // Obtener todas las calificaciones de los estudiantes del curso
     const materiaIds = materias.map(m => m.id);
@@ -144,7 +155,7 @@ export const getReportCards = async (req, res, next) => {
     const reportCards = curso.estudiantes.map(estudiante => {
       const estudianteGrades = grades.filter(g => g.estudianteId === estudiante.id);
       
-      const materiasData = materias.map(materia => {
+      const materiasData = materiasConEscala.map(({ materia, gradeScale }) => {
         const materiaGrades = estudianteGrades.filter(g => g.materiaId === materia.id);
         
         if (materiaGrades.length === 0) {
@@ -154,6 +165,7 @@ export const getReportCards = async (req, res, next) => {
               nombre: materia.nombre,
               codigo: materia.codigo,
             },
+            gradeScale: gradeScale,
             promediosSubPeriodo: {},
             promediosPeriodo: {},
             promedioGeneral: null,
@@ -187,11 +199,13 @@ export const getReportCards = async (req, res, next) => {
             const ponderacion = data.subPeriodo.ponderacion || 0;
             const promedioPonderado = promedioTruncado * (ponderacion / 100);
             
+            const equivalenteSubPeriodo = getGradeScaleEquivalent(gradeScale, promedioTruncado);
             promediosSubPeriodo[subPeriodoId] = {
               subPeriodoNombre: data.subPeriodo.nombre,
               promedio: promedioTruncado,
               promedioPonderado: truncate(promedioPonderado),
               ponderacion: ponderacion,
+              equivalente: equivalenteSubPeriodo,
             };
           }
         });
@@ -234,11 +248,13 @@ export const getReportCards = async (req, res, next) => {
           const periodoPonderacion = data.periodo.ponderacion || 100;
           const promedioPonderado = promedioPeriodoTruncado * (periodoPonderacion / 100);
           
+          const equivalentePeriodo = getGradeScaleEquivalent(gradeScale, promedioPeriodoTruncado);
           promediosPeriodo[periodoId] = {
             periodoNombre: data.periodo.nombre,
             promedio: promedioPeriodoTruncado,
             promedioPonderado: truncate(promedioPonderado),
             ponderacion: periodoPonderacion,
+            equivalente: equivalentePeriodo,
           };
         });
 
@@ -254,15 +270,18 @@ export const getReportCards = async (req, res, next) => {
           promedioGeneral = truncate(sumaPonderada);
         }
 
+        const equivalenteGeneral = getGradeScaleEquivalent(gradeScale, promedioGeneral);
         return {
           materia: {
             id: materia.id,
             nombre: materia.nombre,
             codigo: materia.codigo,
           },
+          gradeScale: gradeScale,
           promediosSubPeriodo,
           promediosPeriodo,
           promedioGeneral,
+          equivalenteGeneral: equivalenteGeneral,
           calificaciones: materiaGrades.map(g => ({
             id: g.id,
             calificacion: g.calificacion,

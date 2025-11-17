@@ -51,6 +51,13 @@ export const getAssignments = async (req, res, next) => {
               user: true,
             },
           },
+          gradeScale: {
+            include: {
+              detalles: {
+                orderBy: { orden: 'asc' },
+              },
+            },
+          },
           horarios: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -96,6 +103,13 @@ export const getAssignmentById = async (req, res, next) => {
         docente: {
           include: {
             user: true,
+          },
+        },
+        gradeScale: {
+          include: {
+            detalles: {
+              orderBy: { orden: 'asc' },
+            },
           },
         },
         horarios: true,
@@ -176,6 +190,19 @@ export const createAssignment = async (req, res, next) => {
       });
     }
 
+    // Verificar que la escala de calificación existe si se proporciona
+    if (validatedData.gradeScaleId) {
+      const gradeScale = await prisma.gradeScale.findUnique({
+        where: { id: validatedData.gradeScaleId },
+      });
+
+      if (!gradeScale) {
+        return res.status(404).json({
+          error: 'Escala de calificación no encontrada.',
+        });
+      }
+    }
+
     // Verificar que no exista ya esta asignación
     const existing = await prisma.courseSubjectAssignment.findUnique({
       where: {
@@ -195,9 +222,14 @@ export const createAssignment = async (req, res, next) => {
     // Crear la asignación
     const { horarios, ...assignmentData } = validatedData;
     
+    console.log('Datos para crear asignación (sin horarios):', assignmentData);
+    
     const assignment = await prisma.courseSubjectAssignment.create({
       data: {
-        ...assignmentData,
+        materiaId: assignmentData.materiaId,
+        cursoId: assignmentData.cursoId,
+        docenteId: assignmentData.docenteId,
+        gradeScaleId: assignmentData.gradeScaleId,
         updatedAt: new Date(),
         horarios: horarios ? {
           create: horarios.flatMap(h => 
@@ -219,6 +251,13 @@ export const createAssignment = async (req, res, next) => {
         docente: {
           include: {
             user: true,
+          },
+        },
+        gradeScale: {
+          include: {
+            detalles: {
+              orderBy: { orden: 'asc' },
+            },
           },
         },
         horarios: true,
@@ -267,20 +306,34 @@ export const updateAssignment = async (req, res, next) => {
       });
     }
 
-    // Verificar que el docente existe
-    const docente = await prisma.teacher.findUnique({
-      where: { id: validatedData.docenteId },
+    // Verificar que el docente existe si se proporciona
+    if (validatedData.docenteId) {
+      const docente = await prisma.teacher.findUnique({
+        where: { id: validatedData.docenteId },
+      });
+
+      if (!docente) {
+        return res.status(404).json({
+          error: 'Docente no encontrado.',
+        });
+      }
+    }
+
+    // Verificar que la escala de calificación existe (es requerida)
+    const gradeScale = await prisma.gradeScale.findUnique({
+      where: { id: validatedData.gradeScaleId },
     });
 
-    if (!docente) {
+    if (!gradeScale) {
       return res.status(404).json({
-        error: 'Docente no encontrado.',
+        error: 'Escala de calificación no encontrada.',
       });
     }
 
-    // Se puede actualizar el docente y horarios, pero no la materia ni el curso
+    // Se puede actualizar el docente, escala de calificación y horarios, pero no la materia ni el curso
     const updateData = {
       updatedAt: new Date(),
+      gradeScaleId: validatedData.gradeScaleId,
     };
     
     if (validatedData.docenteId) {
@@ -320,6 +373,13 @@ export const updateAssignment = async (req, res, next) => {
         docente: {
           include: {
             user: true,
+          },
+        },
+        gradeScale: {
+          include: {
+            detalles: {
+              orderBy: { orden: 'asc' },
+            },
           },
         },
       },

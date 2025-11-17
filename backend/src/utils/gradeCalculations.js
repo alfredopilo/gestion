@@ -106,3 +106,53 @@ export function calculateFinalAverage(periodAverages) {
   return truncate(promedioFinal);
 }
 
+/**
+ * Obtener el equivalente de una escala de calificación según un promedio numérico
+ * @param {Object} gradeScale - Objeto de escala de calificación con detalles
+ * @param {number} promedio - Promedio numérico a convertir
+ * @returns {string|null} - Título del equivalente en la escala o null si no hay escala
+ */
+export function getGradeScaleEquivalent(gradeScale, promedio) {
+  if (!gradeScale || !gradeScale.detalles || gradeScale.detalles.length === 0) {
+    return null;
+  }
+
+  if (promedio === null || promedio === undefined || isNaN(promedio)) {
+    return null;
+  }
+
+  // Ordenar detalles por valor (ascendente)
+  const detallesOrdenados = [...gradeScale.detalles].sort((a, b) => a.valor - b.valor);
+
+  // Buscar el equivalente exacto primero
+  const exactMatch = detallesOrdenados.find(d => d.valor === promedio);
+  if (exactMatch) {
+    return exactMatch.titulo;
+  }
+
+  // Si no hay coincidencia exacta, buscar el más cercano
+  // Para valores menores al mínimo, usar el mínimo
+  if (promedio < detallesOrdenados[0].valor) {
+    return detallesOrdenados[0].titulo;
+  }
+
+  // Para valores mayores al máximo, usar el máximo
+  if (promedio > detallesOrdenados[detallesOrdenados.length - 1].valor) {
+    return detallesOrdenados[detallesOrdenados.length - 1].titulo;
+  }
+
+  // Buscar el valor más cercano
+  let closestDetail = detallesOrdenados[0];
+  let minDiff = Math.abs(promedio - detallesOrdenados[0].valor);
+
+  for (const detail of detallesOrdenados) {
+    const diff = Math.abs(promedio - detail.valor);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestDetail = detail;
+    }
+  }
+
+  return closestDetail.titulo;
+}
+

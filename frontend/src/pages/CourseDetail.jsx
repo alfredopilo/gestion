@@ -20,12 +20,14 @@ const CourseDetail = () => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [periods, setPeriods] = useState([]);
+  const [gradeScales, setGradeScales] = useState([]);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedPeriodoDestino, setSelectedPeriodoDestino] = useState('');
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [assignmentFormData, setAssignmentFormData] = useState({
     materiaId: '',
     docenteId: '',
+    gradeScaleId: '',
     horarios: [], // Array de { hora: number, diasSemana: string[] }
   });
   const [showImportModal, setShowImportModal] = useState(false);
@@ -133,10 +135,11 @@ const CourseDetail = () => {
 
   const fetchSubjectsAndTeachers = async () => {
     try {
-      const [subjectsRes, teachersRes, periodsRes] = await Promise.all([
+      const [subjectsRes, teachersRes, periodsRes, gradeScalesRes] = await Promise.all([
         api.get('/subjects?limit=100'),
         api.get('/teachers?limit=100'),
         api.get('/periods?limit=100'), // Mantener para el modal de promoción
+        api.get('/grade-scales?limit=100'),
       ]);
 
       setSubjects(subjectsRes.data.data || []);
@@ -148,6 +151,7 @@ const CourseDetail = () => {
       setTeachers(activeTeachers);
       
       setPeriods(periodsRes.data.data || []);
+      setGradeScales(gradeScalesRes.data?.data || []);
     } catch (error) {
       console.error('Error al cargar materias y docentes:', error);
     }
@@ -355,6 +359,7 @@ const handleDownloadTemplate = async () => {
     setAssignmentFormData({
       materiaId: '',
       docenteId: '',
+      gradeScaleId: '',
       horarios: [],
     });
     fetchSubjectsAndTeachers();
@@ -388,6 +393,7 @@ const handleDownloadTemplate = async () => {
     setAssignmentFormData({
       materiaId: assignment.materiaId,
       docenteId: assignment.docenteId,
+      gradeScaleId: assignment.gradeScaleId || '',
       horarios: horariosFormatted,
     });
     fetchSubjectsAndTeachers();
@@ -427,9 +433,22 @@ const handleDownloadTemplate = async () => {
 
   const handleSubmitAssignment = async (e) => {
     e.preventDefault();
+    
+    // Validar campos requeridos
+    if (!assignmentFormData.docenteId) {
+      toast.error('Debes seleccionar un docente');
+      return;
+    }
+    
+    if (!assignmentFormData.gradeScaleId) {
+      toast.error('Debes seleccionar una escala de calificación');
+      return;
+    }
+    
     try {
       const requestData = {
         docenteId: assignmentFormData.docenteId,
+        gradeScaleId: assignmentFormData.gradeScaleId || null,
       };
       
       if (assignmentFormData.horarios && assignmentFormData.horarios.length > 0) {
@@ -441,11 +460,19 @@ const handleDownloadTemplate = async () => {
         await api.put(`/assignments/${editingAssignment.id}`, requestData);
         toast.success('Asignación actualizada exitosamente');
       } else {
+        // Validar materia para nueva asignación
+        if (!assignmentFormData.materiaId) {
+          toast.error('Debes seleccionar una materia');
+          return;
+        }
+        
         // Crear nueva asignación
         await api.post('/assignments', {
           cursoId: id,
           materiaId: assignmentFormData.materiaId,
-          ...requestData,
+          docenteId: assignmentFormData.docenteId,
+          gradeScaleId: assignmentFormData.gradeScaleId,
+          ...(requestData.horarios && { horarios: requestData.horarios }),
         });
         toast.success('Materia asignada al curso exitosamente');
       }
@@ -961,6 +988,28 @@ const handleDownloadTemplate = async () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Escala de Calificación <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={assignmentFormData.gradeScaleId}
+                  onChange={(e) => setAssignmentFormData({ ...assignmentFormData, gradeScaleId: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="">Selecciona una escala...</option>
+                  {gradeScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>
+                      {scale.nombre}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  La escala se usará para convertir promedios numéricos a letras o categorías
+                </p>
+              </div>
+
+              <div>
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-gray-700">
                     Horarios
@@ -1031,7 +1080,7 @@ const handleDownloadTemplate = async () => {
                   onClick={() => {
                     setShowSubjectModal(false);
                     setEditingAssignment(null);
-                    setAssignmentFormData({ materiaId: '', docenteId: '', horarios: [] });
+                    setAssignmentFormData({ materiaId: '', docenteId: '', gradeScaleId: '', horarios: [] });
                   }}
                   className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
                 >

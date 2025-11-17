@@ -9,6 +9,7 @@ const SubjectAssignments = () => {
   const [subjects, setSubjects] = useState([]);
   const [courses, setCourses] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [gradeScales, setGradeScales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
@@ -16,6 +17,7 @@ const SubjectAssignments = () => {
     materiaId: '',
     cursoId: '',
     docenteId: '',
+    gradeScaleId: '',
   });
 
   useEffect(() => {
@@ -34,11 +36,12 @@ const SubjectAssignments = () => {
 
     try {
       console.log('Cargando datos para institución:', selectedInstitutionId);
-      const [assignmentsRes, subjectsRes, coursesRes, teachersRes] = await Promise.all([
+      const [assignmentsRes, subjectsRes, coursesRes, teachersRes, gradeScalesRes] = await Promise.all([
         api.get('/assignments?limit=100'),
         api.get('/subjects?limit=100'),
         api.get('/courses?limit=100'),
         api.get('/teachers?limit=100'),
+        api.get('/grade-scales?limit=100'),
       ]);
 
       setAssignments(assignmentsRes.data.data || []);
@@ -89,6 +92,10 @@ const SubjectAssignments = () => {
       if (teachersList.length === 0) {
         console.warn('No se encontraron docentes con información de usuario');
       }
+
+      // Cargar escalas de calificación
+      const gradeScalesData = gradeScalesRes.data?.data || [];
+      setGradeScales(gradeScalesData);
     } catch (error) {
       console.error('Error al cargar datos:', error);
       console.error('Detalles del error:', error.response?.data || error.message);
@@ -102,14 +109,14 @@ const SubjectAssignments = () => {
     e.preventDefault();
     
     // Validar que todos los campos estén completos
-    if (!formData.materiaId || !formData.cursoId || !formData.docenteId) {
+    if (!formData.materiaId || !formData.cursoId || !formData.docenteId || !formData.gradeScaleId) {
       toast.error('Por favor, completa todos los campos requeridos');
       return;
     }
     
     // Validar formato UUID básico
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(formData.materiaId) || !uuidRegex.test(formData.cursoId) || !uuidRegex.test(formData.docenteId)) {
+    if (!uuidRegex.test(formData.materiaId) || !uuidRegex.test(formData.cursoId) || !uuidRegex.test(formData.docenteId) || !uuidRegex.test(formData.gradeScaleId)) {
       toast.error('Error: IDs inválidos. Por favor, selecciona nuevamente los campos.');
       console.error('IDs inválidos:', formData);
       return;
@@ -119,7 +126,10 @@ const SubjectAssignments = () => {
     
     try {
       if (editingAssignment) {
-        await api.put(`/assignments/${editingAssignment.id}`, formData);
+        await api.put(`/assignments/${editingAssignment.id}`, {
+          docenteId: formData.docenteId,
+          gradeScaleId: formData.gradeScaleId,
+        });
         toast.success('Asignación actualizada exitosamente');
       } else {
         await api.post('/assignments', formData);
@@ -147,6 +157,7 @@ const SubjectAssignments = () => {
       materiaId: assignment.materiaId,
       cursoId: assignment.cursoId,
       docenteId: assignment.docenteId,
+      gradeScaleId: assignment.gradeScaleId || '',
     });
     setShowModal(true);
   };
@@ -170,6 +181,7 @@ const SubjectAssignments = () => {
       materiaId: '',
       cursoId: '',
       docenteId: '',
+      gradeScaleId: '',
     });
     setEditingAssignment(null);
   };
@@ -383,6 +395,27 @@ const SubjectAssignments = () => {
                     {teachers.length} docente{teachers.length !== 1 ? 's' : ''} disponible{teachers.length !== 1 ? 's' : ''}
                   </p>
                 )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Escala de Calificación <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.gradeScaleId}
+                  onChange={(e) => setFormData({ ...formData, gradeScaleId: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="">Selecciona una escala...</option>
+                  {gradeScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>
+                      {scale.nombre}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  La escala se usará para convertir promedios numéricos a letras o categorías
+                </p>
               </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button
