@@ -28,6 +28,7 @@ import Reports from './pages/Reports';
 import Schedule from './pages/Schedule';
 import ReportCards from './pages/ReportCards';
 import GradeScales from './pages/GradeScales';
+import StudentProfileTemplate from './pages/StudentProfileTemplate';
 
 // Componente que renderiza el dashboard según el rol
 function DashboardByRole() {
@@ -81,6 +82,7 @@ function App() {
             <Route path="reports" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Reports /></ProtectedRoute>} />
             <Route path="report-cards" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><ReportCards /></ProtectedRoute>} />
             <Route path="grade-scales" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GradeScales /></ProtectedRoute>} />
+            <Route path="student-profile-template" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><StudentProfileTemplate /></ProtectedRoute>} />
             <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
             <Route path="schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />

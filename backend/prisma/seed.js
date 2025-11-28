@@ -45,6 +45,7 @@ async function main() {
       id: randomUUID(),
       institucionId: institucion.id,
       nombre: '2024-2025',
+      ano: 2024,
       fechaInicio: new Date('2024-09-01'),
       fechaFin: new Date('2025-07-15'),
       activo: true,

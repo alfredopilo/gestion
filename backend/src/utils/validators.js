@@ -394,3 +394,74 @@ export const createPaymentSchema = z.object({
   observaciones: z.string().optional().nullable(),
 });
 
+const studentProfileFieldTypeEnum = z.enum([
+  'TEXT',
+  'TEXTAREA',
+  'NUMBER',
+  'DATE',
+  'SELECT',
+  'MULTISELECT',
+  'BOOLEAN',
+  'IMAGE',
+]);
+
+const optionsSchema = z
+  .array(
+    z.object({
+      label: z.string().min(1, 'La etiqueta es requerida'),
+      value: z.string().min(1, 'El valor es requerido'),
+    })
+  )
+  .optional();
+
+export const createStudentProfileSectionSchema = z.object({
+  nombre: z.string().min(2, 'El nombre es requerido'),
+  descripcion: z.string().optional().nullable(),
+  orden: z.number().int().min(0).optional(),
+  activo: z.boolean().optional(),
+});
+
+export const updateStudentProfileSectionSchema = z.object({
+  nombre: z.string().min(2).optional(),
+  descripcion: z.string().optional().nullable(),
+  orden: z.number().int().min(0).optional(),
+  activo: z.boolean().optional(),
+});
+
+export const createStudentProfileFieldSchema = z.object({
+  etiqueta: z.string().min(2, 'La etiqueta es requerida'),
+  descripcion: z.string().optional().nullable(),
+  tipo: studentProfileFieldTypeEnum,
+  requerido: z.boolean().optional(),
+  orden: z.number().int().min(0).optional(),
+  config: z
+    .object({
+      options: optionsSchema,
+    })
+    .optional(),
+});
+
+export const updateStudentProfileFieldSchema = z.object({
+  etiqueta: z.string().min(2).optional(),
+  descripcion: z.string().optional().nullable(),
+  tipo: studentProfileFieldTypeEnum.optional(),
+  requerido: z.boolean().optional(),
+  orden: z.number().int().min(0).optional(),
+  config: z
+    .object({
+      options: optionsSchema,
+    })
+    .optional(),
+});
+
+export const updateStudentProfileValuesSchema = z.object({
+  values: z
+    .array(
+      z.object({
+        fieldId: z.string().uuid(),
+        value: z.any().optional().nullable(),
+      })
+    )
+    .min(1, 'Debe enviar al menos un valor para actualizar'),
+});
+

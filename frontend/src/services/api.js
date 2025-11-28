@@ -23,6 +23,11 @@ api.interceptors.request.use(
       config.headers['x-institution-id'] = selectedInstitutionId;
     }
     
+    // No sobrescribir Content-Type si es FormData (el navegador lo maneja automáticamente)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
     return config;
   },
   (error) => {

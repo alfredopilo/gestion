@@ -18,6 +18,7 @@ import institutionRoutes from './institutionRoutes.js';
 import schoolYearRoutes from './schoolYearRoutes.js';
 import scheduleRoutes from './scheduleRoutes.js';
 import gradeScaleRoutes from './gradeScaleRoutes.js';
+import studentProfileRoutes from './studentProfileRoutes.js';
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ router.use('/institutions', institutionRoutes);
 router.use('/school-years', schoolYearRoutes);
 router.use('/schedules', scheduleRoutes);
 router.use('/grade-scales', gradeScaleRoutes);
+router.use('/student-profile', studentProfileRoutes);
 
 export default router;
 

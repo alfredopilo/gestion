@@ -90,6 +90,13 @@ const Layout = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
       </svg>
     ),
+    'Ficha del Estudiante': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 1.657-1.343 3-3 3S6 12.657 6 11s1.343-3 3-3 3 1.343 3 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 19v-1a4 4 0 014-4h2a4 4 0 014 4v1" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7h5m-2.5-2.5V9" />
+      </svg>
+    ),
     Usuarios: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -136,6 +143,7 @@ const Layout = () => {
       children: [
         { name: 'Configuración General', href: '/general-settings', roles: ['ADMIN', 'SECRETARIA'] },
         { name: 'Configuración Institución', href: '/institution-settings', roles: ['ADMIN'] },
+        { name: 'Ficha del Estudiante', href: '/student-profile-template', roles: ['ADMIN', 'SECRETARIA'] },
       ]
     },
   ];

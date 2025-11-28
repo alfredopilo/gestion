@@ -358,3 +358,92 @@ export const deleteStudent = async (req, res, next) => {
   }
 };
 
+/**
+ * Subir foto de carnet del estudiante
+ */
+export const uploadFotoCarnet = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar que el estudiante existe
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        error: 'Estudiante no encontrado.',
+      });
+    }
+
+    // Verificar que se subió un archivo
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'No se proporcionó ninguna imagen.',
+      });
+    }
+
+    // Actualizar la ruta de la foto en la base de datos
+    const updatedStudent = await prisma.student.update({
+      where: { id },
+      data: {
+        fotoCarnet: req.file.filename,
+      },
+      include: {
+        user: {
+          select: {
+            nombre: true,
+            apellido: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      message: 'Foto de carnet subida exitosamente.',
+      filename: req.file.filename,
+      student: updatedStudent,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Obtener la foto de carnet del estudiante
+ */
+export const getFotoCarnet = async (req, res, next) => {
+  try {
+    const { filename } = req.params;
+    const path = await import('path');
+    const fs = await import('fs');
+    const { fileURLToPath } = await import('url');
+
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    const imagePath = path.join(__dirname, '../../uploads/student-profiles', filename);
+
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).send('Imagen no encontrada');
+    }
+
+    // Determinar el tipo de contenido basado en la extensión
+    const ext = path.extname(filename).toLowerCase();
+    const contentTypeMap = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    
+    const contentType = contentTypeMap[ext] || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(imagePath);
+  } catch (error) {
+    next(error);
+  }
+};
+

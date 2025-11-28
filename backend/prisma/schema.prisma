@@ -169,6 +169,7 @@ model Institution {
   userInstitutions UserInstitution[]
   usuarios         User[]            @relation("InstitutionUsuarios")
   gradeScales      GradeScale[]
+  studentProfileSections StudentProfileSection[]
 
   @@map("institutions")
 }
@@ -290,6 +291,7 @@ model Student {
   genero          String?
   grupoId         String?        @map("grupo_id")
   matricula       String?        @unique
+  fotoCarnet      String?        @map("foto_carnet")
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at")
   asistencias     Attendance[]
@@ -299,8 +301,56 @@ model Student {
   grupo           Course?        @relation(fields: [grupoId], references: [id])
   representante   Representante? @relation(fields: [representanteId], references: [id])
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileValues   StudentProfileValue[]
 
   @@map("students")
+}
+
+model StudentProfileSection {
+  id            String                     @id @default(dbgenerated("gen_random_uuid()::text"))
+  institucionId String                     @map("institucion_id")
+  nombre        String
+  descripcion   String?
+  orden         Int?                       @default(0)
+  activo        Boolean                    @default(true)
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  updatedAt     DateTime                   @default(now()) @updatedAt @map("updated_at")
+  institucion   Institution                @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  campos        StudentProfileField[]
+
+  @@unique([institucionId, nombre])
+  @@map("student_profile_sections")
+}
+
+model StudentProfileField {
+  id          String                    @id @default(dbgenerated("gen_random_uuid()::text"))
+  sectionId   String                    @map("section_id")
+  etiqueta    String
+  descripcion String?
+  tipo        StudentProfileFieldType
+  requerido   Boolean                   @default(false)
+  orden       Int?                      @default(0)
+  config      Json?                     @default("{}")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @default(now()) @updatedAt @map("updated_at")
+  section     StudentProfileSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  valores     StudentProfileValue[]
+
+  @@map("student_profile_fields")
+}
+
+model StudentProfileValue {
+  id        String              @id @default(dbgenerated("gen_random_uuid()::text"))
+  studentId String              @map("student_id")
+  fieldId   String              @map("field_id")
+  valor     String?
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at")
+  student   Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  field     StudentProfileField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, fieldId])
+  @@map("student_profile_values")
 }
 
 model SubPeriod {
@@ -452,4 +502,15 @@ enum TipoDocumento {
   CERTIFICADO_MEDICO
   CERTIFICADO_ACADEMICO
   OTRO
+}
+
+enum StudentProfileFieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  DATE
+  SELECT
+  MULTISELECT
+  BOOLEAN
+  IMAGE
 }
