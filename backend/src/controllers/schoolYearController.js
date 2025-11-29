@@ -4,39 +4,26 @@ import { createSchoolYearSchema, createSchoolYearBasicSchema, updateSchoolYearSc
 import { getSchoolYearInstitutionFilter, getActiveSchoolYear } from '../utils/institutionFilter.js';
 
 /**
- * Obtener todos los años lectivos
+ * Obtener todos los años lectivos de la institución seleccionada
  */
-const ensureSingleActiveSchoolYear = async (tx = prisma) => {
-  const activeYears = await tx.schoolYear.findMany({
-    where: { activo: true },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  });
-
-  if (activeYears.length <= 1) {
-    return activeYears[0]?.id ?? null;
-  }
-
-  const [latestActive, ...others] = activeYears;
-
-  await tx.schoolYear.updateMany({
-    where: {
-      id: { in: others.map((year) => year.id) },
-    },
-    data: {
-      activo: false,
-      updatedAt: new Date(),
-    },
-  });
-
-  return latestActive.id;
-};
-
 export const getSchoolYears = async (req, res, next) => {
   try {
-    await ensureSingleActiveSchoolYear();
-    // Los años escolares son globales, mostrar todos sin filtrar por institución
+    // Obtener la institución del filtro (header o usuario)
+    const institutionId = req.institutionId || req.user?.institucionId;
+    
+    // SIEMPRE filtrar por institución (excepto para ADMIN que puede ver todo)
+    const where = {};
+    if (institutionId) {
+      where.institucionId = institutionId;
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay institución y no es ADMIN, no mostrar nada
+      return res.json({
+        data: [],
+      });
+    }
+    
     const schoolYears = await prisma.schoolYear.findMany({
+      where,
       include: {
         institucion: {
           select: {
@@ -205,12 +192,13 @@ export const createSchoolYear = async (req, res, next) => {
       updatedAt: new Date(),
     };
 
-    // Verificar que solo haya un año activo globalmente (no por institución)
+    // Verificar que solo haya un año activo por institución
     if (validatedData.activo) {
       await prisma.schoolYear.updateMany({
         where: {
           activo: true,
           id: { not: schoolYearData.id },
+          institucionId: validatedData.institucionId, // Solo desactivar años de la misma institución
         },
         data: { activo: false, updatedAt: new Date() },
       });
@@ -418,15 +406,26 @@ export const setActiveSchoolYear = async (req, res, next) => {
       });
     }
 
+    // Verificar que el año escolar pertenece a la institución seleccionada (si no es ADMIN)
+    const institutionId = req.institutionId || req.user?.institucionId;
+    if (institutionId && schoolYear.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'No tienes permiso para activar este año escolar. Debe pertenecer a tu institución.',
+      });
+    }
+
     const updatedSchoolYear = await prisma.$transaction(async (tx) => {
+      // Desactivar todos los demás años escolares DE LA MISMA INSTITUCIÓN
       await tx.schoolYear.updateMany({
         where: {
           activo: true,
           id: { not: id },
+          institucionId: schoolYear.institucionId, // Solo desactivar años de la misma institución
         },
         data: { activo: false, updatedAt: new Date() },
       });
 
+      // Activar el año escolar seleccionado
       return tx.schoolYear.update({
         where: { id },
         data: { activo: true, updatedAt: new Date() },
@@ -458,10 +457,18 @@ export const setActiveSchoolYear = async (req, res, next) => {
  */
 export const getActiveSchoolYearController = async (req, res, next) => {
   try {
+    // Obtener el año escolar activo de la institución seleccionada
     const activeSchoolYear = await getActiveSchoolYear(req, prisma);
     
     if (!activeSchoolYear) {
       // Devolver 200 con null en lugar de 404 para que el frontend pueda manejarlo mejor
+      return res.status(200).json(null);
+    }
+    
+    // Verificar que el año activo pertenece a la institución seleccionada (si no es ADMIN)
+    const institutionId = req.institutionId || req.user?.institucionId;
+    if (institutionId && activeSchoolYear.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      // Si el año activo no pertenece a la institución, devolver null
       return res.status(200).json(null);
     }
 

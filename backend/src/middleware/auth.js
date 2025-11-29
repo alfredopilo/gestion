@@ -134,11 +134,11 @@ export const authenticate = async (req, res, next) => {
             null;
         }
       } else {
-        // Si no hay header, usar la del usuario o activa
+        // Si no hay header, usar SOLO la del usuario (NO usar activa como fallback)
+        // Esto evita que se mezclen datos entre instituciones
         req.institutionId =
           req.user.institucionId ||
           req.user.accessibleInstitutionIds?.[0] ||
-          activeInstitution?.id ||
           null;
       }
       

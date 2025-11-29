@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { createInsumoSchema, updateInsumoSchema } from '../utils/validators.js';
+import { getInsumoInstitutionFilter, verifyCourseBelongsToInstitution } from '../utils/institutionFilter.js';
 
 /**
  * Obtener todos los insumos
@@ -9,6 +10,18 @@ export const getInsumos = async (req, res, next) => {
     const { cursoId, materiaId, subPeriodoId, activo } = req.query;
 
     const where = {};
+    
+    // Filtrar por institución
+    const institutionFilter = await getInsumoInstitutionFilter(req, prisma);
+    if (Object.keys(institutionFilter).length > 0) {
+      if (institutionFilter.cursoId?.in && institutionFilter.cursoId.in.length === 0) {
+        return res.json({
+          data: [],
+        });
+      }
+      Object.assign(where, institutionFilter);
+    }
+    
     if (cursoId) where.cursoId = cursoId;
     if (materiaId) where.materiaId = materiaId;
     if (subPeriodoId) where.subPeriodoId = subPeriodoId;
@@ -83,6 +96,8 @@ export const getInsumoById = async (req, res, next) => {
     const insumo = await prisma.insumo.findUnique({
       where: { id },
       include: {
+        curso: true,
+        materia: true,
         subPeriodo: {
           include: {
             periodo: {
@@ -102,6 +117,9 @@ export const getInsumoById = async (req, res, next) => {
         error: 'Insumo no encontrado.',
       });
     }
+    
+    // Verificar que el insumo pertenece a la institución del usuario
+    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
 
     res.json(insumo);
   } catch (error) {
@@ -129,7 +147,7 @@ export const createInsumo = async (req, res, next) => {
         : null,
     };
 
-    // Verificar que el curso existe
+    // Verificar que el curso existe y pertenece a la institución
     const curso = await prisma.course.findUnique({
       where: { id: insumoData.cursoId },
     });
@@ -139,8 +157,11 @@ export const createInsumo = async (req, res, next) => {
         error: 'Curso no encontrado.',
       });
     }
+    
+    // Verificar que el curso pertenece a la institución del usuario
+    await verifyCourseBelongsToInstitution(req, insumoData.cursoId, prisma);
 
-    // Verificar que la materia existe
+    // Verificar que la materia existe y pertenece a la institución
     const materia = await prisma.subject.findUnique({
       where: { id: insumoData.materiaId },
     });
@@ -148,6 +169,15 @@ export const createInsumo = async (req, res, next) => {
     if (!materia) {
       return res.status(404).json({
         error: 'Materia no encontrada.',
+      });
+    }
+    
+    // Verificar que la materia pertenece a la institución del usuario
+    const { getInstitutionFilter } = require('../utils/institutionFilter.js');
+    const institutionId = getInstitutionFilter(req);
+    if (institutionId && materia.institucionId !== institutionId) {
+      return res.status(403).json({
+        error: 'La materia no pertenece a tu institución.',
       });
     }
 
@@ -252,6 +282,8 @@ export const updateInsumo = async (req, res, next) => {
     const insumo = await prisma.insumo.findUnique({
       where: { id },
       include: {
+        curso: true,
+        materia: true,
         subPeriodo: {
           include: {
             insumos: true,
@@ -265,6 +297,9 @@ export const updateInsumo = async (req, res, next) => {
         error: 'Insumo no encontrado.',
       });
     }
+    
+    // Verificar que el insumo pertenece a la institución del usuario
+    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
 
     // Si se actualiza el nombre, verificar que no exista otro con el mismo nombre para la misma combinación
     if (validatedData.nombre && validatedData.nombre !== insumo.nombre) {
@@ -322,6 +357,9 @@ export const deleteInsumo = async (req, res, next) => {
 
     const insumo = await prisma.insumo.findUnique({
       where: { id },
+      include: {
+        curso: true,
+      },
     });
 
     if (!insumo) {
@@ -329,6 +367,9 @@ export const deleteInsumo = async (req, res, next) => {
         error: 'Insumo no encontrado.',
       });
     }
+    
+    // Verificar que el insumo pertenece a la institución del usuario
+    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
 
     await prisma.insumo.delete({
       where: { id },

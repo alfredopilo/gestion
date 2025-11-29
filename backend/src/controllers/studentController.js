@@ -8,32 +8,58 @@ import { getStudentInstitutionFilter, verifyStudentBelongsToInstitution } from '
  */
 export const getStudents = async (req, res, next) => {
   try {
-    const { grupoId, page = 1, limit = 1000 } = req.query;
+    const { grupoId, estado, page = 1, limit = 1000 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
+    
+    // Obtener filtro de institución una sola vez
+    const institutionFilter = await getStudentInstitutionFilter(req, prisma);
+    
+    // SIEMPRE aplicar el filtro de institución primero (incluso si hay grupoId)
+    if (Object.keys(institutionFilter).length > 0) {
+      // Si el filtro tiene un array vacío, no devolver nada
+      if (institutionFilter.userId?.in && institutionFilter.userId.in.length === 0) {
+        return res.json({
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            pages: 0,
+          },
+        });
+      }
+      Object.assign(where, institutionFilter);
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay filtro y no es ADMIN, no mostrar nada
+      return res.json({
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0,
+        },
+      });
+    }
+    
+    // Si se especifica grupoId, filtrar por grupo (además del filtro de institución)
     if (grupoId) {
       where.grupoId = grupoId;
-    } else {
-      // Filtrar por institución activa o del usuario si no se especifica grupo
-      const institutionFilter = await getStudentInstitutionFilter(req, prisma);
-      // Solo aplicar filtro si no está vacío
-      if (Object.keys(institutionFilter).length > 0) {
-        // Si el filtro tiene un array vacío, no devolver nada
-        if (institutionFilter.userId?.in && institutionFilter.userId.in.length === 0) {
-          return res.json({
-            data: [],
-            pagination: {
-              page: parseInt(page),
-              limit: parseInt(limit),
-              total: 0,
-              pages: 0,
-            },
-          });
-        }
-        Object.assign(where, institutionFilter);
+    }
+
+    // Filtrar por estado del usuario si se proporciona
+    if (estado) {
+      if (where.user) {
+        where.user.estado = estado;
+      } else {
+        where.user = {
+          estado: estado,
+        };
       }
     }
+    
 
     // Obtener estudiantes con registro Student
     const [students, studentsTotal] = await Promise.all([
@@ -50,6 +76,7 @@ export const getStudents = async (req, res, next) => {
               email: true,
               telefono: true,
               estado: true,
+              numeroIdentificacion: true, // Campo mapeado a numero_identificacion
             },
           },
           grupo: {
@@ -73,7 +100,10 @@ export const getStudents = async (req, res, next) => {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { user: { apellido: 'asc' } },
+          { user: { nombre: 'asc' } },
+        ],
       }),
       prisma.student.count({ where }),
     ]);
@@ -81,43 +111,93 @@ export const getStudents = async (req, res, next) => {
     // Obtener IDs de usuarios que ya tienen registro Student
     const studentsWithUser = students.map(s => s.userId);
     
+    // Obtener numeroIdentificacion para estudiantes que ya tienen registro Student
+    // Prisma puede tener problemas con campos mapeados en select dentro de include
+    const userIds = students.map(s => s.userId);
+    const usersWithNumeroId = userIds.length > 0 ? await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: {
+        id: true,
+        numeroIdentificacion: true,
+      },
+    }) : [];
+    
+    // Crear un mapa de userId -> numeroIdentificacion
+    const numeroIdMap = new Map(usersWithNumeroId.map(u => [u.id, u.numeroIdentificacion]));
+    
+    // Agregar numeroIdentificacion a los estudiantes
+    students.forEach(student => {
+      if (student.user && numeroIdMap.has(student.userId)) {
+        student.user.numeroIdentificacion = numeroIdMap.get(student.userId);
+      }
+    });
+    
     // Obtener usuarios con rol ESTUDIANTE que no tienen registro Student
-    // Filtrar también por institución
-    const institutionFilter = await getStudentInstitutionFilter(req, prisma);
+    // SIEMPRE usar el filtro de institución para usuarios sin Student
     const userIdsFromInstitution = institutionFilter.userId?.in || [];
+    
+    // Si no hay usuarios de la institución, no mostrar usuarios sin Student
+    if (userIdsFromInstitution.length === 0 && req.user?.rol !== 'ADMIN') {
+      // No hay usuarios de la institución, solo devolver estudiantes con registro
+      const allStudents = [...students];
+      const total = studentsTotal;
+      
+      res.json({
+        data: allStudents,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      });
+      return;
+    }
     
     const userWhere = {
       rol: 'ESTUDIANTE',
-      estado: 'ACTIVO',
+      estado: estado || 'ACTIVO', // Usar el filtro de estado si se proporciona, sino solo activos
       id: {
         notIn: studentsWithUser.length > 0 ? studentsWithUser : [],
-        ...(userIdsFromInstitution.length > 0 ? { in: userIdsFromInstitution } : {}),
       },
     };
     
-    // Si hay filtro de institución, aplicar el filtro in además del notIn
+    // SIEMPRE aplicar el filtro de institución para usuarios sin Student
     if (userIdsFromInstitution.length > 0) {
       userWhere.id = {
         notIn: studentsWithUser.length > 0 ? studentsWithUser : [],
         in: userIdsFromInstitution,
       };
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay usuarios de la institución y no es ADMIN, no mostrar usuarios sin Student
+      userWhere.id = { in: [] };
     }
     
-    const usersWithoutStudent = await prisma.user.findMany({
-      where: userWhere,
-      select: {
-        id: true,
-        nombre: true,
-        apellido: true,
-        email: true,
-        telefono: true,
-        estado: true,
-      },
-      orderBy: [
-        { apellido: 'asc' },
-        { nombre: 'asc' },
-      ],
-    });
+    // Si se está filtrando por curso, NO incluir usuarios sin Student (solo estudiantes con registro)
+    // porque los usuarios sin Student no tienen curso asignado
+    const shouldIncludeUsersWithoutStudent = !grupoId;
+    
+    // Solo obtener usuarios sin Student si NO se está filtrando por curso
+    // porque los usuarios sin Student no tienen curso asignado
+    let usersWithoutStudent = [];
+    if (!grupoId) {
+      usersWithoutStudent = await prisma.user.findMany({
+        where: userWhere,
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          email: true,
+          telefono: true,
+          estado: true,
+          numeroIdentificacion: true,
+        },
+        orderBy: [
+          { apellido: 'asc' },
+          { nombre: 'asc' },
+        ],
+      });
+    }
 
     // Convertir usuarios sin Student a formato compatible con Student
     const studentsFromUsers = usersWithoutStudent.map(user => ({
@@ -130,6 +210,7 @@ export const getStudents = async (req, res, next) => {
         email: user.email,
         telefono: user.telefono,
         estado: user.estado,
+        numeroIdentificacion: user.numeroIdentificacion,
       },
       grupo: null,
       grupoId: null,
@@ -181,6 +262,7 @@ export const getStudentById = async (req, res, next) => {
             telefono: true,
             direccion: true,
             estado: true,
+            numeroIdentificacion: true,
           },
         },
         grupo: {

@@ -13,14 +13,40 @@ export const getUsers = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
+    
+    // SIEMPRE aplicar el filtro de institución primero
+    const institutionFilter = getUserInstitutionFilter(req);
+    if (Object.keys(institutionFilter).length > 0) {
+      // Si el filtro tiene un array vacío, no devolver nada
+      if (institutionFilter.institucionId?.in && institutionFilter.institucionId.in.length === 0) {
+        return res.json({
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            pages: 0,
+          },
+        });
+      }
+      // Aplicar el filtro de institución
+      Object.assign(where, institutionFilter);
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay filtro y no es ADMIN, no mostrar nada
+      return res.json({
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0,
+        },
+      });
+    }
+    
+    // Aplicar filtros adicionales después del filtro de institución
     if (rol) where.rol = rol;
     if (estado) where.estado = estado;
-    
-    // Filtrar por institución (excepto para ADMIN)
-    if (req.user.rol !== 'ADMIN') {
-      const institutionFilter = getUserInstitutionFilter(req);
-      Object.assign(where, institutionFilter);
-    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -35,6 +61,7 @@ export const getUsers = async (req, res, next) => {
           rol: true,
           estado: true,
           telefono: true,
+          numeroIdentificacion: true,
           createdAt: true,
         },
         orderBy: [

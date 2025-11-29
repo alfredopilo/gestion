@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
 import { createCourseSchema, updateCourseSchema, importStudentsSchema } from '../utils/validators.js';
-import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, verifyPeriodBelongsToInstitution, getActiveSchoolYear, getInstitutionFilter } from '../utils/institutionFilter.js';
+import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, verifyPeriodBelongsToInstitution, getActiveSchoolYear, getInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
 
 /**
  * Obtener todos los cursos
@@ -13,31 +13,79 @@ export const getCourses = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
+    
+    // SIEMPRE aplicar el filtro de institución primero
+    // Este filtro ya considera el año escolar activo global
+    const institutionFilter = await getCourseInstitutionFilter(req, prisma);
+    if (Object.keys(institutionFilter).length > 0) {
+      if (institutionFilter.anioLectivoId?.in && institutionFilter.anioLectivoId.in.length === 0) {
+        return res.json({
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            pages: 0,
+          },
+        });
+      }
+      Object.assign(where, institutionFilter);
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay filtro y no es ADMIN, no mostrar nada
+      return res.json({
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0,
+        },
+      });
+    }
+    
+    // Si se especifica periodoId, filtrar por período (además del filtro de institución)
     if (periodoId) {
-      where.periodoId = periodoId; // Mantener compatibilidad con búsquedas por período
-    } else {
-      // Filtrar por institución activa o del usuario
-      // Por defecto, mostrar solo cursos del año escolar activo
-      const activeSchoolYear = await getActiveSchoolYear(req, prisma);
-      if (activeSchoolYear) {
-        where.anioLectivoId = activeSchoolYear.id;
-      } else {
-        // Si no hay año activo, usar filtro general por institución
-        const institutionFilter = await getCourseInstitutionFilter(req, prisma);
-        if (Object.keys(institutionFilter).length > 0) {
-          if (institutionFilter.anioLectivoId?.in && institutionFilter.anioLectivoId.in.length === 0) {
-            return res.json({
-              data: [],
-              pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: 0,
-                pages: 0,
-              },
-            });
-          }
-          Object.assign(where, institutionFilter);
+      // Verificar que el período pertenece al año activo global
+      const periodo = await prisma.period.findUnique({
+        where: { id: periodoId },
+        include: {
+          anioLectivo: {
+            select: {
+              id: true,
+              institucionId: true,
+            },
+          },
+        },
+      });
+      
+      if (periodo) {
+        const activeSchoolYear = await getActiveSchoolYear(req, prisma);
+        
+        // Verificar que el período pertenece al año escolar activo GLOBAL
+        if (activeSchoolYear && periodo.anioLectivo?.id !== activeSchoolYear.id && req.user?.rol !== 'ADMIN') {
+          return res.json({
+            data: [],
+            pagination: {
+              page: parseInt(page),
+              limit: parseInt(limit),
+              total: 0,
+              pages: 0,
+            },
+          });
         }
+        
+        where.periodoId = periodoId;
+      } else {
+        // Si el período no existe, no mostrar cursos
+        return res.json({
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            pages: 0,
+          },
+        });
       }
     }
     if (nivel) where.nivel = nivel;
@@ -196,24 +244,58 @@ export const createCourse = async (req, res, next) => {
   try {
     const validatedData = createCourseSchema.parse(req.body);
 
-    // Obtener el año escolar activo si no se proporciona
+    // Obtener la institución del usuario (debe ser la seleccionada en el header)
+    const institutionId = getInstitutionFilter(req);
+    
+    // También verificar el header directamente como respaldo
+    const headerInstitutionId = req.headers['x-institution-id'];
+    
+    console.log('🔍 [createCourse] Institución del filtro:', institutionId);
+    console.log('🔍 [createCourse] Institución del header:', headerInstitutionId);
+    console.log('🔍 [createCourse] req.institutionId:', req.institutionId);
+    console.log('🔍 [createCourse] req.user.institucionId:', req.user?.institucionId);
+    
+    // Usar la institución del header si está disponible y el filtro no la tiene
+    const finalInstitutionId = institutionId || headerInstitutionId;
+    
+    if (!finalInstitutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución. Debe estar autenticado y tener una institución seleccionada.',
+      });
+    }
+    
+    console.log('✅ [createCourse] Institución final a usar:', finalInstitutionId);
+
+    // Obtener el año escolar activo de la institución seleccionada
     let anioLectivoId = validatedData.anioLectivoId;
     if (!anioLectivoId) {
+      // Cada institución tiene su propio año escolar activo
       const activeSchoolYear = await getActiveSchoolYear(req, prisma);
       if (!activeSchoolYear) {
         return res.status(400).json({
-          error: 'No hay un año escolar activo configurado. Por favor, configura un año escolar activo primero.',
+          error: 'No hay un año escolar activo configurado para esta institución. Por favor, crea y activa un año escolar para tu institución primero.',
         });
       }
+      
+      // Verificar que el año activo pertenece a la institución seleccionada
+      if (finalInstitutionId && activeSchoolYear.institucionId !== finalInstitutionId) {
+        return res.status(400).json({
+          error: `El año escolar activo (${activeSchoolYear.nombre}) pertenece a otra institución. Por favor, crea y activa un año escolar para tu institución actual.`,
+        });
+      }
+      
       anioLectivoId = activeSchoolYear.id;
+      console.log('✅ [createCourse] Usando año escolar activo de la institución:', activeSchoolYear.id, activeSchoolYear.nombre);
     }
+    
+    console.log('✅ [createCourse] Año escolar final a usar:', anioLectivoId);
 
     // Verificar que el año escolar existe y pertenece a la institución del usuario
     const schoolYear = await prisma.schoolYear.findUnique({
       where: { id: anioLectivoId },
       include: {
         institucion: {
-          select: { id: true },
+          select: { id: true, nombre: true },
         },
       },
     });
@@ -224,13 +306,9 @@ export const createCourse = async (req, res, next) => {
       });
     }
 
-    // Verificar acceso a la institución del año escolar
-    const institutionId = getInstitutionFilter(req);
-    if (institutionId && schoolYear.institucion.id !== institutionId && req.user?.rol !== 'ADMIN') {
-      return res.status(403).json({
-        error: 'No tienes permiso para crear cursos en este año escolar.',
-      });
-    }
+    console.log('✅ [createCourse] Año escolar encontrado:', schoolYear.id, schoolYear.nombre);
+    console.log('✅ [createCourse] El año escolar es GLOBAL - todas las instituciones lo comparten');
+
 
     const sortOrder = validatedData.sortOrder ?? 0;
 
@@ -247,6 +325,12 @@ export const createCourse = async (req, res, next) => {
       periodoId: validatedData.periodoId ?? null, // Opcional
       updatedAt: new Date(),
     };
+    
+    console.log('✅ [createCourse] Datos del curso a crear:', {
+      nombre: courseData.nombre,
+      anioLectivoId: courseData.anioLectivoId,
+      institucionDelAnio: schoolYear.institucion.id,
+    });
 
     const course = await prisma.course.create({
       data: courseData,
@@ -805,14 +889,56 @@ export const removeStudentFromCourse = async (req, res, next) => {
   try {
     const { id: courseId, estudianteId } = req.params;
 
+    // Verificar que el curso existe y pertenece a la institución
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        anioLectivo: {
+          select: {
+            id: true,
+            institucionId: true,
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      return res.status(404).json({
+        error: 'Curso no encontrado.',
+      });
+    }
+
+    // Verificar que el curso pertenece a la institución seleccionada
+    const institutionId = getInstitutionFilter(req);
+    if (institutionId && course.anioLectivo?.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'No tienes permiso para modificar este curso.',
+      });
+    }
+
     // Verificar que el estudiante está en el curso
     const student = await prisma.student.findUnique({
       where: { id: estudianteId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            institucionId: true,
+          },
+        },
+      },
     });
 
     if (!student) {
       return res.status(404).json({
         error: 'Estudiante no encontrado.',
+      });
+    }
+
+    // Verificar que el estudiante pertenece a la institución seleccionada
+    if (institutionId && student.user?.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'No tienes permiso para modificar este estudiante.',
       });
     }
 
@@ -847,37 +973,70 @@ export const removeStudentFromCourse = async (req, res, next) => {
 };
 
 /**
- * Obtener estudiantes disponibles (sin curso en el año escolar activo)
+ * Obtener estudiantes disponibles (sin curso en el año escolar activo de la institución)
  * Incluye estudiantes con registro Student y usuarios con rol ESTUDIANTE sin registro Student
+ * Filtrado por institución y año lectivo activo
  */
 export const getAvailableStudents = async (req, res, next) => {
   try {
     const { cursoId } = req.query;
+    const institutionId = getInstitutionFilter(req);
 
-    // Obtener el año escolar activo
+    // Obtener el año escolar activo de la institución seleccionada
     const activeSchoolYear = await getActiveSchoolYear(req, prisma);
     if (!activeSchoolYear) {
       return res.status(400).json({
-        error: 'No hay un año escolar activo configurado.',
+        error: 'No hay un año escolar activo configurado para esta institución.',
       });
     }
 
-    // Obtener todos los cursos del año escolar activo
+    // Verificar que el año activo pertenece a la institución seleccionada
+    if (institutionId && activeSchoolYear.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(400).json({
+        error: 'El año escolar activo no pertenece a la institución seleccionada.',
+      });
+    }
+
+    // Obtener todos los cursos del año escolar activo de la institución
+    // El año activo ya pertenece a la institución, así que solo filtrar por anioLectivoId
     const coursesInSchoolYear = await prisma.course.findMany({
-      where: { anioLectivoId: activeSchoolYear.id },
+      where: { 
+        anioLectivoId: activeSchoolYear.id,
+      },
       select: { id: true },
     });
 
     const courseIds = coursesInSchoolYear.map(c => c.id);
 
     // Construir condición para excluir estudiantes ya asignados
-    // Siempre excluir el curso actual si se proporciona, además de todos los cursos del período
+    // Siempre excluir el curso actual si se proporciona, además de todos los cursos del año activo
     const courseIdsToExclude = [...courseIds];
     if (cursoId && !courseIdsToExclude.includes(cursoId)) {
       courseIdsToExclude.push(cursoId);
     }
 
+    // Obtener filtro de institución para estudiantes
+    const institutionFilter = await getStudentInstitutionFilter(req, prisma);
+    
+    // Si no hay filtro de institución y no es ADMIN, no mostrar estudiantes
+    if (Object.keys(institutionFilter).length === 0 && req.user?.rol !== 'ADMIN') {
+      return res.json({
+        data: [],
+      });
+    }
+    
+    // Si el filtro tiene un array vacío, no devolver nada
+    if (institutionFilter.userId?.in && institutionFilter.userId.in.length === 0) {
+      return res.json({
+        data: [],
+      });
+    }
+    
+    // Construir condición para filtrar estudiantes por institución y año lectivo
     const whereCondition = {
+      // Aplicar filtro de institución (userId)
+      ...institutionFilter,
+      // Filtrar por estado del usuario
       user: {
         estado: 'ACTIVO',
       },
@@ -949,14 +1108,27 @@ export const getAvailableStudents = async (req, res, next) => {
 
     // Obtener usuarios con rol ESTUDIANTE activos que NO tienen registro Student
     // Y que no están en el curso actual
-    const usersWithoutStudent = await prisma.user.findMany({
-      where: {
-        rol: 'ESTUDIANTE',
-        estado: 'ACTIVO',
-        id: {
-          notIn: allExcludedUserIds.length > 0 ? allExcludedUserIds : [],
-        },
+    // Filtrar por institución
+    const userWhereCondition = {
+      rol: 'ESTUDIANTE',
+      estado: 'ACTIVO',
+      id: {
+        notIn: allExcludedUserIds.length > 0 ? allExcludedUserIds : [],
       },
+    };
+
+    // Aplicar filtro de institución
+    if (institutionId) {
+      userWhereCondition.institucionId = institutionId;
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay institución y no es ADMIN, no mostrar usuarios
+      return res.json({
+        data: [],
+      });
+    }
+
+    const usersWithoutStudent = await prisma.user.findMany({
+      where: userWhereCondition,
       select: {
         id: true,
         nombre: true,

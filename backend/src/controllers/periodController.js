@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import prisma from '../config/database.js';
 import { createPeriodSchema, updatePeriodSchema } from '../utils/validators.js';
-import { getPeriodInstitutionFilter, verifyPeriodBelongsToInstitution, getActiveSchoolYear } from '../utils/institutionFilter.js';
+import { getPeriodInstitutionFilter, verifyPeriodBelongsToInstitution, getActiveSchoolYear, getInstitutionFilter } from '../utils/institutionFilter.js';
 
 /**
  * Obtener todos los períodos

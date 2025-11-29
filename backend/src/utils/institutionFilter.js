@@ -38,34 +38,39 @@ export const getInstitutionFilter = (req) => {
 };
 
 /**
- * Obtiene el año escolar activo (global, no por institución)
+ * Obtiene el año escolar activo de la institución seleccionada
+ * Cada institución tiene su propio año escolar activo
  */
 export const getActiveSchoolYear = async (req, prisma) => {
   try {
     const institutionId = getInstitutionFilter(req);
-
-    // 1) Intentar obtener el año activo de la institución seleccionada (o del usuario)
-    const institutionFilter = institutionId ? { institucionId: institutionId } : {};
-    const activeForInstitution = await prisma.schoolYear.findFirst({
+    
+    if (!institutionId) {
+      // Si no hay institución seleccionada, buscar el año activo más reciente (solo para ADMIN)
+      if (req.user?.rol === 'ADMIN') {
+        const globalActive = await prisma.schoolYear.findFirst({
+          where: { activo: true },
+          include: {
+            institucion: {
+              select: { id: true, nombre: true },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+        
+        if (globalActive) {
+          return globalActive;
+        }
+      }
+      return null;
+    }
+    
+    // Buscar el año escolar activo de la institución seleccionada
+    const activeSchoolYear = await prisma.schoolYear.findFirst({
       where: {
-        ...institutionFilter,
+        institucionId: institutionId,
         activo: true,
       },
-      include: {
-        institucion: {
-          select: { id: true, nombre: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (activeForInstitution) {
-      return activeForInstitution;
-    }
-
-    // 2) Como respaldo, buscar un año escolar activo global (si existiera)
-    const globalActive = await prisma.schoolYear.findFirst({
-      where: { activo: true },
       include: {
         institucion: {
           select: { id: true, nombre: true },
@@ -74,12 +79,13 @@ export const getActiveSchoolYear = async (req, prisma) => {
       orderBy: { updatedAt: 'desc' },
     });
 
-    if (globalActive) {
-      return globalActive;
+    if (activeSchoolYear) {
+      return activeSchoolYear;
     }
 
-    // 3) Último recurso: devolver el año escolar más reciente del sistema
-    const latestGlobal = await prisma.schoolYear.findFirst({
+    // Si no hay activo, devolver el año escolar más reciente de la institución
+    const latestSchoolYear = await prisma.schoolYear.findFirst({
+      where: { institucionId: institutionId },
       include: {
         institucion: {
           select: { id: true, nombre: true },
@@ -88,7 +94,7 @@ export const getActiveSchoolYear = async (req, prisma) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    return latestGlobal ?? null;
+    return latestSchoolYear ?? null;
   } catch (error) {
     console.error('Error al obtener año escolar activo:', error);
     return null;
@@ -114,7 +120,7 @@ export const getSchoolYearInstitutionFilter = (req) => {
 
 /**
  * Construye un filtro para Period basado en la institución
- * A través de la relación anioLectivo -> institucionId
+ * Solo muestra períodos del año escolar activo de la institución actual
  */
 export const getPeriodInstitutionFilter = async (req, prisma) => {
   const institutionId = getInstitutionFilter(req);
@@ -126,22 +132,18 @@ export const getPeriodInstitutionFilter = async (req, prisma) => {
   }
   
   try {
-    // Obtener años lectivos de la institución
-    const schoolYears = await prisma.schoolYear.findMany({
-      where: { institucionId: institutionId },
-      select: { id: true },
-    });
+    // Obtener el año escolar activo de la institución seleccionada
+    const activeSchoolYear = await getActiveSchoolYear(req, prisma);
     
-    const schoolYearIds = schoolYears.map(sy => sy.id);
-    
-    if (schoolYearIds.length === 0) {
-      // Si no hay años lectivos, retornar filtro que no devuelva nada
-      return { anioLectivoId: { in: [] } };
+    if (activeSchoolYear && activeSchoolYear.institucionId === institutionId) {
+      // Filtrar solo períodos del año activo de la institución
+      return {
+        anioLectivoId: activeSchoolYear.id,
+      };
     }
     
-    return {
-      anioLectivoId: { in: schoolYearIds },
-    };
+    // Si no hay año activo para la institución, no mostrar períodos
+    return { anioLectivoId: { in: [] } };
   } catch (error) {
     console.error('Error al obtener filtro de períodos por institución:', error);
     return { anioLectivoId: { in: [] } };
@@ -150,7 +152,8 @@ export const getPeriodInstitutionFilter = async (req, prisma) => {
 
 /**
  * Construye un filtro para Course basado en la institución
- * Ahora filtra por año escolar en lugar de período
+ * Cada institución tiene su propio año escolar activo
+ * Los cursos se filtran por: año escolar activo de la institución
  */
 export const getCourseInstitutionFilter = async (req, prisma) => {
   const institutionId = getInstitutionFilter(req);
@@ -162,21 +165,24 @@ export const getCourseInstitutionFilter = async (req, prisma) => {
   }
   
   try {
-    // Obtener años lectivos de la institución
-    const schoolYears = await prisma.schoolYear.findMany({
-      where: { institucionId: institutionId },
-      select: { id: true },
-    });
+    // Obtener el año escolar activo de la institución seleccionada
+    const activeSchoolYear = await getActiveSchoolYear(req, prisma);
     
-    const schoolYearIds = schoolYears.map(sy => sy.id);
-    
-    if (schoolYearIds.length === 0) {
-      return { anioLectivoId: { in: [] } };
+    if (activeSchoolYear) {
+      // Verificar que el año activo pertenece a la institución seleccionada
+      if (activeSchoolYear.institucionId === institutionId) {
+        // Filtrar cursos del año activo de la institución
+        return {
+          anioLectivoId: activeSchoolYear.id,
+        };
+      } else {
+        // Si el año activo no pertenece a la institución, no mostrar cursos
+        return { anioLectivoId: { in: [] } };
+      }
     }
     
-    return {
-      anioLectivoId: { in: schoolYearIds },
-    };
+    // Si no hay año activo para la institución, no mostrar cursos
+    return { anioLectivoId: { in: [] } };
   } catch (error) {
     console.error('Error al obtener filtro de cursos por institución:', error);
     return { anioLectivoId: { in: [] } };
@@ -220,6 +226,9 @@ export const getStudentInstitutionFilter = async (req, prisma) => {
 
 /**
  * Construye un filtro para User basado en la institución
+ * Muestra usuarios que tienen acceso a la institución seleccionada:
+ * - Usuarios cuya institución principal es la seleccionada
+ * - Usuarios que tienen acceso a través de UserInstitution (relación many-to-many)
  */
 export const getUserInstitutionFilter = (req) => {
   const institutionId = getInstitutionFilter(req);
@@ -227,11 +236,26 @@ export const getUserInstitutionFilter = (req) => {
     // Si no hay institución, no filtrar (mostrar todo para ADMIN)
     if (req.user?.rol === 'ADMIN') return {};
     // Para otros usuarios, no mostrar nada si no hay institución
-    return { institucionId: { in: [] } };
+    return { 
+      OR: [
+        { institucionId: { in: [] } },
+        { userInstitutions: { none: {} } }
+      ]
+    };
   }
   
+  // Filtrar usuarios que tienen acceso a la institución seleccionada
   return {
-    institucionId: institutionId,
+    OR: [
+      { institucionId: institutionId },
+      {
+        userInstitutions: {
+          some: {
+            institucionId: institutionId,
+          },
+        },
+      },
+    ],
   };
 };
 
@@ -448,6 +472,46 @@ export const getSubjectInstitutionFilter = async (req, prisma) => {
   } catch (error) {
     console.error('Error al obtener filtro de materias por institución:', error);
     return { institucionId: { in: [] } };
+  }
+};
+
+/**
+ * Construye un filtro para Insumo basado en la institución
+ * A través de curso -> anioLectivo -> institucionId
+ */
+export const getInsumoInstitutionFilter = async (req, prisma) => {
+  const institutionId = getInstitutionFilter(req);
+  if (!institutionId) {
+    if (req.user?.rol === 'ADMIN') return {};
+    return { cursoId: { in: [] } };
+  }
+  
+  try {
+    // Reutilizar la lógica de cursos para obtener los cursos de la institución
+    const courseFilter = await getCourseInstitutionFilter(req, prisma);
+    
+    if (courseFilter.anioLectivoId?.in && courseFilter.anioLectivoId.in.length === 0) {
+      return { cursoId: { in: [] } };
+    }
+    
+    // Obtener cursos de esos años lectivos
+    const courses = await prisma.course.findMany({
+      where: courseFilter,
+      select: { id: true },
+    });
+    
+    const courseIds = courses.map(c => c.id);
+    
+    if (courseIds.length === 0) {
+      return { cursoId: { in: [] } };
+    }
+    
+    return {
+      cursoId: { in: courseIds },
+    };
+  } catch (error) {
+    console.error('Error al obtener filtro de insumos por institución:', error);
+    return { cursoId: { in: [] } };
   }
 };
 

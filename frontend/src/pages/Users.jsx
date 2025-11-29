@@ -36,8 +36,18 @@ const Users = () => {
   const [importInstitutions, setImportInstitutions] = useState([]);
 
   useEffect(() => {
-    fetchUsers();
     fetchInstitutions();
+  }, []);
+
+  useEffect(() => {
+    // Solo cargar usuarios si hay al menos un filtro activo
+    const hasActiveFilter = filters.rol || filters.estado;
+    if (hasActiveFilter) {
+      fetchUsers();
+    } else {
+      setUsers([]);
+      setLoading(false);
+    }
   }, [filters]);
 
   const fetchInstitutions = async () => {
@@ -458,6 +468,7 @@ const Users = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Número de Identificación</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre Completo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
@@ -468,15 +479,24 @@ const Users = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.length === 0 ? (
+              {!filters.rol && !filters.estado ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                    No hay usuarios registrados
+                  <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                    Aplica filtros para ver usuarios
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                    No se encontraron usuarios con los filtros aplicados
                   </td>
                 </tr>
               ) : (
                 users.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {user.numeroIdentificacion ?? '-'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">
                         {user.apellido} {user.nombre}

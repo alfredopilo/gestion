@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import prisma from '../config/database.js';
 import { createInstitutionSchema, updateInstitutionSchema } from '../utils/validators.js';
 
@@ -74,8 +75,15 @@ export const createInstitution = async (req, res, next) => {
   try {
     const validatedData = createInstitutionSchema.parse(req.body);
 
+    // Generar ID si no se proporciona y agregar updatedAt
+    const institutionData = {
+      ...validatedData,
+      id: validatedData.id || randomUUID(),
+      updatedAt: new Date(),
+    };
+
     const institution = await prisma.institution.create({
-      data: validatedData,
+      data: institutionData,
     });
 
     res.status(201).json({

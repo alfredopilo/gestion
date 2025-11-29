@@ -125,14 +125,32 @@ const InstitutionSettings = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Asegurar que logo sea siempre un string o null
+      let logoValue = null;
+      if (formData.logo) {
+        // Si es un string, usarlo directamente
+        if (typeof formData.logo === 'string') {
+          logoValue = formData.logo.trim() || null;
+        } 
+        // Si es un objeto (por ejemplo, File o Blob), usar logoPreview si está disponible
+        else if (typeof formData.logo === 'object') {
+          // Si hay logoPreview, usar ese (ya está en base64)
+          logoValue = (logoPreview && typeof logoPreview === 'string') ? logoPreview : null;
+        }
+      } else if (logoPreview && typeof logoPreview === 'string') {
+        // Si no hay logo en formData pero hay preview, usar el preview
+        logoValue = logoPreview;
+      }
+      
       const data = {
-        ...formData,
+        nombre: formData.nombre,
         codigo: formData.codigo || null,
-        logo: formData.logo || null,
+        logo: logoValue,
         direccion: formData.direccion || null,
         telefono: formData.telefono || null,
         email: formData.email || null,
         rector: formData.rector || null,
+        activa: formData.activa,
       };
 
       if (editingInstitution) {
@@ -154,10 +172,15 @@ const InstitutionSettings = () => {
 
   const handleEdit = (institution) => {
     setEditingInstitution(institution);
+    // Asegurar que logo sea siempre un string
+    const logoString = typeof institution.logo === 'string' 
+      ? institution.logo 
+      : (institution.logo ? String(institution.logo) : '');
+    
     setFormData({
       nombre: institution.nombre || '',
       codigo: institution.codigo || '',
-      logo: institution.logo || '',
+      logo: logoString,
       direccion: institution.direccion || '',
       telefono: institution.telefono || '',
       email: institution.email || '',
@@ -165,7 +188,7 @@ const InstitutionSettings = () => {
       activa: institution.activa ?? true,
     });
     setLogoFile(null);
-    setLogoPreview(institution.logo || '');
+    setLogoPreview(logoString);
     setOriginalSize(0);
     setCompressedSize(0);
     setShowModal(true);
