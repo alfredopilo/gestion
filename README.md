@@ -5,13 +5,18 @@ Aplicación web completa para la administración integral de una institución ed
 ## 🚀 Características
 
 - **Gestión de Usuarios y Roles**: Administrador, Profesor, Estudiante, Representante, Secretaria
-- **Gestión de Estudiantes**: Registro, asignación a cursos, documentos
-- **Gestión Académica**: Cursos, materias, períodos lectivos
-- **Calificaciones**: Registro de notas, promedios automáticos
+- **Gestión de Estudiantes**: Registro, asignación a cursos, documentos, perfiles personalizados
+- **Gestión Académica**: Cursos, materias, períodos lectivos, años escolares
+- **Calificaciones**: Registro de notas, promedios automáticos, escalas de calificación personalizables
 - **Asistencia**: Control diario, justificaciones, reportes
 - **Pagos y Finanzas**: Gestión de pensiones, matrículas, estado de cuenta
 - **Comunicación**: Sistema de mensajería interna
 - **Reportes**: Generación de reportes en PDF/Excel
+- **Insumos Académicos**: Gestión de deberes, tareas y evaluaciones por curso y materia
+- **Horarios**: Asignación de horarios a materias y cursos
+- **Instituciones Múltiples**: Soporte para múltiples instituciones educativas
+- **Perfiles de Estudiante Personalizables**: Campos dinámicos configurables por institución
+- **Respaldo y Restauración**: Sistema para guardar y restaurar datos iniciales de la base de datos
 
 ## 🛠️ Tecnologías
 
@@ -291,6 +296,32 @@ Para abrir Prisma Studio (interfaz visual):
 npm run prisma:studio
 ```
 
+### 💾 Respaldo y Restauración de Datos
+
+El sistema incluye un sistema de respaldo y restauración para guardar y recuperar los datos iniciales:
+
+1. **Guardar datos actuales**: Después de configurar tu base de datos con datos iniciales, ejecuta:
+   ```bash
+   npm run save:data
+   ```
+   Esto guardará todos los datos en `prisma/seed-data/` como archivos JSON.
+
+2. **Restablecer base de datos**: Cuando necesites limpiar y restaurar los datos:
+   ```bash
+   npm run reset:db
+   ```
+   Este comando:
+   - Limpia toda la base de datos
+   - Si encuentra datos guardados, los restaura automáticamente
+   - Si no hay datos guardados, crea datos iniciales básicos
+
+3. **Restaurar datos manualmente**: Si solo quieres restaurar sin limpiar:
+   ```bash
+   npm run restore:data
+   ```
+
+Los datos se guardan en `prisma/seed-data/` y cada tabla tiene su propio archivo JSON. Ver `backend/scripts/README-DATA-BACKUP.md` para más detalles.
+
 ## 🧪 Desarrollo
 
 ### Comandos Backend
@@ -299,6 +330,9 @@ npm run prisma:studio
 - `npm run prisma:migrate` - Ejecutar migraciones
 - `npm run prisma:seed` - Ejecutar seed
 - `npm run prisma:studio` - Abrir Prisma Studio
+- `npm run save:data` - Guardar datos actuales de la base de datos
+- `npm run restore:data` - Restaurar datos guardados previamente
+- `npm run reset:db` - Limpiar y restablecer base de datos (usa datos guardados si existen)
 
 ### Comandos Frontend
 - `npm run dev` - Iniciar servidor de desarrollo
