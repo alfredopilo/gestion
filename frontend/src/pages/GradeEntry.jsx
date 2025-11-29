@@ -1027,7 +1027,7 @@ const GradeEntry = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap sticky left-[120px] bg-white z-10">
                           <div className="font-medium text-gray-900">
-                            {student.user?.nombre} {student.user?.apellido}
+                            {student.user?.apellido} {student.user?.nombre}
                           </div>
                         </td>
                         {insumos.map(insumo => {

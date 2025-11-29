@@ -58,7 +58,19 @@ const Users = () => {
       params.append('limit', '100');
 
       const response = await api.get(`/users?${params.toString()}`);
-      setUsers(response.data.data || []);
+      const usersData = response.data.data || [];
+      // Ordenar por apellido y luego nombre (alfabético ascendente) como respaldo
+      const sortedUsers = [...usersData].sort((a, b) => {
+        const apellidoA = (a.apellido || '').toLowerCase();
+        const apellidoB = (b.apellido || '').toLowerCase();
+        if (apellidoA !== apellidoB) {
+          return apellidoA.localeCompare(apellidoB);
+        }
+        const nombreA = (a.nombre || '').toLowerCase();
+        const nombreB = (b.nombre || '').toLowerCase();
+        return nombreA.localeCompare(nombreB);
+      });
+      setUsers(sortedUsers);
     } catch (error) {
       console.error('Error al cargar usuarios:', error);
       toast.error('Error al cargar usuarios');
@@ -467,7 +479,7 @@ const Users = () => {
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">
-                        {user.nombre} {user.apellido}
+                        {user.apellido} {user.nombre}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

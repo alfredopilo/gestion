@@ -458,7 +458,7 @@ const Attendance = () => {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <p className="font-medium">
-                            {estudiante.user?.nombre} {estudiante.user?.apellido}
+                            {estudiante.user?.apellido} {estudiante.user?.nombre}
                           </p>
                         </div>
                         <div className="flex gap-2 flex-wrap">

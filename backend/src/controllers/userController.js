@@ -37,7 +37,10 @@ export const getUsers = async (req, res, next) => {
           telefono: true,
           createdAt: true,
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { apellido: 'asc' },
+          { nombre: 'asc' },
+        ],
       }),
       prisma.user.count({ where }),
     ]);

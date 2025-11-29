@@ -113,7 +113,10 @@ export const getStudents = async (req, res, next) => {
         telefono: true,
         estado: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { apellido: 'asc' },
+        { nombre: 'asc' },
+      ],
     });
 
     // Convertir usuarios sin Student a formato compatible con Student

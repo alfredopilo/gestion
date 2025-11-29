@@ -964,9 +964,10 @@ export const getAvailableStudents = async (req, res, next) => {
         email: true,
         estado: true,
       },
-      orderBy: {
-        apellido: 'asc',
-      },
+      orderBy: [
+        { apellido: 'asc' },
+        { nombre: 'asc' },
+      ],
       take: 1000,
     });
 

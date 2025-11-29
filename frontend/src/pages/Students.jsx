@@ -99,7 +99,7 @@ const Students = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       {student._isPending ? (
                         <span className="text-gray-900 font-medium">
-                          {student.user?.nombre || 'Sin nombre'} {student.user?.apellido || ''}
+                          {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
                           <span className="ml-2 text-xs text-yellow-600">(Pendiente de registro)</span>
                         </span>
                       ) : (
@@ -107,7 +107,7 @@ const Students = () => {
                           to={`/students/${student.id}`}
                           className="text-primary-600 hover:text-primary-900 font-medium"
                         >
-                          {student.user?.nombre || 'Sin nombre'} {student.user?.apellido || ''}
+                          {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
                         </Link>
                       )}
                     </td>

@@ -670,7 +670,7 @@ const handleDownloadTemplate = async () => {
                       <tr key={student.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="font-medium text-gray-900">
-                            {student.user?.nombre} {student.user?.apellido}
+                            {student.user?.apellido} {student.user?.nombre}
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
@@ -875,7 +875,7 @@ const handleDownloadTemplate = async () => {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="font-medium text-gray-900">
-                              {student.user?.nombre} {student.user?.apellido}
+                              {student.user?.apellido} {student.user?.nombre}
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
