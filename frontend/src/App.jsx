@@ -27,6 +27,7 @@ import Insumos from './pages/Insumos';
 import Reports from './pages/Reports';
 import Schedule from './pages/Schedule';
 import ReportCards from './pages/ReportCards';
+import HistoricalReportCards from './pages/HistoricalReportCards';
 import GradeScales from './pages/GradeScales';
 import StudentProfileTemplate from './pages/StudentProfileTemplate';
 
@@ -81,6 +82,7 @@ function App() {
             <Route path="insumos" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Insumos /></ProtectedRoute>} />
             <Route path="reports" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Reports /></ProtectedRoute>} />
             <Route path="report-cards" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><ReportCards /></ProtectedRoute>} />
+            <Route path="historical-report-cards" element={<ProtectedRoute><HistoricalReportCards /></ProtectedRoute>} />
             <Route path="grade-scales" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GradeScales /></ProtectedRoute>} />
             <Route path="student-profile-template" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><StudentProfileTemplate /></ProtectedRoute>} />
             <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />

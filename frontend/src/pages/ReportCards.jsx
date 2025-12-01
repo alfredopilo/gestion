@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -88,7 +89,21 @@ const ReportCards = () => {
   const fetchStudents = async () => {
     try {
       const response = await api.get(`/courses/${selectedCurso}`);
-      setEstudiantes(response.data.estudiantes || []);
+      const estudiantesData = response.data.estudiantes || [];
+      
+      // Ordenar estudiantes por apellido y luego por nombre (alfabético ascendente)
+      const estudiantesOrdenados = [...estudiantesData].sort((a, b) => {
+        const apellidoA = (a.user?.apellido || '').toLowerCase();
+        const apellidoB = (b.user?.apellido || '').toLowerCase();
+        if (apellidoA !== apellidoB) {
+          return apellidoA.localeCompare(apellidoB);
+        }
+        const nombreA = (a.user?.nombre || '').toLowerCase();
+        const nombreB = (b.user?.nombre || '').toLowerCase();
+        return nombreA.localeCompare(nombreB);
+      });
+      
+      setEstudiantes(estudiantesOrdenados);
       setSelectedEstudiantes([]);
       setSelectAll(false);
     } catch (error) {
@@ -198,7 +213,7 @@ const ReportCards = () => {
       // Información del estudiante
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      doc.text(`Estudiante: ${reportCard.estudiante.nombre} ${reportCard.estudiante.apellido}`, marginLeft, cursorY);
+      doc.text(`Estudiante: ${reportCard.estudiante.apellido} ${reportCard.estudiante.nombre}`, marginLeft, cursorY);
       cursorY += 5;
       doc.text(`Identificación: ${reportCard.estudiante.numeroIdentificacion}`, marginLeft, cursorY);
       cursorY += 5;
@@ -214,19 +229,64 @@ const ReportCards = () => {
         Object.keys(materia.promediosSubPeriodo || {}).forEach(spId => allSubPeriodIds.add(spId));
       });
       
-      const filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
-        ...periodGroup,
-        subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
-          allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
-        )
-      })).filter(p => p.subPeriods.length > 0);
-      
-      const materiasConDatos = materias.filter(materia => {
-        return filteredPeriodsGrouped.some(periodGroup =>
-          periodGroup.subPeriods.some(subPeriodGroup =>
-            materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId]
+      // Si periodsGrouped está vacío pero hay materias con datos, construir desde las materias
+      let filteredPeriodsGrouped = [];
+      if (periodsGrouped.length === 0 && allSubPeriodIds.size > 0) {
+        // Construir periodsGrouped desde los promediosSubPeriodo de las materias
+        const periodMap = new Map();
+        materias.forEach(materia => {
+          Object.entries(materia.promediosSubPeriodo || {}).forEach(([subPeriodoId, data]) => {
+            // Crear una estructura básica con la información disponible
+            const periodoKey = 'default'; // Usar un período por defecto si no hay información
+            if (!periodMap.has(periodoKey)) {
+              periodMap.set(periodoKey, {
+                periodoId: periodoKey,
+                periodoNombre: 'Período',
+                periodoOrden: 1,
+                periodoPonderacion: 100,
+                subPeriods: [],
+              });
+            }
+            const period = periodMap.get(periodoKey);
+            if (!period.subPeriods.find(sp => sp.subPeriodoId === subPeriodoId)) {
+              period.subPeriods.push({
+                subPeriodoId: subPeriodoId,
+                subPeriodoNombre: data.subPeriodoNombre || 'Subperíodo',
+                subPeriodoOrden: 1,
+                subPeriodoPonderacion: data.ponderacion || 0,
+              });
+            }
+          });
+        });
+        filteredPeriodsGrouped = Array.from(periodMap.values());
+      } else if (periodsGrouped.length > 0) {
+        filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
+          ...periodGroup,
+          subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
+            allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
           )
-        );
+        })).filter(p => p.subPeriods.length > 0);
+      }
+      
+      // Verificar si hay materias con datos: si tiene promediosSubPeriodo, promediosPeriodo, o promedioGeneral
+      const materiasConDatos = materias.filter(materia => {
+        // Si tiene promediosSubPeriodo con al menos un elemento, tiene datos
+        if (materia.promediosSubPeriodo && Object.keys(materia.promediosSubPeriodo).length > 0) {
+          return true;
+        }
+        // Si tiene promediosPeriodo con al menos un elemento, tiene datos
+        if (materia.promediosPeriodo && Object.keys(materia.promediosPeriodo).length > 0) {
+          return true;
+        }
+        // Si tiene promedioGeneral, tiene datos
+        if (materia.promedioGeneral !== null && materia.promedioGeneral !== undefined) {
+          return true;
+        }
+        // Si tiene calificaciones, tiene datos
+        if (materia.calificaciones && materia.calificaciones.length > 0) {
+          return true;
+        }
+        return false;
       });
       
       const showGeneralColumn = filteredPeriodsGrouped.length > 1;
@@ -488,9 +548,17 @@ const ReportCards = () => {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Boletines de Calificaciones</h1>
-        <p className="text-gray-600">Genera y consulta los boletines de calificaciones por estudiante</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Boletines de Calificaciones</h1>
+          <p className="text-gray-600">Genera y consulta los boletines de calificaciones por estudiante</p>
+        </div>
+        <Link
+          to="/historical-report-cards"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+        >
+          <span>📜</span> Boletines Históricos
+        </Link>
       </div>
 
       {/* Filtros */}
@@ -545,7 +613,7 @@ const ReportCards = () => {
                       className="mr-3"
                     />
                     <span className="text-sm">
-                      {estudiante.user?.nombre} {estudiante.user?.apellido}
+                      {estudiante.user?.apellido} {estudiante.user?.nombre}
                       {estudiante.user?.numeroIdentificacion && (
                         <span className="text-gray-500 ml-2">({estudiante.user.numeroIdentificacion})</span>
                       )}
@@ -595,19 +663,64 @@ const ReportCards = () => {
               Object.keys(materia.promediosSubPeriodo || {}).forEach(spId => allSubPeriodIds.add(spId));
             });
             
-            const filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
-              ...periodGroup,
-              subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
-                allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
-              )
-            })).filter(p => p.subPeriods.length > 0);
-            
-            const materiasConDatos = materias.filter(materia => {
-              return filteredPeriodsGrouped.some(periodGroup =>
-                periodGroup.subPeriods.some(subPeriodGroup =>
-                  materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId]
+            // Si periodsGrouped está vacío pero hay materias con datos, construir desde las materias
+            let filteredPeriodsGrouped = periodsGrouped;
+            if (periodsGrouped.length === 0 && allSubPeriodIds.size > 0) {
+              // Construir periodsGrouped desde los promediosSubPeriodo de las materias
+              const periodMap = new Map();
+              materias.forEach(materia => {
+                Object.entries(materia.promediosSubPeriodo || {}).forEach(([subPeriodoId, data]) => {
+                  // Necesitamos obtener información del período desde las calificaciones o materias
+                  // Por ahora, crear una estructura básica
+                  if (!periodMap.has('default')) {
+                    periodMap.set('default', {
+                      periodoId: 'default',
+                      periodoNombre: 'Período',
+                      periodoOrden: 1,
+                      periodoPonderacion: 100,
+                      subPeriods: [],
+                    });
+                  }
+                  const period = periodMap.get('default');
+                  if (!period.subPeriods.find(sp => sp.subPeriodoId === subPeriodoId)) {
+                    period.subPeriods.push({
+                      subPeriodoId: subPeriodoId,
+                      subPeriodoNombre: data.subPeriodoNombre || 'Subperíodo',
+                      subPeriodoOrden: 1,
+                      subPeriodoPonderacion: data.ponderacion || 0,
+                    });
+                  }
+                });
+              });
+              filteredPeriodsGrouped = Array.from(periodMap.values());
+            } else {
+              filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
+                ...periodGroup,
+                subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
+                  allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
                 )
-              );
+              })).filter(p => p.subPeriods.length > 0);
+            }
+            
+            // Verificar si hay materias con datos: si tiene promediosSubPeriodo, promediosPeriodo, o promedioGeneral
+            const materiasConDatos = materias.filter(materia => {
+              // Si tiene promediosSubPeriodo con al menos un elemento, tiene datos
+              if (materia.promediosSubPeriodo && Object.keys(materia.promediosSubPeriodo).length > 0) {
+                return true;
+              }
+              // Si tiene promediosPeriodo con al menos un elemento, tiene datos
+              if (materia.promediosPeriodo && Object.keys(materia.promediosPeriodo).length > 0) {
+                return true;
+              }
+              // Si tiene promedioGeneral, tiene datos
+              if (materia.promedioGeneral !== null && materia.promedioGeneral !== undefined) {
+                return true;
+              }
+              // Si tiene calificaciones, tiene datos
+              if (materia.calificaciones && materia.calificaciones.length > 0) {
+                return true;
+              }
+              return false;
             });
             
             const showGeneralColumn = filteredPeriodsGrouped.length > 1;
@@ -617,7 +730,7 @@ const ReportCards = () => {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h2 className="text-2xl font-bold mb-2">
-                      {reportCard.estudiante.nombre} {reportCard.estudiante.apellido}
+                      {reportCard.estudiante.apellido} {reportCard.estudiante.nombre}
                     </h2>
                     <p className="text-sm text-gray-600 mb-4">
                       Identificación: <span className="font-semibold">{reportCard.estudiante.numeroIdentificacion}</span> | 

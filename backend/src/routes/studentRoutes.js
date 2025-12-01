@@ -8,6 +8,14 @@ import {
   uploadFotoCarnet,
   getFotoCarnet,
 } from '../controllers/studentController.js';
+import {
+  withdrawStudent,
+  getStudentWithdrawals,
+  getStudentEnrollments,
+  reactivateWithSecondEnrollment,
+  transferStudent,
+} from '../controllers/withdrawalController.js';
+import { getStudentSchoolYears } from '../controllers/historicalReportCardController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -19,6 +27,14 @@ router.get('/foto/:filename', getFotoCarnet);
 
 // Aplicar autenticación a todas las demás rutas
 router.use(authenticate);
+
+// Rutas de retiros y matrículas (deben ir antes de /:id para evitar conflictos)
+router.post('/:id/withdraw', authorize('ADMIN', 'SECRETARIA'), withdrawStudent);
+router.get('/:id/withdrawals', authorize('ADMIN', 'SECRETARIA'), getStudentWithdrawals);
+router.get('/:id/enrollments', authorize('ADMIN', 'SECRETARIA'), getStudentEnrollments);
+router.get('/:id/school-years', getStudentSchoolYears);
+router.post('/:id/reactivate', authorize('ADMIN', 'SECRETARIA'), reactivateWithSecondEnrollment);
+router.post('/:id/transfer', authorize('ADMIN', 'SECRETARIA'), transferStudent);
 
 // Subir foto de carnet (admin, secretaria y profesores pueden hacerlo)
 router.post('/:id/foto', authorize('ADMIN', 'SECRETARIA', 'PROFESOR'), upload.single('foto'), uploadFotoCarnet);

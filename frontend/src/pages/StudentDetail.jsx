@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { compressImage } from '../utils/imageCompression';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import StudentWithdrawalModal from '../components/StudentWithdrawalModal';
+import StudentReactivationModal from '../components/StudentReactivationModal';
 
 const StudentDetail = () => {
   const { id } = useParams();
@@ -19,6 +21,9 @@ const StudentDetail = () => {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [showReactivationModal, setShowReactivationModal] = useState(false);
+  const [reactivationMode, setReactivationMode] = useState('reactivate'); // 'reactivate' o 'transfer'
   const canManageProfileTemplate = ['ADMIN', 'SECRETARIA'].includes(user?.rol);
   const canEditProfileValues = canManageProfileTemplate || user?.rol === 'PROFESOR';
 
@@ -940,24 +945,66 @@ const StudentDetail = () => {
             {student.user?.nombre} {student.user?.apellido}
           </h1>
         </div>
-        <button
-          onClick={generatePDF}
-          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center justify-center gap-2 whitespace-nowrap"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            viewBox="0 0 20 20"
-            fill="currentColor"
+        <div className="flex items-center gap-3">
+          {canManageProfileTemplate && (
+            <>
+              {student.retirado ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setReactivationMode('reactivate');
+                      setShowReactivationModal(true);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <span>🔄</span> Reactivar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setReactivationMode('transfer');
+                      setShowReactivationModal(true);
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <span>↗️</span> Transferir
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowWithdrawalModal(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2"
+                >
+                  <span>❌</span> Retirar
+                </button>
+              )}
+            </>
+          )}
+          <button
+            onClick={generatePDF}
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center justify-center gap-2 whitespace-nowrap"
           >
-            <path
-              fillRule="evenodd"
-              d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Generar PDF
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Generar PDF
+          </button>
+          <Link
+            to={`/historical-report-cards?estudianteId=${id}`}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center gap-2 whitespace-nowrap"
+          >
+            <span>📜</span>
+            Boletines Históricos
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -1400,6 +1447,33 @@ const StudentDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Modales */}
+      {showWithdrawalModal && student && (
+        <StudentWithdrawalModal
+          student={student}
+          onClose={() => setShowWithdrawalModal(false)}
+          onSuccess={() => {
+            fetchStudent();
+            setShowWithdrawalModal(false);
+          }}
+        />
+      )}
+
+      {showReactivationModal && student && (
+        <StudentReactivationModal
+          student={{ ...student, reactivationMode }}
+          onClose={() => {
+            setShowReactivationModal(false);
+            setReactivationMode('reactivate');
+          }}
+          onSuccess={() => {
+            fetchStudent();
+            setShowReactivationModal(false);
+            setReactivationMode('reactivate');
+          }}
+        />
+      )}
     </div>
   );
 };
