@@ -5,7 +5,9 @@ import toast from 'react-hot-toast';
 const DatabaseBackup = () => {
   const [generating, setGenerating] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [resetCredentials, setResetCredentials] = useState(null);
 
   const handleDownloadBackup = async () => {
     try {
@@ -114,6 +116,70 @@ const DatabaseBackup = () => {
       toast.error(error.response?.data?.error || 'Error al restaurar backup de la base de datos');
     } finally {
       setRestoring(false);
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    // Primera confirmación
+    const firstConfirm = window.confirm(
+      '⚠️ ADVERTENCIA CRÍTICA\n\n' +
+      'Estás a punto de RESTABLECER completamente la base de datos.\n\n' +
+      'Esto eliminará:\n' +
+      '• TODOS los usuarios\n' +
+      '• TODOS los estudiantes\n' +
+      '• TODOS los cursos\n' +
+      '• TODAS las calificaciones\n' +
+      '• TODOS los datos del sistema\n\n' +
+      'Esta acción NO se puede deshacer.\n\n' +
+      '¿Deseas continuar?'
+    );
+
+    if (!firstConfirm) {
+      return;
+    }
+
+    // Segunda confirmación
+    const secondConfirm = window.confirm(
+      '⚠️ ÚLTIMA CONFIRMACIÓN\n\n' +
+      'Escribe "RESET" en el siguiente prompt para confirmar.\n\n' +
+      'Esta es tu última oportunidad de cancelar.'
+    );
+
+    if (!secondConfirm) {
+      return;
+    }
+
+    // Tercera confirmación con texto
+    const confirmText = window.prompt(
+      'Para confirmar, escribe exactamente: RESET\n\n' +
+      'Cualquier otro texto cancelará la operación.'
+    );
+
+    if (confirmText !== 'RESET') {
+      toast.error('Confirmación cancelada. La base de datos no fue restablecida.');
+      return;
+    }
+
+    try {
+      setResetting(true);
+      setResetCredentials(null);
+
+      const response = await api.post('/reset/database');
+
+      toast.success('Base de datos restablecida exitosamente');
+      setResetCredentials(response.data.credentials);
+      
+      // Mostrar mensaje adicional con información
+      setTimeout(() => {
+        toast.success('Datos iniciales cargados. Revisa las credenciales abajo.', {
+          duration: 5000,
+        });
+      }, 1000);
+    } catch (error) {
+      console.error('Error al restablecer base de datos:', error);
+      toast.error(error.response?.data?.error || 'Error al restablecer la base de datos');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -339,6 +405,152 @@ const DatabaseBackup = () => {
                   <p className="text-sm text-yellow-700 mt-1">
                     Por favor espera, esto puede tomar varios minutos. No cierres esta ventana.
                   </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sección de Restablecer Base de Datos */}
+      <div className="bg-white shadow rounded-lg p-6 mt-6">
+        <div className="max-w-3xl">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold mb-4">Restablecer Base de Datos</h2>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p className="text-sm text-red-800 font-medium">⚠️ ADVERTENCIA CRÍTICA</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    Esta acción eliminará TODOS los datos de la base de datos y cargará datos iniciales de ejemplo. 
+                    Esta acción NO se puede deshacer. Asegúrate de tener un backup antes de proceder.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-sm text-red-800 font-medium">¿Qué se cargará?</p>
+                  <p className="text-sm text-red-700 mt-1">
+                    Se cargarán datos iniciales de ejemplo incluyendo: institución, año lectivo, períodos, 
+                    usuarios de prueba (admin, profesor, estudiante, representante), cursos y materias básicas.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Restablecer Base de Datos</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Elimina todos los datos y carga datos iniciales de ejemplo
+                </p>
+              </div>
+              <button
+                onClick={handleResetDatabase}
+                disabled={resetting || generating || restoring}
+                className="px-6 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center"
+              >
+                {resetting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Restableciendo...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Restablecer Base de Datos
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {resetting && (
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <svg className="animate-spin h-5 w-5 text-yellow-600 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">
+                    Restableciendo base de datos...
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Por favor espera, esto puede tomar varios minutos. No cierres esta ventana.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {resetCredentials && (
+            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-800 mb-3">
+                    ✅ Base de datos restablecida exitosamente
+                  </p>
+                  <div className="bg-white rounded-md p-4 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Credenciales de Acceso</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <span className="font-medium text-gray-700">👨‍💼 Administrador:</span>
+                          <div className="text-right">
+                            <div className="text-gray-900">{resetCredentials.admin.email}</div>
+                            <div className="text-gray-600 text-xs">Contraseña: {resetCredentials.admin.password}</div>
+                            <div className="text-gray-500 text-xs">ID: {resetCredentials.admin.numeroIdentificacion}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <span className="font-medium text-gray-700">👨‍🏫 Profesor:</span>
+                          <div className="text-right">
+                            <div className="text-gray-900">{resetCredentials.profesor.email}</div>
+                            <div className="text-gray-600 text-xs">Contraseña: {resetCredentials.profesor.password}</div>
+                            <div className="text-gray-500 text-xs">ID: {resetCredentials.profesor.numeroIdentificacion}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <span className="font-medium text-gray-700">👨‍🎓 Estudiante:</span>
+                          <div className="text-right">
+                            <div className="text-gray-900">{resetCredentials.estudiante.email}</div>
+                            <div className="text-gray-600 text-xs">Contraseña: {resetCredentials.estudiante.password}</div>
+                            <div className="text-gray-500 text-xs">ID: {resetCredentials.estudiante.numeroIdentificacion}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <span className="font-medium text-gray-700">👨‍👩‍👧 Representante:</span>
+                          <div className="text-right">
+                            <div className="text-gray-900">{resetCredentials.representante.email}</div>
+                            <div className="text-gray-600 text-xs">Contraseña: {resetCredentials.representante.password}</div>
+                            <div className="text-gray-500 text-xs">ID: {resetCredentials.representante.numeroIdentificacion}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-xs text-gray-600">
+                        💡 <strong>Nota:</strong> Serás desconectado automáticamente. Usa las credenciales de administrador para iniciar sesión nuevamente.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

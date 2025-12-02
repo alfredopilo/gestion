@@ -22,6 +22,7 @@ import studentProfileRoutes from './studentProfileRoutes.js';
 import supplementaryRoutes from './supplementaryRoutes.js';
 import promotionRoutes from './promotionRoutes.js';
 import backupRoutes from './backupRoutes.js';
+import resetRoutes from './resetRoutes.js';
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ router.use('/student-profile', studentProfileRoutes);
 router.use('/supplementary', supplementaryRoutes);
 router.use('/promotion', promotionRoutes);
 router.use('/backup', backupRoutes);
+router.use('/reset', resetRoutes);
 
 export default router;
 
