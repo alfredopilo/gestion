@@ -17,8 +17,9 @@ export const getStudentSchoolYears = async (req, res, next) => {
       });
     }
 
-    // Obtener todos los enrollments del estudiante (incluyendo inactivos/retirados)
-    // No filtrar por activo para mostrar histórico completo
+    const schoolYearsMap = new Map();
+
+    // 1. Obtener años lectivos desde enrollments
     const enrollments = await prisma.enrollment.findMany({
       where: { studentId },
       include: {
@@ -33,27 +34,93 @@ export const getStudentSchoolYears = async (req, res, next) => {
           },
         },
       },
-      orderBy: {
-        anioLectivo: {
-          ano: 'desc',
-        },
-      },
     });
 
-    // Extraer años lectivos únicos
-    const schoolYearsMap = new Map();
+    console.log(`[getStudentSchoolYears] Enrollments encontrados: ${enrollments.length}`);
+    
     enrollments.forEach(enrollment => {
       if (enrollment.anioLectivo && !schoolYearsMap.has(enrollment.anioLectivo.id)) {
         schoolYearsMap.set(enrollment.anioLectivo.id, enrollment.anioLectivo);
       }
     });
 
-    const schoolYears = Array.from(schoolYearsMap.values());
+    // 2. Si no hay enrollments, buscar años lectivos desde cursos donde el estudiante está asignado
+    // Esto cubre casos donde el estudiante tiene calificaciones/cursos pero no enrollments formales
+    if (schoolYearsMap.size === 0) {
+      console.log(`[getStudentSchoolYears] No hay enrollments, buscando desde cursos asignados...`);
+      
+      const student = await prisma.student.findUnique({
+        where: { id: studentId },
+        include: {
+          grupo: {
+            include: {
+              anioLectivo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  ano: true,
+                  fechaInicio: true,
+                  fechaFin: true,
+                  activo: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (student?.grupo?.anioLectivo && !schoolYearsMap.has(student.grupo.anioLectivo.id)) {
+        schoolYearsMap.set(student.grupo.anioLectivo.id, student.grupo.anioLectivo);
+        console.log(`[getStudentSchoolYears] Encontrado año lectivo desde curso asignado: ${student.grupo.anioLectivo.nombre}`);
+      }
+
+      // 3. También buscar desde las calificaciones del estudiante
+      // Las materias tienen anioLectivoId, así que podemos obtenerlos directamente
+      const grades = await prisma.grade.findMany({
+        where: { estudianteId: studentId },
+        include: {
+          materia: {
+            include: {
+              anioLectivo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  ano: true,
+                  fechaInicio: true,
+                  fechaFin: true,
+                  activo: true,
+                },
+              },
+            },
+          },
+        },
+        distinct: ['materiaId'],
+      });
+
+      // Extraer años lectivos únicos de las materias de las calificaciones
+      grades.forEach(grade => {
+        if (grade.materia?.anioLectivo && !schoolYearsMap.has(grade.materia.anioLectivo.id)) {
+          schoolYearsMap.set(grade.materia.anioLectivo.id, grade.materia.anioLectivo);
+          console.log(`[getStudentSchoolYears] Encontrado año lectivo desde calificaciones: ${grade.materia.anioLectivo.nombre}`);
+        }
+      });
+    }
+
+    const schoolYears = Array.from(schoolYearsMap.values()).sort((a, b) => {
+      // Ordenar por año descendente
+      return (b.ano || 0) - (a.ano || 0);
+    });
+
+    console.log(`[getStudentSchoolYears] Total años lectivos encontrados: ${schoolYears.length}`);
+    schoolYears.forEach((sy, idx) => {
+      console.log(`[getStudentSchoolYears] Año lectivo ${idx + 1}: ${sy.nombre} (${sy.ano})`);
+    });
 
     res.json({
       data: schoolYears,
     });
   } catch (error) {
+    console.error('[getStudentSchoolYears] Error:', error);
     next(error);
   }
 };
@@ -102,8 +169,14 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
     },
   });
 
-  if (!curso || curso.anioLectivoId !== anioLectivoId) {
+  if (!curso) {
+    console.log(`[HistoricalReportCards] ERROR: Curso con ID ${courseId} no encontrado`);
     return null;
+  }
+  
+  if (curso.anioLectivoId !== anioLectivoId) {
+    console.log(`[HistoricalReportCards] ADVERTENCIA: Curso ${courseId} (${curso.nombre}) pertenece al año lectivo ${curso.anioLectivoId}, pero se esperaba ${anioLectivoId}`);
+    // Continuar de todas formas, puede haber una inconsistencia pero queremos mostrar los datos
   }
 
   // Obtener información del estudiante
@@ -122,8 +195,11 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
   });
 
   if (!estudiante) {
+    console.log(`[HistoricalReportCards] ERROR: Estudiante con ID ${studentId} no encontrado`);
     return null;
   }
+  
+  console.log(`[HistoricalReportCards] Generando boletín para: Estudiante=${estudiante.user.nombre} ${estudiante.user.apellido}, Curso=${curso.nombre}, AñoLectivo=${anioLectivoId}`);
 
   // Obtener todas las materias del curso con sus escalas
   const materiasConEscala = curso.course_subject_assignments.map(a => ({
@@ -143,6 +219,14 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
     },
     orderBy: { orden: 'asc' },
   });
+
+  // Log para depuración
+  console.log(`[HistoricalReportCards] Año lectivo ${anioLectivoId} - Períodos encontrados: ${periods.length}`);
+  if (periods.length > 0) {
+    periods.forEach((p, idx) => {
+      console.log(`[HistoricalReportCards] Período ${idx + 1}: ${p.nombre} (${p.subPeriodos.length} subperíodos)`);
+    });
+  }
 
   // Obtener todos los subperíodos del año lectivo
   const allSubPeriodIds = periods.flatMap(p => p.subPeriodos.map(sp => sp.id));
@@ -368,68 +452,72 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
   });
 
   // Construir periodsGrouped basado en los períodos del año lectivo
-  const periodsGrouped = [];
-  const subPeriodsMap = new Map();
+  // Siempre usar los períodos del año lectivo, incluso si no hay calificaciones
+  const periodsByPeriod = {};
   
-  // Recopilar todos los subperíodos únicos de las calificaciones
-  grades.forEach(grade => {
-    const subPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
-    if (subPeriodo) {
-      const subPeriodoId = subPeriodo.id;
-      if (!subPeriodsMap.has(subPeriodoId)) {
-        const periodo = subPeriodo.periodo;
-        subPeriodsMap.set(subPeriodoId, {
-          subPeriodoId: subPeriodo.id,
-          subPeriodoNombre: subPeriodo.nombre,
-          subPeriodoOrden: subPeriodo.orden ?? 999,
-          subPeriodoPonderacion: subPeriodo.ponderacion || 0,
-          periodoId: periodo?.id || 'default',
-          periodoNombre: periodo?.nombre || periodoNombre !== '-' ? periodoNombre : 'Período',
-          periodoOrden: periodo?.orden ?? 999,
-          periodoPonderacion: periodo?.ponderacion || 100,
-        });
-      }
-    }
-  });
-  
-  // Si no hay subperíodos en las calificaciones pero hay períodos del año lectivo, usar esos
-  if (subPeriodsMap.size === 0 && periods.length > 0) {
+  // Primero, construir desde los períodos del año lectivo para asegurar que todos se muestren
+  if (periods.length > 0) {
     periods.forEach(period => {
-      period.subPeriodos.forEach(subPeriodo => {
-        subPeriodsMap.set(subPeriodo.id, {
-          subPeriodoId: subPeriodo.id,
-          subPeriodoNombre: subPeriodo.nombre,
-          subPeriodoOrden: subPeriodo.orden ?? 999,
-          subPeriodoPonderacion: subPeriodo.ponderacion || 0,
-          periodoId: period.id,
+      const periodoId = period.id;
+      if (!periodsByPeriod[periodoId]) {
+        periodsByPeriod[periodoId] = {
+          periodoId: periodoId,
           periodoNombre: period.nombre,
           periodoOrden: period.orden ?? 999,
           periodoPonderacion: period.ponderacion || 100,
-        });
+          subPeriods: [],
+        };
+      }
+      
+      // Agregar todos los subperíodos del período
+      period.subPeriodos.forEach(subPeriodo => {
+        // Evitar duplicados
+        if (!periodsByPeriod[periodoId].subPeriods.find(sp => sp.subPeriodoId === subPeriodo.id)) {
+          periodsByPeriod[periodoId].subPeriods.push({
+            subPeriodoId: subPeriodo.id,
+            subPeriodoNombre: subPeriodo.nombre,
+            subPeriodoOrden: subPeriodo.orden ?? 999,
+            subPeriodoPonderacion: subPeriodo.ponderacion || 0,
+          });
+        }
       });
     });
   }
   
-  // Agrupar por período
-  const periodsByPeriod = {};
-  subPeriodsMap.forEach(subPeriodData => {
-    const periodoId = subPeriodData.periodoId || 'default';
-    if (!periodsByPeriod[periodoId]) {
-      periodsByPeriod[periodoId] = {
-        periodoId,
-        periodoNombre: subPeriodData.periodoNombre,
-        periodoOrden: subPeriodData.periodoOrden,
-        periodoPonderacion: subPeriodData.periodoPonderacion,
-        subPeriods: [],
-      };
+  // También recopilar subperíodos de las calificaciones para asegurar que se incluyan
+  // incluso si no están en los períodos configurados (por si acaso)
+  const subPeriodsFromGrades = new Map();
+  grades.forEach(grade => {
+    const subPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
+    if (subPeriodo) {
+      const subPeriodoId = subPeriodo.id;
+      if (!subPeriodsFromGrades.has(subPeriodoId)) {
+        const periodo = subPeriodo.periodo;
+        const periodoId = periodo?.id || 'default';
+        
+        if (!periodsByPeriod[periodoId]) {
+          periodsByPeriod[periodoId] = {
+            periodoId: periodoId,
+            periodoNombre: periodo?.nombre || periodoNombre !== '-' ? periodoNombre : 'Período',
+            periodoOrden: periodo?.orden ?? 999,
+            periodoPonderacion: periodo?.ponderacion || 100,
+            subPeriods: [],
+          };
+        }
+        
+        // Agregar subperíodo si no existe
+        if (!periodsByPeriod[periodoId].subPeriods.find(sp => sp.subPeriodoId === subPeriodoId)) {
+          periodsByPeriod[periodoId].subPeriods.push({
+            subPeriodoId: subPeriodo.id,
+            subPeriodoNombre: subPeriodo.nombre,
+            subPeriodoOrden: subPeriodo.orden ?? 999,
+            subPeriodoPonderacion: subPeriodo.ponderacion || 0,
+          });
+        }
+        
+        subPeriodsFromGrades.set(subPeriodoId, true);
+      }
     }
-    
-    periodsByPeriod[periodoId].subPeriods.push({
-      subPeriodoId: subPeriodData.subPeriodoId,
-      subPeriodoNombre: subPeriodData.subPeriodoNombre,
-      subPeriodoOrden: subPeriodData.subPeriodoOrden,
-      subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
-    });
   });
   
   // Ordenar subperíodos dentro de cada período
@@ -439,6 +527,16 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
   
   // Convertir a array y ordenar por orden de período
   const periodsGroupedArray = Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden);
+  
+  // Log para depuración
+  console.log(`[HistoricalReportCards] Períodos agrupados finales: ${periodsGroupedArray.length}`);
+  if (periodsGroupedArray.length > 0) {
+    periodsGroupedArray.forEach((pg, idx) => {
+      console.log(`[HistoricalReportCards] Período agrupado ${idx + 1}: ${pg.periodoNombre} (${pg.subPeriods.length} subperíodos)`);
+    });
+  } else {
+    console.log(`[HistoricalReportCards] ADVERTENCIA: No se generaron períodos agrupados para el año lectivo ${anioLectivoId}`);
+  }
 
   const promedioGeneralEstudiante = materiasData.length > 0
     ? truncate(materiasData.reduce((sum, m) => sum + (m.promedioGeneral || 0), 0) / materiasData.filter(m => m.promedioGeneral !== null).length)
@@ -494,6 +592,7 @@ export const getHistoricalReportCards = async (req, res, next) => {
     // Obtener enrollments del estudiante (incluyendo inactivos/retirados)
     // No filtrar por activo para mostrar histórico completo
     let enrollmentsWhere = { studentId: estudianteId };
+    const anioLectivoIdParam = anioLectivoId; // Guardar para uso posterior
     
     // Si se especifica año lectivo, filtrar por ese año
     if (anioLectivoId) {
@@ -527,41 +626,178 @@ export const getHistoricalReportCards = async (req, res, next) => {
       },
     });
 
-    if (enrollments.length === 0) {
+    console.log(`[HistoricalReportCards] Enrollments encontrados para estudiante ${estudianteId}: ${enrollments.length}`);
+    
+    // Preparar estructura para agrupar cursos por año lectivo
+    const coursesBySchoolYear = {};
+    
+    // 1. Si hay enrollments, usarlos
+    if (enrollments.length > 0) {
+      enrollments.forEach((enr, idx) => {
+        console.log(`[HistoricalReportCards] Enrollment ${idx + 1}: cursoId=${enr.cursoId}, cursoNombre=${enr.curso?.nombre}, anioLectivoId=${enr.anioLectivoId}`);
+        
+        const anioLectivoKey = enr.anioLectivoId;
+        if (!coursesBySchoolYear[anioLectivoKey]) {
+          coursesBySchoolYear[anioLectivoKey] = {
+            anioLectivo: enr.anioLectivo,
+            courses: [],
+          };
+        }
+        
+        // Agregar curso si no está ya en la lista
+        if (enr.cursoId && !coursesBySchoolYear[anioLectivoKey].courses.find(c => c.id === enr.cursoId)) {
+          coursesBySchoolYear[anioLectivoKey].courses.push({
+            id: enr.cursoId,
+            nombre: enr.curso?.nombre,
+            nivel: enr.curso?.nivel,
+            paralelo: enr.curso?.paralelo,
+            anioLectivoId: enr.anioLectivoId,
+          });
+        }
+      });
+    } else {
+      console.log(`[HistoricalReportCards] No se encontraron enrollments, buscando cursos desde otras fuentes...`);
+      
+      // 2. Buscar desde el curso asignado directamente al estudiante
+      const student = await prisma.student.findUnique({
+        where: { id: estudianteId },
+        include: {
+          grupo: {
+            include: {
+              anioLectivo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  ano: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (student?.grupo) {
+        const cursoId = student.grupo.id;
+        const anioLectivoId = student.grupo.anioLectivoId;
+        
+        // Filtrar por año lectivo si se especificó
+        if (anioLectivoIdParam && anioLectivoId !== anioLectivoIdParam) {
+          console.log(`[HistoricalReportCards] Curso asignado pertenece a año lectivo diferente (${anioLectivoId}), filtrando...`);
+        } else {
+          console.log(`[HistoricalReportCards] Encontrado curso asignado directamente: ${cursoId} en año lectivo ${anioLectivoId}`);
+          
+          if (!coursesBySchoolYear[anioLectivoId]) {
+            coursesBySchoolYear[anioLectivoId] = {
+              anioLectivo: student.grupo.anioLectivo,
+              courses: [],
+            };
+          }
+          
+          if (!coursesBySchoolYear[anioLectivoId].courses.find(c => c.id === cursoId)) {
+            coursesBySchoolYear[anioLectivoId].courses.push({
+              id: cursoId,
+              nombre: student.grupo.nombre,
+              nivel: student.grupo.nivel,
+              paralelo: student.grupo.paralelo,
+              anioLectivoId: anioLectivoId,
+            });
+          }
+        }
+      }
+
+      // 3. Buscar cursos desde las calificaciones del estudiante
+      const grades = await prisma.grade.findMany({
+        where: { estudianteId: estudianteId },
+        include: {
+          materia: {
+            include: {
+              asignaciones: {
+                include: {
+                  curso: {
+                    include: {
+                      anioLectivo: {
+                        select: {
+                          id: true,
+                          nombre: true,
+                          ano: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        distinct: ['materiaId'],
+      });
+
+      console.log(`[HistoricalReportCards] Calificaciones encontradas: ${grades.length}`);
+      
+      grades.forEach(grade => {
+        grade.materia?.asignaciones?.forEach(assignment => {
+          const curso = assignment.curso;
+          if (curso && curso.anioLectivo) {
+            const anioLectivoId = curso.anioLectivo.id;
+            
+            // Filtrar por año lectivo si se especificó
+            if (anioLectivoIdParam && anioLectivoId !== anioLectivoIdParam) {
+              return;
+            }
+            
+            if (!coursesBySchoolYear[anioLectivoId]) {
+              coursesBySchoolYear[anioLectivoId] = {
+                anioLectivo: curso.anioLectivo,
+                courses: [],
+              };
+            }
+            
+            if (!coursesBySchoolYear[anioLectivoId].courses.find(c => c.id === curso.id)) {
+              coursesBySchoolYear[anioLectivoId].courses.push({
+                id: curso.id,
+                nombre: curso.nombre,
+                nivel: curso.nivel,
+                paralelo: curso.paralelo,
+                anioLectivoId: anioLectivoId,
+              });
+              console.log(`[HistoricalReportCards] Agregado curso desde calificaciones: ${curso.nombre} en año lectivo ${curso.anioLectivo.nombre}`);
+            }
+          }
+        });
+      });
+    }
+
+    // Si aún no hay cursos, devolver vacío
+    if (Object.keys(coursesBySchoolYear).length === 0) {
+      console.log(`[HistoricalReportCards] ADVERTENCIA: No se encontraron cursos para el estudiante ${estudianteId}`);
       return res.json({
         data: [],
         total: 0,
       });
     }
 
-    // Agrupar enrollments por año lectivo
-    const enrollmentsBySchoolYear = {};
-    enrollments.forEach(enrollment => {
-      const anioLectivoKey = enrollment.anioLectivoId;
-      if (!enrollmentsBySchoolYear[anioLectivoKey]) {
-        enrollmentsBySchoolYear[anioLectivoKey] = {
-          anioLectivo: enrollment.anioLectivo,
-          enrollments: [],
-        };
-      }
-      enrollmentsBySchoolYear[anioLectivoKey].enrollments.push(enrollment);
-    });
-
     // Generar boletines para cada curso en cada año lectivo
     const reportCards = [];
-    for (const [anioLectivoKey, schoolYearData] of Object.entries(enrollmentsBySchoolYear)) {
-      for (const enrollment of schoolYearData.enrollments) {
+    for (const [anioLectivoKey, schoolYearData] of Object.entries(coursesBySchoolYear)) {
+      console.log(`[HistoricalReportCards] Procesando año lectivo ${anioLectivoKey} con ${schoolYearData.courses.length} cursos`);
+      for (const course of schoolYearData.courses) {
+        console.log(`[HistoricalReportCards] Generando boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
         const reportCard = await generateReportCardForCourse(
           estudianteId,
-          enrollment.cursoId,
-          enrollment.anioLectivoId
+          course.id,
+          course.anioLectivoId
         );
         
         if (reportCard) {
+          console.log(`[HistoricalReportCards] Boletín generado exitosamente para curso ${course.nombre}`);
           reportCards.push(reportCard);
+        } else {
+          console.log(`[HistoricalReportCards] ADVERTENCIA: No se pudo generar boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
         }
       }
     }
+    
+    console.log(`[HistoricalReportCards] Total de boletines generados: ${reportCards.length}`);
 
     res.json({
       data: reportCards,

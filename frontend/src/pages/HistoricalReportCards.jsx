@@ -149,11 +149,27 @@ const HistoricalReportCards = () => {
         params.anioLectivoId = selectedSchoolYearId;
       }
 
-      const response = await api.get('/report-cards/historical', { params });
+      // Agregar timestamp para evitar caché (solo en los parámetros, sin header)
+      const paramsWithCacheBuster = {
+        ...params,
+        _t: new Date().getTime(),
+      };
+      
+      const response = await api.get('/report-cards/historical', { 
+        params: paramsWithCacheBuster,
+      });
+      
+      console.log('[HistoricalReportCards Frontend] Respuesta del backend:', {
+        dataLength: response.data.data?.length || 0,
+        data: response.data.data,
+        total: response.data.total,
+      });
+      
       setReportCards(response.data.data || []);
       
       if (response.data.data.length === 0) {
         toast('No se encontraron boletines para los criterios seleccionados');
+        console.warn('[HistoricalReportCards Frontend] No se encontraron boletines. Verifica los logs del backend.');
       } else {
         toast.success(`Se encontraron ${response.data.data.length} boletín(es)`);
       }
@@ -584,9 +600,7 @@ const HistoricalReportCards = () => {
                 {students.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.user?.apellido} {student.user?.nombre}
-                    {student.user?.numeroIdentificacion && (
-                      <span> ({student.user.numeroIdentificacion})</span>
-                    )}
+                    {student.user?.numeroIdentificacion ? ` (${student.user.numeroIdentificacion})` : ''}
                   </option>
                 ))}
               </select>
@@ -687,19 +701,28 @@ const HistoricalReportCards = () => {
                 const materias = reportCard.materias || [];
                 const periodsGrouped = reportCard.periodsGrouped || [];
                 
+                // Log para depuración
+                console.log(`[HistoricalReportCards Frontend] ReportCard ${index}:`, {
+                  curso: reportCard.curso?.nombre,
+                  anioLectivo: reportCard.anioLectivo?.nombre,
+                  periodsGroupedLength: periodsGrouped.length,
+                  periodsGrouped: periodsGrouped,
+                  materiasLength: materias.length,
+                });
+                
                 const allSubPeriodIds = new Set();
                 materias.forEach(materia => {
                   Object.keys(materia.promediosSubPeriodo || {}).forEach(spId => allSubPeriodIds.add(spId));
                 });
                 
-                let filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
-                  ...periodGroup,
-                  subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
-                    allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
-                  )
-                })).filter(p => p.subPeriods.length > 0);
-
+                // Usar directamente los períodos que vienen del backend sin filtrar
+                // El backend ya incluye todos los períodos del año lectivo
+                let filteredPeriodsGrouped = periodsGrouped || [];
+                
+                // Solo si NO hay períodos del backend Y hay calificaciones, construir desde las calificaciones
                 if (filteredPeriodsGrouped.length === 0 && allSubPeriodIds.size > 0) {
+                  console.log('[HistoricalReportCards Frontend] No hay períodos del backend, construyendo desde calificaciones');
+                  // Fallback: construir desde promediosSubPeriodo si no hay periodsGrouped
                   const periodMap = new Map();
                   materias.forEach(materia => {
                     Object.entries(materia.promediosSubPeriodo || {}).forEach(([subPeriodoId, data]) => {
@@ -725,14 +748,9 @@ const HistoricalReportCards = () => {
                     });
                   });
                   filteredPeriodsGrouped = Array.from(periodMap.values());
-                } else {
-                  filteredPeriodsGrouped = periodsGrouped.map(periodGroup => ({
-                    ...periodGroup,
-                    subPeriods: periodGroup.subPeriods.filter(subPeriodGroup =>
-                      allSubPeriodIds.has(subPeriodGroup.subPeriodoId)
-                    )
-                  })).filter(p => p.subPeriods.length > 0);
                 }
+                
+                console.log(`[HistoricalReportCards Frontend] Períodos finales para mostrar: ${filteredPeriodsGrouped.length}`, filteredPeriodsGrouped);
                 
                 const materiasConDatos = materias.filter(materia => {
                   if (materia.promediosSubPeriodo && Object.keys(materia.promediosSubPeriodo).length > 0) {
@@ -777,6 +795,11 @@ const HistoricalReportCards = () => {
                     {materiasConDatos.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         <p className="text-lg">No se encontraron promedios para este curso.</p>
+                      </div>
+                    ) : filteredPeriodsGrouped.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p className="text-lg">No se encontraron períodos configurados para este año lectivo.</p>
+                        <p className="text-sm mt-2">Por favor, verifica que el año lectivo tenga períodos configurados.</p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-gray-300 rounded-lg">
