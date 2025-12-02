@@ -57,9 +57,34 @@ const Reports = () => {
     return subjectsInReport
       .map((subject) => {
         const subjectKey = subject.materiaId || subject.key || subject.nombre;
-        const rows = reportData.grades.filter((row) => {
+        let rows = reportData.grades.filter((row) => {
           const rowKey = row.materiaId || row.materia;
           return rowKey === subjectKey;
+        });
+
+        // Ordenar por apellido y luego nombre (alfabético ascendente)
+        // El formato es "Apellido Nombre", extraer apellido (primera palabra) y nombre (resto)
+        rows = [...rows].sort((a, b) => {
+          const estudianteA = (a.estudiante || '').trim();
+          const estudianteB = (b.estudiante || '').trim();
+          
+          const partesA = estudianteA.split(/\s+/);
+          const partesB = estudianteB.split(/\s+/);
+          
+          // Apellido es la primera palabra
+          const apellidoA = partesA.length > 0 ? partesA[0] : '';
+          const apellidoB = partesB.length > 0 ? partesB[0] : '';
+          
+          // Comparar por apellido primero
+          const comparacionApellido = apellidoA.toLowerCase().localeCompare(apellidoB.toLowerCase());
+          if (comparacionApellido !== 0) {
+            return comparacionApellido;
+          }
+          
+          // Si los apellidos son iguales, comparar por nombre (resto de palabras)
+          const nombreA = partesA.slice(1).join(' ').toLowerCase();
+          const nombreB = partesB.slice(1).join(' ').toLowerCase();
+          return nombreA.localeCompare(nombreB);
         });
 
         return {
@@ -102,9 +127,34 @@ const Reports = () => {
     return subjectsInAveragesReport
       .map((subject) => {
         const subjectKey = subject.materiaId || subject.key || subject.nombre;
-        const rows = reportData.averages.filter((row) => {
+        let rows = reportData.averages.filter((row) => {
           const rowKey = row.materiaId || row.materia;
           return rowKey === subjectKey;
+        });
+
+        // Ordenar por apellido y luego nombre (alfabético ascendente)
+        // El formato es "Apellido Nombre", extraer apellido (primera palabra) y nombre (resto)
+        rows = [...rows].sort((a, b) => {
+          const estudianteA = (a.estudiante || '').trim();
+          const estudianteB = (b.estudiante || '').trim();
+          
+          const partesA = estudianteA.split(/\s+/);
+          const partesB = estudianteB.split(/\s+/);
+          
+          // Apellido es la primera palabra
+          const apellidoA = partesA.length > 0 ? partesA[0] : '';
+          const apellidoB = partesB.length > 0 ? partesB[0] : '';
+          
+          // Comparar por apellido primero
+          const comparacionApellido = apellidoA.toLowerCase().localeCompare(apellidoB.toLowerCase());
+          if (comparacionApellido !== 0) {
+            return comparacionApellido;
+          }
+          
+          // Si los apellidos son iguales, comparar por nombre (resto de palabras)
+          const nombreA = partesA.slice(1).join(' ').toLowerCase();
+          const nombreB = partesB.slice(1).join(' ').toLowerCase();
+          return nombreA.localeCompare(nombreB);
         });
 
         return {

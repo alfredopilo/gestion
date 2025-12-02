@@ -20,6 +20,8 @@ import scheduleRoutes from './scheduleRoutes.js';
 import gradeScaleRoutes from './gradeScaleRoutes.js';
 import studentProfileRoutes from './studentProfileRoutes.js';
 import supplementaryRoutes from './supplementaryRoutes.js';
+import promotionRoutes from './promotionRoutes.js';
+import backupRoutes from './backupRoutes.js';
 
 const router = express.Router();
 
@@ -44,6 +46,8 @@ router.use('/schedules', scheduleRoutes);
 router.use('/grade-scales', gradeScaleRoutes);
 router.use('/student-profile', studentProfileRoutes);
 router.use('/supplementary', supplementaryRoutes);
+router.use('/promotion', promotionRoutes);
+router.use('/backup', backupRoutes);
 
 export default router;
 

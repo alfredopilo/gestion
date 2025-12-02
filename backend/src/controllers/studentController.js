@@ -8,7 +8,7 @@ import { getStudentInstitutionFilter, verifyStudentBelongsToInstitution } from '
  */
 export const getStudents = async (req, res, next) => {
   try {
-    const { grupoId, estado, page = 1, limit = 1000 } = req.query;
+    const { grupoId, estado, includeRetired, page = 1, limit = 1000 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -47,6 +47,12 @@ export const getStudents = async (req, res, next) => {
     // Si se especifica grupoId, filtrar por grupo (además del filtro de institución)
     if (grupoId) {
       where.grupoId = grupoId;
+    }
+
+    // Filtrar estudiantes retirados por defecto (solo mostrar activos)
+    // A menos que se especifique includeRetired=true
+    if (includeRetired !== 'true') {
+      where.retirado = false;
     }
 
     // Filtrar por estado del usuario si se proporciona

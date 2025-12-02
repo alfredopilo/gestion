@@ -3,20 +3,43 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
 import { createCourseSchema, updateCourseSchema, importStudentsSchema } from '../utils/validators.js';
 import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, verifyPeriodBelongsToInstitution, getActiveSchoolYear, getInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
+import { generateMatriculaNumber } from '../utils/matricula.js';
 
 /**
  * Obtener todos los cursos
  */
 export const getCourses = async (req, res, next) => {
   try {
-    const { periodoId, nivel, docenteId, page = 1, limit = 10 } = req.query;
+    const { periodoId, nivel, docenteId, institucionId, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
     
-    // SIEMPRE aplicar el filtro de institución primero
-    // Este filtro ya considera el año escolar activo global
-    const institutionFilter = await getCourseInstitutionFilter(req, prisma);
+    // Si se especifica institucionId en el query, usar ese en lugar del filtro de sesión
+    let institutionFilter = {};
+    if (institucionId) {
+      // Obtener el año escolar activo de la institución especificada
+      const activeSchoolYear = await prisma.schoolYear.findFirst({
+        where: {
+          institucionId: institucionId,
+          activo: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+      
+      if (activeSchoolYear) {
+        institutionFilter = { anioLectivoId: activeSchoolYear.id };
+      } else {
+        // Si no hay año activo, no mostrar cursos
+        institutionFilter = { anioLectivoId: { in: [] } };
+      }
+    } else {
+      // SIEMPRE aplicar el filtro de institución primero
+      // Este filtro ya considera el año escolar activo global
+      institutionFilter = await getCourseInstitutionFilter(req, prisma);
+    }
     if (Object.keys(institutionFilter).length > 0) {
       if (institutionFilter.anioLectivoId?.in && institutionFilter.anioLectivoId.in.length === 0) {
         return res.json({
@@ -754,9 +777,17 @@ export const assignStudentToCourse = async (req, res, next) => {
       });
     }
 
-    // Verificar que el curso existe
+    // Verificar que el curso existe y obtener información completa
     const course = await prisma.course.findUnique({
       where: { id: courseId },
+      include: {
+        anioLectivo: {
+          select: {
+            id: true,
+            institucionId: true,
+          },
+        },
+      },
     });
 
     if (!course) {
@@ -764,6 +795,15 @@ export const assignStudentToCourse = async (req, res, next) => {
         error: 'Curso no encontrado.',
       });
     }
+
+    if (!course.anioLectivo) {
+      return res.status(400).json({
+        error: 'El curso no tiene un año lectivo asignado.',
+      });
+    }
+
+    const anioLectivoId = course.anioLectivo.id;
+    const institucionId = course.anioLectivo.institucionId;
 
     // Verificar capacidad del curso
     const currentCount = await prisma.student.count({
@@ -802,46 +842,15 @@ export const assignStudentToCourse = async (req, res, next) => {
 
       if (existingStudent) {
         student = existingStudent;
-        // Actualizar el curso del estudiante existente
-        const updatedStudent = await prisma.student.update({
-          where: { id: student.id },
-          data: { grupoId: courseId },
-          include: {
-            user: {
-              select: {
-                nombre: true,
-                apellido: true,
-                email: true,
-              },
-            },
-          },
-        });
-        return res.json({
-          message: 'Estudiante asignado al curso exitosamente.',
-          student: updatedStudent,
-        });
       } else {
         // Crear nuevo registro Student con el curso asignado
-        const newStudent = await prisma.student.create({
+        student = await prisma.student.create({
           data: {
             userId,
             fechaNacimiento: new Date(),
             nacionalidad: 'Ecuatoriana',
             grupoId: courseId,
           },
-          include: {
-            user: {
-              select: {
-                nombre: true,
-                apellido: true,
-                email: true,
-              },
-            },
-          },
-        });
-        return res.json({
-          message: 'Estudiante creado y asignado al curso exitosamente.',
-          student: newStudent,
         });
       }
     } else {
@@ -855,8 +864,35 @@ export const assignStudentToCourse = async (req, res, next) => {
           error: 'Estudiante no encontrado.',
         });
       }
+    }
 
-      // Asignar estudiante al curso
+    // Verificar que el estudiante no esté retirado
+    if (student.retirado) {
+      return res.status(400).json({
+        error: 'No se puede asignar un estudiante retirado a un curso. Primero debe reactivarlo.',
+      });
+    }
+
+    // Verificar si ya tiene una matrícula activa para este año lectivo
+    const existingEnrollment = await prisma.enrollment.findFirst({
+      where: {
+        studentId: student.id,
+        anioLectivoId,
+        activo: true,
+      },
+    });
+
+    // Si ya tiene matrícula activa, actualizar el curso
+    if (existingEnrollment) {
+      await prisma.enrollment.update({
+        where: { id: existingEnrollment.id },
+        data: {
+          cursoId: courseId,
+          fechaFin: null, // Mantener activa
+        },
+      });
+
+      // Actualizar el grupo del estudiante
       const updatedStudent = await prisma.student.update({
         where: { id: student.id },
         data: { grupoId: courseId },
@@ -876,6 +912,45 @@ export const assignStudentToCourse = async (req, res, next) => {
         student: updatedStudent,
       });
     }
+
+    // Crear nueva matrícula (Enrollment)
+    const matricula = await generateMatriculaNumber(institucionId, anioLectivoId);
+
+    const enrollment = await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        cursoId: courseId,
+        anioLectivoId,
+        institucionId,
+        matricula,
+        fechaInicio: new Date(),
+        activo: true,
+      },
+    });
+
+    // Actualizar el grupo del estudiante
+    const updatedStudent = await prisma.student.update({
+      where: { id: student.id },
+      data: { grupoId: courseId },
+      include: {
+        user: {
+          select: {
+            nombre: true,
+            apellido: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return res.json({
+      message: 'Estudiante asignado al curso exitosamente. Matrícula creada.',
+      student: updatedStudent,
+      enrollment: {
+        id: enrollment.id,
+        matricula: enrollment.matricula,
+      },
+    });
 
   } catch (error) {
     next(error);
@@ -948,6 +1023,31 @@ export const removeStudentFromCourse = async (req, res, next) => {
       });
     }
 
+    const anioLectivoId = course.anioLectivo?.id;
+
+    // Buscar matrícula activa para este curso y año lectivo
+    if (anioLectivoId) {
+      const activeEnrollment = await prisma.enrollment.findFirst({
+        where: {
+          studentId: estudianteId,
+          cursoId: courseId,
+          anioLectivoId,
+          activo: true,
+        },
+      });
+
+      // Inactivar la matrícula si existe
+      if (activeEnrollment) {
+        await prisma.enrollment.update({
+          where: { id: activeEnrollment.id },
+          data: {
+            activo: false,
+            fechaFin: new Date(),
+          },
+        });
+      }
+    }
+
     // Remover del curso
     const updatedStudent = await prisma.student.update({
       where: { id: estudianteId },
@@ -964,7 +1064,7 @@ export const removeStudentFromCourse = async (req, res, next) => {
     });
 
     res.json({
-      message: 'Estudiante removido del curso exitosamente.',
+      message: 'Estudiante removido del curso exitosamente. Matrícula inactivada.',
       student: updatedStudent,
     });
   } catch (error) {

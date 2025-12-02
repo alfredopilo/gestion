@@ -100,9 +100,24 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 app.use(morgan('dev'));
-// Aumentar límite de tamaño del body para permitir imágenes base64
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware condicional para excluir la ruta de backup/upload de express.json()
+// porque multer necesita procesar multipart/form-data sin interferencia
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/v1/backup/upload' && req.method === 'POST') {
+    // Saltar express.json() para esta ruta, multer lo manejará
+    return next();
+  }
+  express.json({ limit: '10mb' })(req, res, next);
+});
+
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/v1/backup/upload' && req.method === 'POST') {
+    // Saltar express.urlencoded() para esta ruta también
+    return next();
+  }
+  express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+});
 
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

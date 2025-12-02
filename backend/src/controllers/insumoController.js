@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { createInsumoSchema, updateInsumoSchema } from '../utils/validators.js';
-import { getInsumoInstitutionFilter, verifyCourseBelongsToInstitution } from '../utils/institutionFilter.js';
+import { getInsumoInstitutionFilter, verifyCourseBelongsToInstitution, getInstitutionFilter } from '../utils/institutionFilter.js';
 
 /**
  * Obtener todos los insumos
@@ -119,7 +119,7 @@ export const getInsumoById = async (req, res, next) => {
     }
     
     // Verificar que el insumo pertenece a la institución del usuario
-    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
+    await verifyCourseBelongsToInstitution(req, prisma, insumo.cursoId);
 
     res.json(insumo);
   } catch (error) {
@@ -159,7 +159,7 @@ export const createInsumo = async (req, res, next) => {
     }
     
     // Verificar que el curso pertenece a la institución del usuario
-    await verifyCourseBelongsToInstitution(req, insumoData.cursoId, prisma);
+    await verifyCourseBelongsToInstitution(req, prisma, insumoData.cursoId);
 
     // Verificar que la materia existe y pertenece a la institución
     const materia = await prisma.subject.findUnique({
@@ -173,7 +173,6 @@ export const createInsumo = async (req, res, next) => {
     }
     
     // Verificar que la materia pertenece a la institución del usuario
-    const { getInstitutionFilter } = require('../utils/institutionFilter.js');
     const institutionId = getInstitutionFilter(req);
     if (institutionId && materia.institucionId !== institutionId) {
       return res.status(403).json({
@@ -299,7 +298,7 @@ export const updateInsumo = async (req, res, next) => {
     }
     
     // Verificar que el insumo pertenece a la institución del usuario
-    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
+    await verifyCourseBelongsToInstitution(req, prisma, insumo.cursoId);
 
     // Si se actualiza el nombre, verificar que no exista otro con el mismo nombre para la misma combinación
     if (validatedData.nombre && validatedData.nombre !== insumo.nombre) {
@@ -369,7 +368,7 @@ export const deleteInsumo = async (req, res, next) => {
     }
     
     // Verificar que el insumo pertenece a la institución del usuario
-    await verifyCourseBelongsToInstitution(req, insumo.cursoId, prisma);
+    await verifyCourseBelongsToInstitution(req, prisma, insumo.cursoId);
 
     await prisma.insumo.delete({
       where: { id },

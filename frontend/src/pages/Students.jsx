@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import StudentWithdrawalModal from '../components/StudentWithdrawalModal';
+import StudentReactivationModal from '../components/StudentReactivationModal';
 
 const Students = () => {
   const [students, setStudents] = useState([]);
@@ -12,8 +14,12 @@ const Students = () => {
     grupoId: '',
     estado: '',
     search: '',
+    includeRetired: false,
   });
   const [searchInput, setSearchInput] = useState(''); // Estado separado para el input de búsqueda
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [showReactivationModal, setShowReactivationModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -36,7 +42,7 @@ const Students = () => {
       setPagination(prev => ({ ...prev, total: 0, pages: 0 }));
       setLoading(false);
     }
-  }, [filters.grupoId, filters.estado, filters.search, pagination.page]);
+  }, [filters.grupoId, filters.estado, filters.search, filters.includeRetired, pagination.page]);
 
   const fetchCourses = async () => {
     try {
@@ -61,6 +67,9 @@ const Students = () => {
       // Aumentar el límite para permitir búsqueda completa en el cliente
       params.append('page', 1);
       params.append('limit', '1000');
+      if (filters.includeRetired) {
+        params.append('includeRetired', 'true');
+      }
       const response = await api.get(`/students?${params.toString()}`);
       const studentsData = response.data.data || [];
       
@@ -159,8 +168,17 @@ const Students = () => {
       grupoId: '',
       estado: '',
       search: '',
+      includeRetired: false,
     });
     setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handleWithdrawalSuccess = () => {
+    fetchStudents();
+  };
+
+  const handleReactivationSuccess = () => {
+    fetchStudents();
   };
 
   if (loading) {
@@ -255,6 +273,17 @@ const Students = () => {
               <option value="SUSPENDIDO">Suspendido</option>
             </select>
           </div>
+          <div>
+            <label className="flex items-center space-x-2 mt-2">
+              <input
+                type="checkbox"
+                checked={filters.includeRetired}
+                onChange={(e) => handleFilterChange('includeRetired', e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700">Incluir estudiantes retirados</span>
+            </label>
+          </div>
           <div className="flex items-end">
             <button
               onClick={clearFilters}
@@ -289,12 +318,15 @@ const Students = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Estado
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {!filters.grupoId && !filters.estado && !filters.search.trim() ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                     <div className="flex flex-col items-center justify-center py-8">
                       <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -306,13 +338,13 @@ const Students = () => {
                 </tr>
               ) : students.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                     No se encontraron estudiantes con los filtros aplicados
                   </td>
                 </tr>
               ) : (
                 students.map((student) => (
-                  <tr key={student.id} className={`hover:bg-gray-50 ${student._isPending ? 'bg-yellow-50' : ''}`}>
+                  <tr key={student.id} className={`hover:bg-gray-50 ${student._isPending ? 'bg-yellow-50' : ''} ${student.retirado ? 'bg-red-50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {student.user?.numeroIdentificacion ?? '-'}
                     </td>
@@ -356,6 +388,54 @@ const Students = () => {
                         <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
                           Pendiente
                         </span>
+                      )}
+                      {student.retirado && (
+                        <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                          Retirado
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {!student._isPending && (
+                        <div className="flex space-x-2">
+                          {student.retirado ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedStudent({ ...student, reactivationMode: 'reactivate' });
+                                  setShowReactivationModal(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 text-sm"
+                                title="Reactivar con segunda matrícula"
+                              >
+                                Reactivar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedStudent({ ...student, reactivationMode: 'transfer' });
+                                  setShowReactivationModal(true);
+                                }}
+                                className="text-green-600 hover:text-green-900 text-sm"
+                                title="Transferir a otra institución"
+                              >
+                                Transferir
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedStudent(student);
+                                  setShowWithdrawalModal(true);
+                                }}
+                                className="text-red-600 hover:text-red-900 text-sm"
+                                title="Retirar estudiante"
+                              >
+                                Retirar
+                              </button>
+                            </>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -445,6 +525,29 @@ const Students = () => {
           </div>
         )}
       </div>
+
+      {/* Modales */}
+      {showWithdrawalModal && selectedStudent && (
+        <StudentWithdrawalModal
+          student={selectedStudent}
+          onClose={() => {
+            setShowWithdrawalModal(false);
+            setSelectedStudent(null);
+          }}
+          onSuccess={handleWithdrawalSuccess}
+        />
+      )}
+
+      {showReactivationModal && selectedStudent && (
+        <StudentReactivationModal
+          student={selectedStudent}
+          onClose={() => {
+            setShowReactivationModal(false);
+            setSelectedStudent(null);
+          }}
+          onSuccess={handleReactivationSuccess}
+        />
+      )}
     </div>
   );
 };

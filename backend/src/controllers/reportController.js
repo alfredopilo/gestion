@@ -161,6 +161,7 @@ export const getGradesReport = async (req, res, next) => {
       },
       orderBy: [
         { estudiante: { user: { apellido: 'asc' } } },
+        { estudiante: { user: { nombre: 'asc' } } },
         { materia: { nombre: 'asc' } },
         { fechaRegistro: 'desc' },
       ],
@@ -173,7 +174,7 @@ export const getGradesReport = async (req, res, next) => {
     grades.forEach(grade => {
       const estudianteId = grade.estudianteId;
       const materiaId = grade.materiaId;
-      const estudianteNombre = `${grade.estudiante.user.nombre} ${grade.estudiante.user.apellido}`;
+      const estudianteNombre = `${grade.estudiante.user.apellido} ${grade.estudiante.user.nombre}`;
       const identificacion = grade.estudiante.user.numeroIdentificacion || '-';
       const materiaNombre = grade.materia.nombre;
       const insumoNombre = grade.insumo?.nombre || '-';
@@ -347,11 +348,30 @@ export const getGradesReport = async (req, res, next) => {
       }
     });
     
-    // Convertir a array y ordenar
+    // Convertir a array y ordenar por apellido y luego nombre
     const pivotRows = Object.values(pivotData).sort((a, b) => {
-      if (a.estudiante !== b.estudiante) {
-        return a.estudiante.localeCompare(b.estudiante);
+      // El formato es "Apellido Nombre", extraer apellido (primera palabra) y nombre (resto)
+      const partesA = (a.estudiante || '').trim().split(/\s+/);
+      const partesB = (b.estudiante || '').trim().split(/\s+/);
+      
+      const apellidoA = partesA.length > 0 ? partesA[0] : '';
+      const apellidoB = partesB.length > 0 ? partesB[0] : '';
+      
+      // Comparar por apellido primero
+      const comparacionApellido = apellidoA.toLowerCase().localeCompare(apellidoB.toLowerCase());
+      if (comparacionApellido !== 0) {
+        return comparacionApellido;
       }
+      
+      // Si los apellidos son iguales, comparar por nombre completo (resto de palabras)
+      const nombreA = partesA.slice(1).join(' ').toLowerCase();
+      const nombreB = partesB.slice(1).join(' ').toLowerCase();
+      const comparacionNombre = nombreA.localeCompare(nombreB);
+      if (comparacionNombre !== 0) {
+        return comparacionNombre;
+      }
+      
+      // Si todo es igual, ordenar por materia
       return a.materia.localeCompare(b.materia);
     });
     
@@ -618,6 +638,7 @@ export const getAveragesReport = async (req, res, next) => {
       },
       orderBy: [
         { estudiante: { user: { apellido: 'asc' } } },
+        { estudiante: { user: { nombre: 'asc' } } },
         { materia: { nombre: 'asc' } },
         { fechaRegistro: 'desc' },
       ],
@@ -629,7 +650,7 @@ export const getAveragesReport = async (req, res, next) => {
     grades.forEach(grade => {
       const estudianteId = grade.estudianteId;
       const materiaId = grade.materiaId;
-      const estudianteNombre = `${grade.estudiante.user.nombre} ${grade.estudiante.user.apellido}`;
+      const estudianteNombre = `${grade.estudiante.user.apellido} ${grade.estudiante.user.nombre}`;
       const identificacion = grade.estudiante.user.numeroIdentificacion || '-';
       const materiaNombre = grade.materia.nombre;
       
@@ -818,6 +839,33 @@ export const getAveragesReport = async (req, res, next) => {
     // Convertir a array y ordenar por orden de período
     periodsGrouped.push(...Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden));
 
+    // Ordenar averages por apellido y luego nombre
+    averages.sort((a, b) => {
+      // El formato es "Apellido Nombre", extraer apellido (primera palabra) y nombre (resto)
+      const partesA = (a.estudiante || '').trim().split(/\s+/);
+      const partesB = (b.estudiante || '').trim().split(/\s+/);
+      
+      const apellidoA = partesA.length > 0 ? partesA[0] : '';
+      const apellidoB = partesB.length > 0 ? partesB[0] : '';
+      
+      // Comparar por apellido primero
+      const comparacionApellido = apellidoA.toLowerCase().localeCompare(apellidoB.toLowerCase());
+      if (comparacionApellido !== 0) {
+        return comparacionApellido;
+      }
+      
+      // Si los apellidos son iguales, comparar por nombre completo (resto de palabras)
+      const nombreA = partesA.slice(1).join(' ').toLowerCase();
+      const nombreB = partesB.slice(1).join(' ').toLowerCase();
+      const comparacionNombre = nombreA.localeCompare(nombreB);
+      if (comparacionNombre !== 0) {
+        return comparacionNombre;
+      }
+      
+      // Si todo es igual, ordenar por materia
+      return a.materia.localeCompare(b.materia);
+    });
+
     // Generar datos para gráfico
     const chartData = [
       { rango: '0-4.99', cantidad: averages.filter(a => a.promedioGeneral !== null && a.promedioGeneral >= 0 && a.promedioGeneral < 5).length },
@@ -899,12 +947,13 @@ export const getAttendanceReport = async (req, res, next) => {
       },
       orderBy: [
         { estudiante: { user: { apellido: 'asc' } } },
+        { estudiante: { user: { nombre: 'asc' } } },
         { fecha: 'desc' },
       ],
     });
 
     const formattedAttendance = attendance.map(att => ({
-      estudiante: `${att.estudiante.user.nombre} ${att.estudiante.user.apellido}`,
+      estudiante: `${att.estudiante.user.apellido} ${att.estudiante.user.nombre}`,
       identificacion: att.estudiante.user.numeroIdentificacion || '-',
       fecha: att.fecha.toISOString().split('T')[0],
       estado: att.estado,
@@ -1031,7 +1080,7 @@ export const getPerformanceReport = async (req, res, next) => {
       }
 
       performanceData.push({
-        estudiante: `${student.user.nombre} ${student.user.apellido}`,
+        estudiante: `${student.user.apellido} ${student.user.nombre}`,
         identificacion: student.user.numeroIdentificacion || '-',
         promedio: promedioGeneral,
         asistencia: asistenciaPorcentaje,

@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Instalar OpenSSL y otras dependencias necesarias para Prisma
-RUN apk add --no-cache openssl openssl-dev libc6-compat
+# Instalar OpenSSL, postgresql-client (para pg_dump) y otras dependencias necesarias para Prisma
+RUN apk add --no-cache openssl openssl-dev libc6-compat postgresql-client
 
 WORKDIR /app
 

@@ -1,5 +1,5 @@
 import prisma from '../config/database.js';
-import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution } from '../utils/institutionFilter.js';
+import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, getGradeInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
 import { calculateWeightedAverage, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
 
 /**
@@ -23,6 +23,62 @@ export const getReportCards = async (req, res, next) => {
       });
     }
 
+    // Obtener filtro de institución para estudiantes
+    const studentInstitutionFilter = await getStudentInstitutionFilter(req, prisma);
+    let studentWhere = {};
+    
+    // Aplicar filtro de institución a estudiantes
+    if (Object.keys(studentInstitutionFilter).length > 0) {
+      if (studentInstitutionFilter.userId?.in && studentInstitutionFilter.userId.in.length === 0) {
+        // No hay estudiantes de la institución
+        return res.json({
+          data: [],
+          periodsGrouped: [],
+          total: 0,
+        });
+      }
+      // Aplicar filtro de institución (userId)
+      studentWhere.user = {
+        id: { in: studentInstitutionFilter.userId.in },
+      };
+    } else if (req.user?.rol !== 'ADMIN') {
+      // Si no hay filtro y no es ADMIN, no mostrar estudiantes
+      return res.json({
+        data: [],
+        periodsGrouped: [],
+        total: 0,
+      });
+    }
+    
+    // Si se especifican estudianteIds, agregar al filtro
+    if (estudianteIds) {
+      const estudianteIdsArray = Array.isArray(estudianteIds) ? estudianteIds : [estudianteIds];
+      if (studentWhere.user) {
+        // Ya hay filtro de institución, combinar con estudianteIds
+        const studentsFromIds = await prisma.student.findMany({
+          where: { 
+            id: { in: estudianteIdsArray },
+            user: {
+              id: { in: studentInstitutionFilter.userId.in },
+            },
+          },
+          select: { id: true },
+        });
+        const validStudentIds = studentsFromIds.map(s => s.id);
+        if (validStudentIds.length === 0) {
+          return res.json({
+            data: [],
+            periodsGrouped: [],
+            total: 0,
+          });
+        }
+        studentWhere.id = { in: validStudentIds };
+      } else {
+        // Si no hay filtro de institución, usar solo los estudianteIds
+        studentWhere.id = { in: estudianteIdsArray };
+      }
+    }
+
     // Obtener información del curso
     const curso = await prisma.course.findUnique({
       where: { id: cursoId },
@@ -35,9 +91,10 @@ export const getReportCards = async (req, res, next) => {
           },
         },
         estudiantes: {
-          where: estudianteIds ? {
-            id: { in: Array.isArray(estudianteIds) ? estudianteIds : [estudianteIds] },
-          } : undefined,
+          where: {
+            grupoId: cursoId,
+            ...studentWhere,
+          },
           include: {
             user: {
               select: {
@@ -48,11 +105,10 @@ export const getReportCards = async (req, res, next) => {
               },
             },
           },
-          orderBy: {
-            user: {
-              apellido: 'asc',
-            },
-          },
+          orderBy: [
+            { user: { apellido: 'asc' } },
+            { user: { nombre: 'asc' } },
+          ],
         },
         course_subject_assignments: {
           include: {
@@ -92,11 +148,71 @@ export const getReportCards = async (req, res, next) => {
     const materiaIds = materias.map(m => m.id);
     const estudianteIdsArray = curso.estudiantes.map(e => e.id);
 
+    // Aplicar filtro de institución a las calificaciones
+    const gradeInstitutionFilter = await getGradeInstitutionFilter(req, prisma);
+    const gradeWhere = {
+      estudianteId: { in: estudianteIdsArray },
+      materiaId: { in: materiaIds },
+    };
+    
+    // Aplicar filtro de institución si existe
+    if (Object.keys(gradeInstitutionFilter).length > 0) {
+      // Si el filtro tiene un array vacío, no hay calificaciones
+      if (gradeInstitutionFilter.estudianteId?.in && gradeInstitutionFilter.estudianteId.in.length === 0) {
+        // No hay estudiantes de la institución, devolver boletines vacíos
+        return res.json({
+          data: curso.estudiantes.map(estudiante => ({
+            estudiante: {
+              id: estudiante.id,
+              nombre: estudiante.user.nombre,
+              apellido: estudiante.user.apellido,
+              numeroIdentificacion: estudiante.user.numeroIdentificacion || '-',
+              email: estudiante.user.email || '-',
+            },
+            curso: {
+              id: curso.id,
+              nombre: curso.nombre,
+              nivel: curso.nivel,
+              paralelo: curso.paralelo,
+              periodo: curso.periodo?.nombre || '-',
+            },
+            materias: materiasConEscala.map(({ materia, gradeScale }) => ({
+              materia: {
+                id: materia.id,
+                nombre: materia.nombre,
+                codigo: materia.codigo,
+              },
+              gradeScale: gradeScale,
+              promediosSubPeriodo: {},
+              promediosPeriodo: {},
+              promedioGeneral: null,
+              equivalenteGeneral: null,
+              calificaciones: [],
+            })),
+            promedioGeneral: null,
+          })),
+          periodsGrouped: [],
+          total: curso.estudiantes.length,
+        });
+      }
+      // Combinar el filtro de institución con el filtro de estudiantes del curso
+      // Solo incluir estudiantes que están en ambos arrays
+      const filteredStudentIds = estudianteIdsArray.filter(id => 
+        gradeInstitutionFilter.estudianteId.in.includes(id)
+      );
+      if (filteredStudentIds.length === 0) {
+        // No hay estudiantes del curso que pertenezcan a la institución
+        return res.json({
+          data: [],
+          periodsGrouped: [],
+          total: 0,
+        });
+      }
+      gradeWhere.estudianteId = { in: filteredStudentIds };
+    }
+
     const grades = await prisma.grade.findMany({
-      where: {
-        estudianteId: { in: estudianteIdsArray },
-        materiaId: { in: materiaIds },
-      },
+      where: gradeWhere,
       include: {
         materia: {
           select: {
@@ -151,6 +267,17 @@ export const getReportCards = async (req, res, next) => {
       ],
     });
 
+    // Obtener el período desde las calificaciones si el curso no tiene período asignado
+    let periodoNombre = curso.periodo?.nombre || '-';
+    if (periodoNombre === '-' && grades.length > 0) {
+      // Intentar obtener el período desde la primera calificación
+      const firstGrade = grades[0];
+      const periodoFromGrade = firstGrade.subPeriodo?.periodo || firstGrade.insumo?.subPeriodo?.periodo;
+      if (periodoFromGrade) {
+        periodoNombre = periodoFromGrade.nombre;
+      }
+    }
+    
     // Estructurar datos por estudiante y materia
     const reportCards = curso.estudiantes.map(estudiante => {
       const estudianteGrades = grades.filter(g => g.estudianteId === estudiante.id);
@@ -306,7 +433,7 @@ export const getReportCards = async (req, res, next) => {
           nombre: curso.nombre,
           nivel: curso.nivel,
           paralelo: curso.paralelo,
-          periodo: curso.periodo?.nombre || '-',
+          periodo: periodoNombre,
         },
         materias: materiasData,
         promedioGeneral: materiasData.length > 0
@@ -315,77 +442,77 @@ export const getReportCards = async (req, res, next) => {
       };
     });
 
-    // Construir periodsGrouped basado en el período del curso
+    // Construir periodsGrouped basado en el período del curso o desde las calificaciones
     const periodsGrouped = [];
-    if (curso.periodo) {
-      const subPeriodsMap = new Map();
-      
-      // Recopilar todos los subperíodos únicos de las calificaciones
-      grades.forEach(grade => {
-        const subPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
-        if (subPeriodo) {
-          const subPeriodoId = subPeriodo.id;
-          if (!subPeriodsMap.has(subPeriodoId)) {
-            subPeriodsMap.set(subPeriodoId, {
-              subPeriodoId: subPeriodo.id,
-              subPeriodoNombre: subPeriodo.nombre,
-              subPeriodoOrden: subPeriodo.orden ?? 999,
-              subPeriodoPonderacion: subPeriodo.ponderacion || 0,
-              periodoId: subPeriodo.periodo?.id,
-              periodoNombre: subPeriodo.periodo?.nombre,
-              periodoOrden: subPeriodo.periodo?.orden ?? 999,
-              periodoPonderacion: subPeriodo.periodo?.ponderacion || 100,
-            });
-          }
-        }
-      });
-      
-      // Si no hay subperíodos en las calificaciones, usar los del período del curso
-      if (subPeriodsMap.size === 0 && curso.periodo.subPeriodos) {
-        curso.periodo.subPeriodos.forEach(subPeriodo => {
-          subPeriodsMap.set(subPeriodo.id, {
+    const subPeriodsMap = new Map();
+    
+    // Recopilar todos los subperíodos únicos de las calificaciones
+    grades.forEach(grade => {
+      const subPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
+      if (subPeriodo) {
+        const subPeriodoId = subPeriodo.id;
+        if (!subPeriodsMap.has(subPeriodoId)) {
+          // Obtener el período desde el subperíodo
+          const periodo = subPeriodo.periodo;
+          subPeriodsMap.set(subPeriodoId, {
             subPeriodoId: subPeriodo.id,
             subPeriodoNombre: subPeriodo.nombre,
             subPeriodoOrden: subPeriodo.orden ?? 999,
             subPeriodoPonderacion: subPeriodo.ponderacion || 0,
-            periodoId: curso.periodo.id,
-            periodoNombre: curso.periodo.nombre,
-            periodoOrden: curso.periodo.orden ?? 999,
-            periodoPonderacion: curso.periodo.ponderacion || 100,
+            periodoId: periodo?.id || 'default',
+            periodoNombre: periodo?.nombre || periodoNombre !== '-' ? periodoNombre : 'Período',
+            periodoOrden: periodo?.orden ?? 999,
+            periodoPonderacion: periodo?.ponderacion || 100,
           });
+        }
+      }
+    });
+    
+    // Si no hay subperíodos en las calificaciones pero el curso tiene período, usar los del período del curso
+    if (subPeriodsMap.size === 0 && curso.periodo && curso.periodo.subPeriodos) {
+      curso.periodo.subPeriodos.forEach(subPeriodo => {
+        subPeriodsMap.set(subPeriodo.id, {
+          subPeriodoId: subPeriodo.id,
+          subPeriodoNombre: subPeriodo.nombre,
+          subPeriodoOrden: subPeriodo.orden ?? 999,
+          subPeriodoPonderacion: subPeriodo.ponderacion || 0,
+          periodoId: curso.periodo.id,
+          periodoNombre: curso.periodo.nombre,
+          periodoOrden: curso.periodo.orden ?? 999,
+          periodoPonderacion: curso.periodo.ponderacion || 100,
         });
+      });
+    }
+    
+    // Agrupar por período
+    const periodsByPeriod = {};
+    subPeriodsMap.forEach(subPeriodData => {
+      const periodoId = subPeriodData.periodoId || 'default';
+      if (!periodsByPeriod[periodoId]) {
+        periodsByPeriod[periodoId] = {
+          periodoId,
+          periodoNombre: subPeriodData.periodoNombre,
+          periodoOrden: subPeriodData.periodoOrden,
+          periodoPonderacion: subPeriodData.periodoPonderacion,
+          subPeriods: [],
+        };
       }
       
-      // Agrupar por período
-      const periodsByPeriod = {};
-      subPeriodsMap.forEach(subPeriodData => {
-        const periodoId = subPeriodData.periodoId;
-        if (!periodsByPeriod[periodoId]) {
-          periodsByPeriod[periodoId] = {
-            periodoId,
-            periodoNombre: subPeriodData.periodoNombre,
-            periodoOrden: subPeriodData.periodoOrden,
-            periodoPonderacion: subPeriodData.periodoPonderacion,
-            subPeriods: [],
-          };
-        }
-        
-        periodsByPeriod[periodoId].subPeriods.push({
-          subPeriodoId: subPeriodData.subPeriodoId,
-          subPeriodoNombre: subPeriodData.subPeriodoNombre,
-          subPeriodoOrden: subPeriodData.subPeriodoOrden,
-          subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
-        });
+      periodsByPeriod[periodoId].subPeriods.push({
+        subPeriodoId: subPeriodData.subPeriodoId,
+        subPeriodoNombre: subPeriodData.subPeriodoNombre,
+        subPeriodoOrden: subPeriodData.subPeriodoOrden,
+        subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
       });
-      
-      // Ordenar subperíodos dentro de cada período
-      Object.values(periodsByPeriod).forEach(period => {
-        period.subPeriods.sort((a, b) => a.subPeriodoOrden - b.subPeriodoOrden);
-      });
-      
-      // Convertir a array y ordenar por orden de período
-      periodsGrouped.push(...Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden));
-    }
+    });
+    
+    // Ordenar subperíodos dentro de cada período
+    Object.values(periodsByPeriod).forEach(period => {
+      period.subPeriods.sort((a, b) => a.subPeriodoOrden - b.subPeriodoOrden);
+    });
+    
+    // Convertir a array y ordenar por orden de período
+    periodsGrouped.push(...Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden));
 
     res.json({
       data: reportCards,
