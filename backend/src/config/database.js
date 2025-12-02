@@ -8,8 +8,8 @@ const prisma = new PrismaClient({
 
 // Verificar que el cliente tenga los campos correctos al iniciar
 if (process.env.NODE_ENV === 'development') {
-  console.log('🔍 Verificando cliente de Prisma...');
-  // Esta verificación se hace al importar el módulo
+  console.log('🔍 Cliente de Prisma inicializado');
+  console.log('📦 Versión del cliente:', '@prisma/client');
 }
 
 // Función para conectar a la base de datos

@@ -178,6 +178,18 @@ export const createPeriod = async (req, res, next) => {
       });
     }
 
+    // Si se está creando un período supletorio activo, desactivar automáticamente los demás períodos supletorios activos del mismo año lectivo
+    if (validatedData.esSupletorio && validatedData.activo) {
+      await prisma.period.updateMany({
+        where: {
+          anioLectivoId: validatedData.anioLectivoId,
+          esSupletorio: true,
+          activo: true,
+        },
+        data: { activo: false },
+      });
+    }
+
     // Generar ID para el período
     const periodData = {
       id: randomUUID(),
@@ -245,6 +257,25 @@ export const updatePeriod = async (req, res, next) => {
         await prisma.period.updateMany({
           where: {
             anioLectivoId: anioLectivoId,
+            activo: true,
+            id: { not: id },
+          },
+          data: { activo: false },
+        });
+      }
+    }
+
+    // Si se está marcando como supletorio y activo, desactivar otros períodos supletorios activos del mismo año lectivo
+    const isBecomingSupplementary = (validatedData.esSupletorio === true) && (period.esSupletorio !== true);
+    const isActivatingSupplementary = (validatedData.activo === true) && (validatedData.esSupletorio === true || period.esSupletorio === true);
+    
+    if ((isBecomingSupplementary || isActivatingSupplementary) && validatedData.activo !== false) {
+      const anioLectivoId = validatedData.anioLectivoId || period.anioLectivoId;
+      if (anioLectivoId) {
+        await prisma.period.updateMany({
+          where: {
+            anioLectivoId: anioLectivoId,
+            esSupletorio: true,
             activo: true,
             id: { not: id },
           },

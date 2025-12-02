@@ -200,6 +200,7 @@ export const createPeriodSchema = z.object({
   calificacionMinima: z.number().min(0).max(10).default(7.0),
   ponderacion: z.number().min(0).max(100).optional(),
   activo: z.boolean().default(true),
+  esSupletorio: z.boolean().default(false),
   orden: z.number().int().positive().optional(),
 }).passthrough(); // Permitir campos adicionales que no están en el schema
 
@@ -211,6 +212,7 @@ export const updatePeriodSchema = z.object({
   calificacionMinima: z.number().min(0).max(10).optional(),
   ponderacion: z.number().min(0).max(100).optional(),
   activo: z.boolean().optional(),
+  esSupletorio: z.boolean().optional(),
   orden: z.number().int().positive().optional(),
   anioLectivoId: z.string().uuid().optional(),
 });

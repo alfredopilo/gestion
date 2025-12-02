@@ -156,3 +156,60 @@ export function getGradeScaleEquivalent(gradeScale, promedio) {
   return closestDetail.titulo;
 }
 
+/**
+ * Calcular promedio final considerando supletorios
+ * Reemplaza períodos bajos con la calificación de supletorio
+ * @param {Array} periodAverages - Array de { periodoId, promedio, ponderacion, calificacionMinima }
+ * @param {number} supplementaryAverage - Calificación de supletorio
+ * @returns {Object} - { promedioFinal: number, periodAveragesAdjusted: Array, periodsReplaced: Array }
+ */
+export function calculateFinalAverageWithSupplementary(periodAverages, supplementaryAverage) {
+  if (!periodAverages || periodAverages.length === 0) {
+    return {
+      promedioFinal: 0,
+      periodAveragesAdjusted: [],
+      periodsReplaced: [],
+    };
+  }
+
+  // Crear copia del array de promedios
+  const adjustedAverages = periodAverages.map((pa, index) => ({ ...pa, originalIndex: index }));
+
+  // Identificar períodos que están por debajo del mínimo
+  const periodsBelowMinimum = adjustedAverages.filter(pa => pa.promedio < pa.calificacionMinima);
+
+  // Ordenar por promedio más bajo primero
+  const sortedPeriodsToReplace = [...periodsBelowMinimum].sort((a, b) => a.promedio - b.promedio);
+
+  // Reemplazar períodos más bajos con supletorio
+  const periodsReplaced = [];
+  sortedPeriodsToReplace.forEach(period => {
+    const originalPromedio = period.promedio;
+    adjustedAverages[period.originalIndex] = {
+      ...period,
+      promedio: supplementaryAverage,
+      promedioPonderado: truncate(supplementaryAverage * (period.ponderacion / 100)),
+      reemplazadoPorSupletorio: true,
+      promedioOriginal: originalPromedio,
+    };
+    periodsReplaced.push({
+      periodoId: period.periodoId,
+      periodoNombre: period.periodoNombre,
+      promedioOriginal: originalPromedio,
+      promedioSupletorio: supplementaryAverage,
+    });
+  });
+
+  // Calcular promedio final con los períodos ajustados
+  const promedioFinal = calculateFinalAverage(adjustedAverages.map(pa => ({
+    promedio: pa.promedio,
+    ponderacion: pa.ponderacion,
+  })));
+
+  return {
+    promedioFinal,
+    periodAveragesAdjusted: adjustedAverages,
+    periodsReplaced,
+  };
+}
+

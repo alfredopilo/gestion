@@ -18,6 +18,7 @@ const Periods = () => {
     calificacionMinima: 7.0,
     ponderacion: 50.0,
     activo: true,
+    esSupletorio: false,
     orden: 1,
   });
   const [subPeriodFormData, setSubPeriodFormData] = useState({
@@ -55,6 +56,7 @@ const Periods = () => {
         ponderacion: parseFloat(formData.ponderacion),
         orden: parseInt(formData.orden),
         activo: formData.activo,
+        esSupletorio: formData.esSupletorio,
         // No enviar anioEscolar ni anioLectivoId, el backend lo obtendrá automáticamente
       };
 
@@ -141,6 +143,7 @@ const Periods = () => {
       calificacionMinima: period.calificacionMinima || 7.0,
       ponderacion: period.ponderacion || 50.0,
       activo: period.activo ?? true,
+      esSupletorio: period.esSupletorio ?? false,
       orden: period.orden || 1,
     });
     setShowModal(true);
@@ -205,6 +208,7 @@ const Periods = () => {
       calificacionMinima: 7.0,
       ponderacion: 50.0,
       activo: true,
+      esSupletorio: false,
       orden: 1,
     });
     setEditingPeriod(null);
@@ -306,16 +310,21 @@ const Periods = () => {
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {period.activo ? (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
-                        ) : (
-                          <button
-                            onClick={() => handleSetActive(period.id)}
-                            className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200"
-                          >
-                            Activar
-                          </button>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {period.activo ? (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Activo</span>
+                          ) : (
+                            <button
+                              onClick={() => handleSetActive(period.id)}
+                              className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 hover:bg-gray-200"
+                            >
+                              Activar
+                            </button>
+                          )}
+                          {period.esSupletorio && (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">Supletorio</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
@@ -484,6 +493,17 @@ const Periods = () => {
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="ml-2 text-sm text-gray-700">Período activo</span>
+                </label>
+              </div>
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.esSupletorio}
+                    onChange={(e) => setFormData({ ...formData, esSupletorio: e.target.checked })}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Es Supletorio</span>
                 </label>
               </div>
               <div className="flex justify-end space-x-3 pt-4">

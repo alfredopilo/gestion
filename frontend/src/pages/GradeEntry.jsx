@@ -37,6 +37,14 @@ const GradeEntry = () => {
   }, [selectedCourse]);
 
   useEffect(() => {
+    // Refrescar estudiantes cuando cambia el período o la materia
+    // Esto es importante para actualizar entre períodos supletorios y regulares
+    if (selectedCourse && selectedPeriod && selectedSubject) {
+      fetchStudents();
+    }
+  }, [selectedPeriod, selectedSubject]);
+
+  useEffect(() => {
     if (selectedPeriod) {
       fetchSubPeriods();
     } else {
@@ -183,6 +191,56 @@ const GradeEntry = () => {
     if (!selectedCourse) return;
     
     try {
+      // Si el período es supletorio y hay materia seleccionada, filtrar estudiantes elegibles
+      if (selectedPeriod?.esSupletorio && selectedSubject && selectedCourse?.anioLectivo?.id) {
+        try {
+          const response = await api.get('/supplementary/eligible-students', {
+            params: {
+              materiaId: selectedSubject.id,
+              anioLectivoId: selectedCourse.anioLectivo.id,
+              periodoId: selectedPeriod.id,
+            },
+          });
+          
+          const eligibleStudents = response.data.data || [];
+          
+          // Convertir a formato compatible con el resto del código
+          const estudiantesList = eligibleStudents.map(item => ({
+            id: item.estudiante.id,
+            user: item.estudiante,
+            grupo: item.curso,
+            grupoId: item.curso.id,
+          }));
+          
+          // Ordenar estudiantes alfabéticamente por apellido y nombre
+          const estudiantesOrdenados = estudiantesList.sort((a, b) => {
+            const apellidoA = (a.user?.apellido || '').toLowerCase();
+            const apellidoB = (b.user?.apellido || '').toLowerCase();
+            if (apellidoA !== apellidoB) {
+              return apellidoA.localeCompare(apellidoB);
+            }
+            const nombreA = (a.user?.nombre || '').toLowerCase();
+            const nombreB = (b.user?.nombre || '').toLowerCase();
+            return nombreA.localeCompare(nombreB);
+          });
+          
+          setStudents(estudiantesOrdenados);
+          
+          if (estudiantesOrdenados.length === 0) {
+            toast('No hay estudiantes elegibles para supletorio en esta materia');
+          } else {
+            toast.success(`${estudiantesOrdenados.length} estudiante(s) elegible(s) para supletorio`);
+          }
+          
+          return;
+        } catch (supplementaryError) {
+          console.error('Error al cargar estudiantes elegibles para supletorio:', supplementaryError);
+          toast.error('Error al cargar estudiantes elegibles para supletorio');
+          // Continuar con el método normal como fallback
+        }
+      }
+      
+      // Método normal: obtener todos los estudiantes del curso
       const response = await api.get(`/courses/${selectedCourse.id}`);
       const courseData = response.data;
       const estudiantesList = courseData.estudiantes || [];
@@ -205,6 +263,12 @@ const GradeEntry = () => {
         const nombreB = (b.user?.nombre || '').toLowerCase();
         return nombreA.localeCompare(nombreB);
       });
+      
+      // Limpiar cualquier flag de supletorio que puedan tener los estudiantes anteriores
+      estudiantesOrdenados.forEach(e => {
+        delete e._isEligibleForSupplementary;
+      });
+      
       setStudents(estudiantesOrdenados);
     } catch (error) {
       console.error('Error al cargar estudiantes:', error);

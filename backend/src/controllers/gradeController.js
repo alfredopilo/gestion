@@ -295,6 +295,73 @@ export const upsertGrade = async (req, res, next) => {
       });
     }
 
+    // Validar supletorio si se está ingresando una calificación de supletorio
+    let periodoEsSupletorio = false;
+    let anioLectivoId = null;
+
+    if (validatedData.subPeriodoId) {
+      const subPeriodo = await prisma.subPeriod.findUnique({
+        where: { id: validatedData.subPeriodoId },
+        include: {
+          periodo: {
+            select: {
+              id: true,
+              esSupletorio: true,
+              anioLectivoId: true,
+            },
+          },
+        },
+      });
+
+      if (subPeriodo?.periodo) {
+        periodoEsSupletorio = subPeriodo.periodo.esSupletorio;
+        anioLectivoId = subPeriodo.periodo.anioLectivoId;
+      }
+    } else if (validatedData.insumoId) {
+      const insumo = await prisma.insumo.findUnique({
+        where: { id: validatedData.insumoId },
+        include: {
+          subPeriodo: {
+            include: {
+              periodo: {
+                select: {
+                  id: true,
+                  esSupletorio: true,
+                  anioLectivoId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (insumo?.subPeriodo?.periodo) {
+        periodoEsSupletorio = insumo.subPeriodo.periodo.esSupletorio;
+        anioLectivoId = insumo.subPeriodo.periodo.anioLectivoId;
+      }
+    }
+
+    // Si es un período supletorio, verificar que el estudiante califica
+    if (periodoEsSupletorio && anioLectivoId) {
+      const { checkStudentQualifiesForSupplementary } = await import('../utils/supplementaryLogic.js');
+      
+      const qualificationResult = await checkStudentQualifiesForSupplementary(
+        validatedData.estudianteId,
+        validatedData.materiaId,
+        anioLectivoId
+      );
+
+      if (!qualificationResult.qualifies) {
+        return res.status(400).json({
+          error: 'Este estudiante no califica para supletorio en esta materia. El promedio general debe ser menor a la suma de las calificaciones mínimas de los períodos regulares.',
+          detalles: {
+            promedioGeneral: qualificationResult.promedioGeneral,
+            sumaMinima: qualificationResult.sumaMinima,
+          },
+        });
+      }
+    }
+
     // NO truncar las calificaciones individuales, mantener el valor exacto
     // Solo se truncará el promedio en el cálculo
 
