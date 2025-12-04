@@ -4,35 +4,43 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: gestion-escolar-db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: gestionscolar
-      POSTGRES_PASSWORD: gestionscolar2024
-      POSTGRES_DB: gestion_escolar
+      POSTGRES_USER: ${POSTGRES_USER:-gestionscolar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gestionscolar2024}
+      POSTGRES_DB: ${POSTGRES_DB:-gestion_escolar}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - gestion-escolar-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gestionscolar}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: gestion-escolar-backend
+    restart: unless-stopped
     environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://gestionscolar:gestionscolar2024@postgres:5432/gestion_escolar
-      JWT_SECRET: mi_secreto_jwt_super_seguro_2024
-      JWT_EXPIRES_IN: 7d
-      PORT: 3000
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gestionscolar}:${POSTGRES_PASSWORD:-gestionscolar2024}@postgres:5432/${POSTGRES_DB:-gestion_escolar}
+      JWT_SECRET: ${JWT_SECRET:-mi_secreto_jwt_super_seguro_2024}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      PORT: ${BACKEND_PORT:-3000}
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
     volumes:
       - ./backend:/app
       - /app/node_modules
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - gestion-escolar-network
     command: npm run dev
@@ -42,11 +50,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: gestion-escolar-frontend
+    restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:3000/api/v1
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api/v1}
       CHOKIDAR_USEPOLLING: "true"
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules

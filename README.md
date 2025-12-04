@@ -42,44 +42,63 @@ Aplicación web completa para la administración integral de una institución ed
 
 ## 📋 Requisitos Previos
 
-- Docker y Docker Compose instalados
-- Node.js 20+ (si ejecutas localmente)
-- PostgreSQL 15 (si ejecutas localmente)
+- **Docker** (versión 20.10 o superior)
+- **Docker Compose** (versión 2.0 o superior)
+- Node.js 20+ (solo si ejecutas localmente sin Docker)
+- PostgreSQL 15 (solo si ejecutas localmente sin Docker)
 
-## 🚀 Instalación y Ejecución
+> 💡 **Recomendación**: Usa Docker Compose para una instalación más sencilla y sin conflictos de dependencias.
 
-### Opción 1: Docker Compose (Recomendado)
+## 🚀 Instalación Rápida
 
-1. Clonar el repositorio:
+### ⚡ Opción 1: Instalación Automática (Más Fácil)
+
+**Linux/Mac:**
 ```bash
 git clone <url-del-repositorio>
 cd gestion-escolar
+./install.sh
 ```
 
-2. Crear archivo `.env` en `backend/`:
-```bash
-cd backend
-cp .env.example .env
-# Editar .env con tus configuraciones si es necesario
+**Windows:**
+```cmd
+git clone <url-del-repositorio>
+cd gestion-escolar
+install.bat
 ```
 
-3. Levantar los servicios:
+Los scripts automáticos:
+- ✅ Verifican que Docker esté instalado
+- ✅ Levantan todos los servicios
+- ✅ Configuran la base de datos automáticamente
+- ✅ Te muestran las credenciales de acceso
+
+### ⚡ Opción 2: Instalación Manual con Docker Compose
+
+Para una guía detallada paso a paso, consulta **[INSTALACION.md](./INSTALACION.md)**
+
+**Resumen rápido:**
+
 ```bash
+# 1. Clonar el repositorio
+git clone <url-del-repositorio>
+cd gestion-escolar
+
+# 2. Levantar los servicios (usa valores por defecto o crea .env para personalizar)
 docker-compose up -d
-```
 
-4. Generar el cliente de Prisma y ejecutar migraciones:
-```bash
-# Ejecutar dentro del contenedor del backend
+# 3. Configurar la base de datos
 docker-compose exec backend npm run prisma:generate
 docker-compose exec backend npm run prisma:migrate
 docker-compose exec backend npm run prisma:seed
+
+# 4. ¡Listo! Accede a:
+#    - Frontend: http://localhost:5173
+#    - Backend API: http://localhost:3000
+#    - Documentación API: http://localhost:3000/api-docs
 ```
 
-5. Acceder a la aplicación:
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:3000
-   - Documentación API: http://localhost:3000/api-docs
+> 📖 **Nota**: El sistema funciona con valores por defecto. Solo necesitas crear archivos `.env` si quieres personalizar puertos o credenciales. Ver [INSTALACION.md](./INSTALACION.md) para más detalles.
 
 ### Opción 2: Instalación Local
 
@@ -349,17 +368,29 @@ Los datos se guardan en `prisma/seed-data/` y cada tabla tiene su propio archivo
 
 ## 🐛 Troubleshooting
 
-### Error de conexión a la base de datos
-- Verificar que PostgreSQL esté corriendo
+Para soluciones detalladas a problemas comunes, consulta:
+- **[INSTALACION.md](./INSTALACION.md)** - Sección "Solución de Problemas"
+- **[INSTRUCCIONES.md](./INSTRUCCIONES.md)** - Problemas específicos del frontend
+
+### Problemas Comunes
+
+**Error de conexión a la base de datos**
+- Verificar que PostgreSQL esté corriendo: `docker-compose ps postgres`
 - Verificar la URL de conexión en `.env`
 - Asegurarse de que las migraciones se hayan ejecutado
 
-### Error al iniciar el frontend
-- Verificar que el backend esté corriendo
+**Error al iniciar el frontend**
+- Verificar que el backend esté corriendo: `docker-compose ps backend`
 - Verificar la variable `VITE_API_URL` en `.env`
+- Limpiar caché del navegador (Ctrl+Shift+R)
 
-### Error de permisos en Docker
-- En Linux/Mac, puede ser necesario ajustar permisos: `sudo chown -R $USER:$USER .`
+**Error de permisos en Docker**
+- En Linux/Mac: `sudo chown -R $USER:$USER .`
+- En Windows: Ejecutar Docker Desktop como administrador
+
+**Puertos en uso**
+- Cambiar puertos en `.env` (ver [INSTALACION.md](./INSTALACION.md))
+- O detener el servicio que usa el puerto
 
 ## 📄 Licencia
 
