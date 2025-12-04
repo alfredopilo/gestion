@@ -281,7 +281,7 @@ const GradeEntry = () => {
 
     try {
       const response = await api.get(
-        `/grades?materiaId=${selectedSubject.id}&subPeriodoId=${selectedSubPeriod.id}`
+        `/grades?materiaId=${selectedSubject.id}&subPeriodoId=${selectedSubPeriod.id}&limit=1000&page=1`
       );
       const gradesList = response.data.data || [];
       
@@ -544,6 +544,7 @@ const GradeEntry = () => {
   const [importData, setImportData] = useState('');
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
+  const [resetting, setResetting] = useState(false);
 
   const handleImportGrades = async () => {
     if (!importData.trim()) {
@@ -574,7 +575,14 @@ const GradeEntry = () => {
         // Formato simple: solo calificaciones en orden
         for (let i = 0; i < lines.length && i < students.length; i++) {
           const student = students[i];
-          const values = lines[i].split(/[\t,;]/).map(v => v.trim());
+          const values = lines[i]
+            .split(/[\t,;]/)
+            .map(v =>
+              v
+                .trim()
+                .replace(/^\uFEFF/, '') // quitar BOM si existe
+                .replace(/^"(.*)"$/, '$1') // quitar comillas envolventes
+            );
           
           for (let j = 0; j < insumos.length && j < values.length; j++) {
             const insumo = insumos[j];
@@ -616,22 +624,38 @@ const GradeEntry = () => {
       } else {
         // Formato con identificación/nombres de estudiantes
         for (const line of lines) {
-          const parts = line.split(/[\t,;]/).map(p => p.trim());
+          const parts = line
+            .split(/[\t,;]/)
+            .map(p =>
+              p
+                .trim()
+                .replace(/^\uFEFF/, '') // quitar BOM si existe
+                .replace(/^"(.*)"$/, '$1') // quitar comillas envolventes
+            );
           if (parts.length === 0) continue;
           
           const firstPart = parts[0];
+
+          // Omitir fila de encabezados (Identificación, Estudiante, etc.)
+          const firstLower = firstPart.toLowerCase();
+          if (firstLower === 'identificación' || firstLower === 'identificacion' || firstLower === 'id') {
+            continue;
+          }
+
           let student = null;
           let startIndex = 1; // Por defecto, asumir que la primera columna es nombre
           
           // Buscar por identificación primero
-          const studentById = students.find(s => s.user?.numeroIdentificacion === firstPart);
+          const studentById = students.find(
+            s => (s.user?.numeroIdentificacion || '').toString() === firstPart
+          );
           if (studentById) {
             student = studentById;
             startIndex = 2; // Si es identificación, las calificaciones empiezan en índice 2 (identificación, nombre, calificaciones...)
           } else {
             // Buscar por nombre completo
             const studentByName = students.find(s => {
-              const fullName = `${s.user?.nombre || ''} ${s.user?.apellido || ''}`.trim();
+              const fullName = `${s.user?.apellido || ''} ${s.user?.nombre || ''}`.trim();
               return fullName === firstPart || fullName.toLowerCase() === firstPart.toLowerCase();
             });
             if (studentByName) {
@@ -640,7 +664,7 @@ const GradeEntry = () => {
             } else {
               // Buscar por nombre parcial
               const studentByPartialName = students.find(s => {
-                const fullName = `${s.user?.nombre || ''} ${s.user?.apellido || ''}`.trim().toLowerCase();
+                const fullName = `${s.user?.apellido || ''} ${s.user?.nombre || ''}`.trim().toLowerCase();
                 return fullName.includes(firstPart.toLowerCase()) || firstPart.toLowerCase().includes(fullName);
               });
               if (studentByPartialName) {
@@ -804,7 +828,9 @@ const GradeEntry = () => {
     template += 'Ejemplo:\n';
     students.slice(0, 3).forEach(student => {
       const identificacion = student.user?.numeroIdentificacion || '';
-      template += `${identificacion}\t${student.user?.nombre} ${student.user?.apellido}\t8.5\t9.0\t7.5\n`;
+      const apellido = student.user?.apellido || '';
+      const nombre = student.user?.nombre || '';
+      template += `${identificacion}\t${apellido} ${nombre}\t8.5\t9.0\t7.5\n`;
     });
     template += '\nNota: Las columnas corresponden a: Identificación, Estudiante, y luego los insumos en orden:\n';
     insumos.forEach((insumo, index) => {
@@ -826,7 +852,7 @@ const GradeEntry = () => {
 
     // Agregar filas de estudiantes
     students.forEach(student => {
-      const nombreCompleto = `${student.user?.nombre || ''} ${student.user?.apellido || ''}`.trim();
+      const nombreCompleto = `${student.user?.apellido || ''} ${student.user?.nombre || ''}`.trim();
       const identificacion = student.user?.numeroIdentificacion || '';
       const row = [identificacion, nombreCompleto, ...insumos.map(() => '')];
       rows.push(row);
@@ -1021,6 +1047,62 @@ const GradeEntry = () => {
                 className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
               >
                 Guardar Todo
+              </button>
+              <button
+                onClick={async () => {
+                  if (resetting) return;
+
+                  if (!selectedCourse || !selectedSubject || !selectedPeriod || !selectedSubPeriod) {
+                    toast.error('Debe seleccionar curso, materia, período y subperíodo.');
+                    return;
+                  }
+
+                  const firstConfirm = window.confirm(
+                    'Esta acción ELIMINARÁ TODAS las calificaciones y observaciones de este curso, materia, período y subperíodo. ¿Deseas continuar?'
+                  );
+
+                  if (!firstConfirm) return;
+
+                  const secondInput = window.prompt(
+                    'Para confirmar, escribe la palabra ELIMINAR (en mayúsculas). Esta acción no se puede deshacer.'
+                  );
+
+                  if (secondInput !== 'ELIMINAR') {
+                    toast('Operación cancelada. No se realizaron cambios.');
+                    return;
+                  }
+
+                  try {
+                    setResetting(true);
+                    const response = await api.post('/grades/reset', {
+                      cursoId: selectedCourse.id,
+                      materiaId: selectedSubject.id,
+                      subPeriodoId: selectedSubPeriod.id,
+                    });
+
+                    const count = response.data?.count ?? 0;
+                    toast.success(
+                      count > 0
+                        ? `Se eliminaron ${count} calificación(es) correctamente.`
+                        : 'No se encontraron calificaciones para eliminar.'
+                    );
+
+                    // Limpiar inputs y recargar calificaciones desde el backend
+                    setGradeInputs({});
+                    await fetchGrades();
+                  } catch (error) {
+                    console.error('Error al reiniciar calificaciones:', error);
+                    const errorMessage =
+                      error.response?.data?.error || error.message || 'Error al reiniciar calificaciones';
+                    toast.error(errorMessage);
+                  } finally {
+                    setResetting(false);
+                  }
+                }}
+                disabled={resetting}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm disabled:opacity-60"
+              >
+                {resetting ? 'Reiniciando...' : 'Eliminar todas'}
               </button>
               <button
                 onClick={downloadTemplate}

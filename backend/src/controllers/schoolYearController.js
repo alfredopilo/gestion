@@ -298,6 +298,12 @@ export const updateSchoolYear = async (req, res, next) => {
           details: ['nombre'],
         });
       }
+
+      // Mantener sincronizado el campo denormalizado anioEscolar en los períodos asociados
+      await prisma.period.updateMany({
+        where: { anioLectivoId: id },
+        data: { anioEscolar: validatedData.nombre },
+      });
     }
 
     // Si se está activando este año, desactivar todos los demás (global)

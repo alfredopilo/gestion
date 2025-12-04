@@ -5,6 +5,62 @@ import { getGradeInstitutionFilter } from '../utils/institutionFilter.js';
 import { randomUUID } from 'crypto';
 
 /**
+ * Reiniciar calificaciones masivamente (poner en 0 y limpiar observaciones)
+ * para una combinación específica de curso, materia y subperíodo.
+ */
+export const resetGrades = async (req, res, next) => {
+  try {
+    const { cursoId, materiaId, subPeriodoId } = req.body;
+
+    if (!cursoId || !materiaId || !subPeriodoId) {
+      return res.status(400).json({
+        error: 'Debe proporcionar cursoId, materiaId y subPeriodoId.',
+      });
+    }
+
+    // Obtener estudiantes del curso para limitar el alcance
+    const course = await prisma.course.findUnique({
+      where: { id: cursoId },
+      include: {
+        estudiantes: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!course) {
+      return res.status(404).json({
+        error: 'Curso no encontrado.',
+      });
+    }
+
+    const studentIds = course.estudiantes.map((e) => e.id);
+
+    if (studentIds.length === 0) {
+      return res.json({
+        message: 'No hay estudiantes en el curso para reiniciar calificaciones.',
+        count: 0,
+      });
+    }
+
+    const result = await prisma.grade.deleteMany({
+      where: {
+        estudianteId: { in: studentIds },
+        materiaId,
+        subPeriodoId,
+      },
+    });
+
+    return res.json({
+      message: 'Calificaciones eliminadas exitosamente.',
+      count: result.count || 0,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Obtener calificaciones
  */
 export const getGrades = async (req, res, next) => {

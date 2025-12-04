@@ -6,6 +6,7 @@ import {
   updateGrade,
   deleteGrade,
   bulkCreateGrades,
+  resetGrades,
 } from '../controllers/gradeController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
@@ -19,6 +20,7 @@ router.post('/', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), upsertGrade);
 router.put('/:id', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), updateGrade);
 router.delete('/:id', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), deleteGrade);
 router.post('/bulk', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), bulkCreateGrades);
+router.post('/reset', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), resetGrades);
 
 export default router;
 

@@ -43,12 +43,15 @@ const Grades = () => {
           <p className="text-gray-500">No hay calificaciones registradas</p>
         ) : (
           <div className="space-y-6">
-            {grades.map((item) => {
+            {grades.map((item, index) => {
               const materia = item.materia || item;
               const calificaciones = item.calificaciones || [];
               
               return (
-                <div key={materia.id || item.materia?.id} className="border-b pb-4">
+                <div
+                  key={`${materia.id || item.materia?.id || 'materia'}-${index}`}
+                  className="border-b pb-4"
+                >
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="text-lg font-semibold">{materia.nombre || item.materia?.nombre}</h3>
                     {item.promedio !== undefined && (
