@@ -454,13 +454,16 @@ export const getReportCards = async (req, res, next) => {
         if (!subPeriodsMap.has(subPeriodoId)) {
           // Obtener el período desde el subperíodo
           const periodo = subPeriodo.periodo;
+          // Si no hay período, usar un identificador único basado en el subperíodo
+          const periodoId = periodo?.id || `subperiod-${subPeriodoId}`;
+          const periodoNombre = periodo?.nombre || `Período de ${subPeriodo.nombre}`;
           subPeriodsMap.set(subPeriodoId, {
             subPeriodoId: subPeriodo.id,
             subPeriodoNombre: subPeriodo.nombre,
             subPeriodoOrden: subPeriodo.orden ?? 999,
             subPeriodoPonderacion: subPeriodo.ponderacion || 0,
-            periodoId: periodo?.id || 'default',
-            periodoNombre: periodo?.nombre || periodoNombre !== '-' ? periodoNombre : 'Período',
+            periodoId: periodoId,
+            periodoNombre: periodoNombre,
             periodoOrden: periodo?.orden ?? 999,
             periodoPonderacion: periodo?.ponderacion || 100,
           });
@@ -487,7 +490,8 @@ export const getReportCards = async (req, res, next) => {
     // Agrupar por período
     const periodsByPeriod = {};
     subPeriodsMap.forEach(subPeriodData => {
-      const periodoId = subPeriodData.periodoId || 'default';
+      // Usar periodoId como clave, asegurando que sea único
+      const periodoId = subPeriodData.periodoId || `default-${subPeriodData.subPeriodoId}`;
       if (!periodsByPeriod[periodoId]) {
         periodsByPeriod[periodoId] = {
           periodoId,
@@ -498,12 +502,18 @@ export const getReportCards = async (req, res, next) => {
         };
       }
       
-      periodsByPeriod[periodoId].subPeriods.push({
-        subPeriodoId: subPeriodData.subPeriodoId,
-        subPeriodoNombre: subPeriodData.subPeriodoNombre,
-        subPeriodoOrden: subPeriodData.subPeriodoOrden,
-        subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
-      });
+      // Verificar que el subperíodo no esté ya en la lista (evitar duplicados)
+      const exists = periodsByPeriod[periodoId].subPeriods.some(
+        sp => sp.subPeriodoId === subPeriodData.subPeriodoId
+      );
+      if (!exists) {
+        periodsByPeriod[periodoId].subPeriods.push({
+          subPeriodoId: subPeriodData.subPeriodoId,
+          subPeriodoNombre: subPeriodData.subPeriodoNombre,
+          subPeriodoOrden: subPeriodData.subPeriodoOrden,
+          subPeriodoPonderacion: subPeriodData.subPeriodoPonderacion,
+        });
+      }
     });
     
     // Ordenar subperíodos dentro de cada período
