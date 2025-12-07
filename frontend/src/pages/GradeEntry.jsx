@@ -27,8 +27,18 @@ const GradeEntry = () => {
 
   useEffect(() => {
     if (selectedCourse) {
-      fetchStudents();
+      // NO cargar estudiantes aquí si no hay período seleccionado
+      // Solo cargar las materias
       fetchSubjects();
+      
+      // Solo cargar estudiantes si ya hay período y materia seleccionados
+      // Esto evita cargar todos los estudiantes antes de que se seleccione el período supletorio
+      if (selectedPeriod && selectedSubject) {
+        fetchStudents();
+      } else {
+        // Limpiar estudiantes si no hay período/materia
+        setStudents([]);
+      }
     } else {
       setStudents([]);
       setSubjects([]);
@@ -191,8 +201,19 @@ const GradeEntry = () => {
     if (!selectedCourse) return;
     
     try {
+      // Debug: Log para verificar condiciones
+      console.log('fetchStudents - Verificando condiciones:', {
+        esSupletorio: selectedPeriod?.esSupletorio,
+        tieneMateriaSeleccionada: !!selectedSubject,
+        anioLectivoId: selectedCourse?.anioLectivo?.id,
+        selectedPeriod,
+        selectedSubject,
+        selectedCourse
+      });
+      
       // Si el período es supletorio y hay materia seleccionada, filtrar estudiantes elegibles
       if (selectedPeriod?.esSupletorio && selectedSubject && selectedCourse?.anioLectivo?.id) {
+        console.log('fetchStudents - ES SUPLETORIO, cargando estudiantes elegibles...');
         try {
           const response = await api.get('/supplementary/eligible-students', {
             params: {
@@ -236,11 +257,15 @@ const GradeEntry = () => {
         } catch (supplementaryError) {
           console.error('Error al cargar estudiantes elegibles para supletorio:', supplementaryError);
           toast.error('Error al cargar estudiantes elegibles para supletorio');
-          // Continuar con el método normal como fallback
+          // Para supletorio, no continuar con el método normal
+          // Establecer lista vacía y retornar
+          setStudents([]);
+          return;
         }
       }
       
       // Método normal: obtener todos los estudiantes del curso
+      console.log('fetchStudents - Método normal: cargando todos los estudiantes del curso');
       const response = await api.get(`/courses/${selectedCourse.id}`);
       const courseData = response.data;
       const estudiantesList = courseData.estudiantes || [];

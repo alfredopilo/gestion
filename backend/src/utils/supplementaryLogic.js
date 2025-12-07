@@ -1,5 +1,5 @@
 import prisma from '../config/database.js';
-import { calculateFinalAverage, truncate } from './gradeCalculations.js';
+import { calculateSubPeriodAverage, calculatePeriodAverageFromSubPeriods, calculateGeneralAverageFromPeriods, truncate } from './gradeCalculations.js';
 
 /**
  * Calcula el promedio mínimo requerido para supletorio
@@ -131,33 +131,25 @@ export async function calculateStudentGeneralAverage(studentId, materiaId, anioL
       }
     });
 
-    // Calcular promedio por subperíodo
+    // Calcular promedio por subperíodo usando función centralizada
     const subPeriodAverages = {};
     Object.keys(gradesBySubPeriod).forEach(subPeriodoId => {
       const data = gradesBySubPeriod[subPeriodoId];
       if (data.calificaciones.length > 0) {
-        const promedio = data.calificaciones.reduce((sum, cal) => sum + cal, 0) / data.calificaciones.length;
+        const promedio = calculateSubPeriodAverage(data.calificaciones);
         subPeriodAverages[subPeriodoId] = {
-          promedio: truncate(promedio),
+          promedio: promedio,
           ponderacion: data.subPeriodo.ponderacion || 0,
         };
       }
     });
 
-    // Calcular promedio ponderado del período
-    let sumaPonderada = 0;
-    let sumaPonderacion = 0;
-
-    Object.keys(subPeriodAverages).forEach(subPeriodoId => {
-      const data = subPeriodAverages[subPeriodoId];
-      sumaPonderada += data.promedio * (data.ponderacion / 100);
-      sumaPonderacion += data.ponderacion / 100;
-    });
-
-    const promedioPeriodo = sumaPonderacion > 0 ? sumaPonderada / sumaPonderacion : 0;
-    const promedioPeriodoTruncado = truncate(promedioPeriodo);
+    // Calcular promedio ponderado del período usando función centralizada
     const periodoPonderacion = period.ponderacion || 100;
-    const promedioPonderado = truncate(promedioPeriodoTruncado * (periodoPonderacion / 100));
+    const { promedio: promedioPeriodoTruncado, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
+      subPeriodAverages,
+      periodoPonderacion
+    );
 
     periodAverages.push({
       periodoId: period.id,
@@ -169,11 +161,12 @@ export async function calculateStudentGeneralAverage(studentId, materiaId, anioL
     });
   }
 
-  // Calcular promedio general (suma de promedios ponderados de períodos)
-  const promedioGeneral = periodAverages.reduce((sum, pa) => sum + pa.promedioPonderado, 0);
+  // Calcular promedio general (suma de promedios ponderados de períodos) usando función centralizada
+  const promediosPonderados = periodAverages.map(pa => pa.promedioPonderado);
+  const promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados);
 
   return {
-    promedioGeneral: truncate(promedioGeneral),
+    promedioGeneral: promedioGeneral,
     periodAverages: periodAverages,
   };
 }

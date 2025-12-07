@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { randomUUID } from 'crypto';
 import { calculateStudentGeneralAverage } from './supplementaryLogic.js';
+import { truncate } from './gradeCalculations.js';
 
 const MINIMUM_GRADE_TO_PASS = 7.0;
 
@@ -72,8 +73,9 @@ export async function calculateStudentPromotionStatus(studentId, anioLectivoId, 
   }
 
   // Calcular promedio general (promedio de promedios de todas las materias)
+  // CRÍTICO: Se debe truncar el resultado para consistencia con otros cálculos
   const promedioGeneral = materiasConCalificaciones > 0 
-    ? sumaPromedios / materiasConCalificaciones 
+    ? truncate(sumaPromedios / materiasConCalificaciones)
     : 0;
 
   return {

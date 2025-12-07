@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, getGradeInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
-import { calculateWeightedAverage, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
+import { calculateAveragesByMateria, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
 
 /**
  * Obtener boletines de calificaciones para estudiantes de un curso
@@ -296,108 +296,27 @@ export const getReportCards = async (req, res, next) => {
             promediosSubPeriodo: {},
             promediosPeriodo: {},
             promedioGeneral: null,
+            equivalenteGeneral: null,
             calificaciones: [],
           };
         }
 
-        // Agrupar calificaciones por subperíodo
-        const gradesBySubPeriod = {};
-        materiaGrades.forEach(grade => {
-          const subPeriodo = grade.subPeriodo || grade.insumo?.subPeriodo;
-          if (subPeriodo) {
-            const subPeriodoId = subPeriodo.id;
-            if (!gradesBySubPeriod[subPeriodoId]) {
-              gradesBySubPeriod[subPeriodoId] = {
-                subPeriodo: subPeriodo,
-                calificaciones: [],
-              };
-            }
-            gradesBySubPeriod[subPeriodoId].calificaciones.push(grade.calificacion);
-          }
+        // Usar función centralizada para calcular promedios
+        const { promediosSubPeriodo, promediosPeriodo, promedioGeneral } = calculateAveragesByMateria(materiaGrades);
+
+        // Agregar equivalentes de escala a los promedios calculados
+        Object.keys(promediosSubPeriodo).forEach(subPeriodoId => {
+          const equivalente = getGradeScaleEquivalent(gradeScale, promediosSubPeriodo[subPeriodoId].promedio);
+          promediosSubPeriodo[subPeriodoId].equivalente = equivalente;
         });
 
-        // Calcular promedios por subperíodo
-        const promediosSubPeriodo = {};
-        Object.keys(gradesBySubPeriod).forEach(subPeriodoId => {
-          const data = gradesBySubPeriod[subPeriodoId];
-          if (data.calificaciones.length > 0) {
-            const promedio = data.calificaciones.reduce((sum, cal) => sum + cal, 0) / data.calificaciones.length;
-            const promedioTruncado = truncate(promedio);
-            const ponderacion = data.subPeriodo.ponderacion || 0;
-            const promedioPonderado = promedioTruncado * (ponderacion / 100);
-            
-            const equivalenteSubPeriodo = getGradeScaleEquivalent(gradeScale, promedioTruncado);
-            promediosSubPeriodo[subPeriodoId] = {
-              subPeriodoNombre: data.subPeriodo.nombre,
-              promedio: promedioTruncado,
-              promedioPonderado: truncate(promedioPonderado),
-              ponderacion: ponderacion,
-              equivalente: equivalenteSubPeriodo,
-            };
-          }
+        Object.keys(promediosPeriodo).forEach(periodoId => {
+          const equivalente = getGradeScaleEquivalent(gradeScale, promediosPeriodo[periodoId].promedio);
+          promediosPeriodo[periodoId].equivalente = equivalente;
         });
-
-        // Calcular promedios por período
-        const promediosPeriodo = {};
-        const gradesByPeriod = {};
-        
-        Object.keys(gradesBySubPeriod).forEach(subPeriodoId => {
-          const data = gradesBySubPeriod[subPeriodoId];
-          const periodoId = data.subPeriodo.periodo?.id;
-          if (periodoId) {
-            if (!gradesByPeriod[periodoId]) {
-              gradesByPeriod[periodoId] = {
-                periodo: data.subPeriodo.periodo,
-                subPeriodos: [],
-              };
-            }
-            gradesByPeriod[periodoId].subPeriodos.push({
-              subPeriodoId,
-              promedio: promediosSubPeriodo[subPeriodoId]?.promedio || 0,
-              ponderacion: data.subPeriodo.ponderacion || 0,
-            });
-          }
-        });
-
-        Object.keys(gradesByPeriod).forEach(periodoId => {
-          const data = gradesByPeriod[periodoId];
-          let sumaPonderada = 0;
-          let sumaPonderacion = 0;
-          
-          data.subPeriodos.forEach(sub => {
-            const promedio = promediosSubPeriodo[sub.subPeriodoId]?.promedio || 0;
-            sumaPonderada += promedio * (sub.ponderacion / 100);
-            sumaPonderacion += sub.ponderacion / 100;
-          });
-          
-          const promedioPeriodo = sumaPonderacion > 0 ? sumaPonderada / sumaPonderacion : 0;
-          const promedioPeriodoTruncado = truncate(promedioPeriodo);
-          const periodoPonderacion = data.periodo.ponderacion || 100;
-          const promedioPonderado = promedioPeriodoTruncado * (periodoPonderacion / 100);
-          
-          const equivalentePeriodo = getGradeScaleEquivalent(gradeScale, promedioPeriodoTruncado);
-          promediosPeriodo[periodoId] = {
-            periodoNombre: data.periodo.nombre,
-            promedio: promedioPeriodoTruncado,
-            promedioPonderado: truncate(promedioPonderado),
-            ponderacion: periodoPonderacion,
-            equivalente: equivalentePeriodo,
-          };
-        });
-
-        // Calcular promedio general
-        const periodAverages = Object.values(promediosPeriodo);
-        let promedioGeneral = null;
-        
-        if (periodAverages.length > 0) {
-          let sumaPonderada = 0;
-          periodAverages.forEach(period => {
-            sumaPonderada += period.promedioPonderado;
-          });
-          promedioGeneral = truncate(sumaPonderada);
-        }
 
         const equivalenteGeneral = getGradeScaleEquivalent(gradeScale, promedioGeneral);
+
         return {
           materia: {
             id: materia.id,

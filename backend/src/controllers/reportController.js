@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { getCourseInstitutionFilter } from '../utils/institutionFilter.js';
-import { truncate } from '../utils/gradeCalculations.js';
+import { calculateSubPeriodAverage, calculatePeriodAverageFromSubPeriods, calculateGeneralAverageFromPeriods, truncate } from '../utils/gradeCalculations.js';
 
 /**
  * Reporte de calificaciones detallado
@@ -277,28 +277,27 @@ export const getGradesReport = async (req, res, next) => {
     
     // Calcular promedios para cada fila
     Object.values(pivotData).forEach(row => {
-      // Calcular promedios por subperíodo
+      // Calcular promedios por subperíodo usando función centralizada
       row.promediosSubPeriodo = {};
       Object.entries(row.subPeriodoGrades).forEach(([subPeriodoId, data]) => {
         if (data.calificaciones.length > 0) {
-          const promedio = data.calificaciones.reduce((sum, cal) => sum + cal, 0) / data.calificaciones.length;
+          const promedio = calculateSubPeriodAverage(data.calificaciones);
+          // NO truncar promedioPonderado aquí para evitar acumulación de errores
           const promedioPonderado = promedio * (data.ponderacion / 100);
           row.promediosSubPeriodo[subPeriodoId] = {
-            promedio: truncate(promedio),
-            promedioPonderado: truncate(promedioPonderado),
+            promedio: promedio,
+            promedioPonderado: promedioPonderado, // Sin truncate
             nombre: data.nombre,
             ponderacion: data.ponderacion,
           };
         }
       });
       
-      // Calcular promedios por período
-      // El promedio del período es el PROMEDIO PONDERADO de los subperíodos
+      // Calcular promedios por período usando función centralizada
       row.promediosPeriodo = {};
       Object.entries(row.periodoGrades).forEach(([periodoId, data]) => {
         // Obtener todos los subperíodos que pertenecen a este período
-        let sumaPonderada = 0;
-        let sumaPonderacion = 0;
+        const subPeriodAveragesForPeriod = {};
         
         Object.entries(row.subPeriodoGrades).forEach(([subPeriodoId, subData]) => {
           // Verificar si este subperíodo pertenece al período actual usando la relación guardada
@@ -306,48 +305,32 @@ export const getGradesReport = async (req, res, next) => {
             // Buscar el promedio calculado para este subperíodo
             const subPromedio = row.promediosSubPeriodo[subPeriodoId];
             if (subPromedio) {
-              // Usar el promedio simple (no el ponderado) y multiplicar por la ponderación
-              const promedio = subPromedio.promedio;
-              const ponderacion = subPromedio.ponderacion;
-              sumaPonderada += promedio * (ponderacion / 100);
-              sumaPonderacion += ponderacion / 100;
+              subPeriodAveragesForPeriod[subPeriodoId] = {
+                promedio: subPromedio.promedio,
+                ponderacion: subPromedio.ponderacion,
+              };
             }
           }
         });
         
-        if (sumaPonderacion > 0) {
-          // El promedio del período es el promedio ponderado de los subperíodos
-          const promedio = sumaPonderada / sumaPonderacion;
-          const promedioPonderado = promedio * (data.ponderacion / 100);
-          row.promediosPeriodo[periodoId] = {
-            promedio: truncate(promedio),
-            promedioPonderado: truncate(promedioPonderado),
-            nombre: data.nombre,
-            ponderacion: data.ponderacion,
-          };
-        } else if (data.calificaciones.length > 0) {
-          // Fallback: calcular promedio de todas las calificaciones si no hay subperíodos calculados
-          const promedio = data.calificaciones.reduce((sum, cal) => sum + cal, 0) / data.calificaciones.length;
-          const promedioPonderado = promedio * (data.ponderacion / 100);
-          row.promediosPeriodo[periodoId] = {
-            promedio: truncate(promedio),
-            promedioPonderado: truncate(promedioPonderado),
-            nombre: data.nombre,
-            ponderacion: data.ponderacion,
-          };
-        }
+        const { promedio, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
+          subPeriodAveragesForPeriod,
+          data.ponderacion
+        );
+        
+        row.promediosPeriodo[periodoId] = {
+          promedio: promedio,
+          promedioPonderado: promedioPonderado, // Ya viene sin truncate de la función
+          nombre: data.nombre,
+          ponderacion: data.ponderacion,
+        };
       });
       
-      // Calcular promedio general (suma de las ponderaciones de cada período)
-      // El promedio final es la SUMA de los promedios ponderados de cada período
+      // Calcular promedio general usando función centralizada
       const periodosCalculados = Object.values(row.promediosPeriodo);
       if (periodosCalculados.length > 0) {
-        // Sumar los promedios ponderados de cada período (ya están ponderados)
-        let sumaPonderada = 0;
-        periodosCalculados.forEach(periodoData => {
-          sumaPonderada += periodoData.promedioPonderado;
-        });
-        row.promedioGeneral = truncate(sumaPonderada);
+        const promediosPonderados = periodosCalculados.map(p => p.promedioPonderado);
+        row.promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados);
       } else {
         row.promedioGeneral = null;
       }
@@ -715,12 +698,11 @@ export const getAveragesReport = async (req, res, next) => {
       const promediosSubPeriodo = {};
       const promediosPeriodo = {};
       
-      // Calcular promedios por subperíodo
+      // Calcular promedios por subperíodo usando función centralizada
       Object.keys(row.subPeriodoGrades).forEach(subPeriodoId => {
         const calificaciones = row.subPeriodoGrades[subPeriodoId];
         if (calificaciones.length > 0) {
-          const promedio = calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length;
-          const promedioTruncado = truncate(promedio);
+          const promedio = calculateSubPeriodAverage(calificaciones);
           
           // Obtener información del subperíodo para ponderación
           const grade = grades.find(g => {
@@ -733,11 +715,12 @@ export const getAveragesReport = async (req, res, next) => {
           
           if (subPeriodo) {
             const ponderacion = subPeriodo.ponderacion || 0;
-            const promedioPonderado = promedioTruncado * (ponderacion / 100);
+            // NO truncar promedioPonderado aquí para evitar acumulación de errores
+            const promedioPonderado = promedio * (ponderacion / 100);
             
             promediosSubPeriodo[subPeriodoId] = {
-              promedio: promedioTruncado,
-              promedioPonderado: truncate(promedioPonderado),
+              promedio: promedio,
+              promedioPonderado: promedioPonderado, // Sin truncate
               subPeriodoNombre: subPeriodo.nombre,
               subPeriodoOrden: subPeriodo.orden ?? 999,
               ponderacion: ponderacion,
@@ -760,12 +743,10 @@ export const getAveragesReport = async (req, res, next) => {
         }
       });
       
-      // Calcular promedios por período
-      // El promedio del período debe calcularse a partir de los subperíodos, no directamente de las calificaciones
+      // Calcular promedios por período usando función centralizada
       Object.keys(row.periodoGrades).forEach(periodoId => {
         // Obtener todos los subperíodos que pertenecen a este período
-        let sumaPonderada = 0;
-        let sumaPonderacion = 0;
+        const subPeriodAveragesForPeriod = {};
         
         Object.keys(row.subPeriodoGrades).forEach(subPeriodoId => {
           // Obtener información del subperíodo para verificar a qué período pertenece
@@ -781,11 +762,10 @@ export const getAveragesReport = async (req, res, next) => {
           if (periodo?.id === periodoId) {
             const subPromedio = promediosSubPeriodo[subPeriodoId];
             if (subPromedio) {
-              // Usar el promedio simple (no el ponderado) y multiplicar por la ponderación
-              const promedio = subPromedio.promedio;
-              const ponderacion = subPromedio.ponderacion;
-              sumaPonderada += promedio * (ponderacion / 100);
-              sumaPonderacion += ponderacion / 100;
+              subPeriodAveragesForPeriod[subPeriodoId] = {
+                promedio: subPromedio.promedio,
+                ponderacion: subPromedio.ponderacion,
+              };
             }
           }
         });
@@ -800,33 +780,16 @@ export const getAveragesReport = async (req, res, next) => {
         
         if (periodo) {
           const ponderacion = periodo.ponderacion || 0;
+          const { promedio, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
+            subPeriodAveragesForPeriod,
+            ponderacion
+          );
           
-          if (sumaPonderacion > 0) {
-            // El promedio del período es el promedio ponderado de los subperíodos
-            const promedio = sumaPonderada / sumaPonderacion;
-            const promedioTruncado = truncate(promedio);
-            const promedioPonderado = promedioTruncado * (ponderacion / 100);
-            
-            promediosPeriodo[periodoId] = {
-              promedio: promedioTruncado,
-              promedioPonderado: truncate(promedioPonderado),
-              nombre: periodo.nombre,
-            };
-          } else {
-            // Fallback: calcular promedio de todas las calificaciones si no hay subperíodos calculados
-            const calificaciones = row.periodoGrades[periodoId];
-            if (calificaciones.length > 0) {
-              const promedio = calificaciones.reduce((a, b) => a + b, 0) / calificaciones.length;
-              const promedioTruncado = truncate(promedio);
-              const promedioPonderado = promedioTruncado * (ponderacion / 100);
-              
-              promediosPeriodo[periodoId] = {
-                promedio: promedioTruncado,
-                promedioPonderado: truncate(promedioPonderado),
-                nombre: periodo.nombre,
-              };
-            }
-          }
+          promediosPeriodo[periodoId] = {
+            promedio: promedio,
+            promedioPonderado: promedioPonderado,
+            nombre: periodo.nombre,
+          };
           
           // Guardar información del período
           if (!periodsMap.has(periodoId)) {
@@ -840,10 +803,10 @@ export const getAveragesReport = async (req, res, next) => {
         }
       });
       
-      // Calcular promedio general (suma de los promedios ponderados de cada período)
+      // Calcular promedio general usando función centralizada
       const periodAverages = Object.values(promediosPeriodo);
       const promedioGeneral = periodAverages.length > 0
-        ? truncate(periodAverages.reduce((a, b) => a + b.promedioPonderado, 0))
+        ? calculateGeneralAverageFromPeriods(periodAverages.map(p => p.promedioPonderado))
         : null;
       
       averages.push({
