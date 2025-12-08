@@ -10,11 +10,13 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:resolve": "prisma migrate resolve",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.js",
     "reset:db": "node scripts/reset-db.js",
     "save:data": "node scripts/save-data.js",
-    "restore:data": "node scripts/restore-data.js"
+    "restore:data": "node scripts/restore-data.js",
+    "fix:migration": "node scripts/fix-failed-migration.js"
   },
   "keywords": [
     "educacion",
