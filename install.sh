@@ -69,7 +69,7 @@ fi
 # Levantar servicios
 echo ""
 echo "🐳 Levantando servicios Docker..."
-docker-compose up -d
+docker-compose up -d --build
 
 # Esperar a que PostgreSQL esté listo
 echo ""
@@ -101,7 +101,7 @@ echo "   Generando cliente de Prisma..."
 docker-compose exec -T backend npm run prisma:generate
 
 echo "   Ejecutando migraciones..."
-docker-compose exec -T backend npm run prisma:migrate
+docker-compose exec -T backend npm run prisma:migrate:deploy
 
 echo "   Poblando base de datos con datos iniciales..."
 docker-compose exec -T backend npm run prisma:seed
@@ -126,7 +126,7 @@ echo "🎉 ¡Instalación completada!"
 echo "=============================================="
 echo ""
 echo "📍 Accesos:"
-echo "   • Frontend:        http://localhost:5173"
+echo "   • Frontend:        http://localhost"
 echo "   • Backend API:      http://localhost:3000"
 echo "   • API Docs:        http://localhost:3000/api-docs"
 echo ""

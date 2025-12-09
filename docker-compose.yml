@@ -28,22 +28,19 @@ services:
     container_name: gestion-escolar-backend
     restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-gestionscolar}:${POSTGRES_PASSWORD:-gestionscolar2024}@postgres:5432/${POSTGRES_DB:-gestion_escolar}
       JWT_SECRET: ${JWT_SECRET:-mi_secreto_jwt_super_seguro_2024}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      PORT: ${BACKEND_PORT:-3000}
+      PORT: 3000
     ports:
       - "${BACKEND_PORT:-3000}:3000"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - gestion-escolar-network
-    command: npm run dev
+    # Volumes de código eliminados para producción para mejorar rendimiento
 
   frontend:
     build:
@@ -51,19 +48,13 @@ services:
       dockerfile: Dockerfile
     container_name: gestion-escolar-frontend
     restart: unless-stopped
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api/v1}
-      CHOKIDAR_USEPOLLING: "true"
     ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       - backend
     networks:
       - gestion-escolar-network
-    command: npm run dev -- --host 0.0.0.0
+    # Volumes y variables de entorno de dev (CHOKIDAR) eliminados
 
 networks:
   gestion-escolar-network:
@@ -71,4 +62,3 @@ networks:
 
 volumes:
   postgres_data:
-
