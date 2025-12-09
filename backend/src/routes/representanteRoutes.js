@@ -10,6 +10,8 @@ import {
   searchRepresentantes,
   associateStudent,
   disassociateStudent,
+  downloadBulkTemplate,
+  bulkAssociate,
 } from '../controllers/representanteController.js';
 import { authenticate } from '../middleware/auth.js';
 import { authorize } from '../middleware/auth.js';
@@ -32,5 +34,9 @@ router.get('/search-students', authorize(['ADMIN', 'SECRETARIA']), searchStudent
 router.get('/search-representantes', authorize(['ADMIN', 'SECRETARIA']), searchRepresentantes);
 router.post('/students/:studentId/associate', authorize(['ADMIN', 'SECRETARIA']), associateStudent);
 router.delete('/students/:studentId/associate', authorize(['ADMIN', 'SECRETARIA']), disassociateStudent);
+
+// Rutas para carga masiva (solo admin/secretaría)
+router.get('/bulk-template', authorize(['ADMIN', 'SECRETARIA']), downloadBulkTemplate);
+router.post('/bulk-associate', authorize(['ADMIN', 'SECRETARIA']), bulkAssociate);
 
 export default router;

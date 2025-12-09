@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { verifyStudentBelongsToInstitution } from '../utils/institutionFilter.js';
+import * as XLSX from 'xlsx';
 
 /**
  * Verificar que el estudiante pertenece al representante autenticado
@@ -1272,6 +1273,225 @@ export const searchStudents = async (req, res, next) => {
 
     res.json({
       data: filteredStudents,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Descargar plantilla Excel para carga masiva de asociaciones
+ */
+export const downloadBulkTemplate = async (req, res, next) => {
+  try {
+    // Solo administradores y secretaría pueden descargar la plantilla
+    if (!['ADMIN', 'SECRETARIA'].includes(req.user.rol)) {
+      return res.status(403).json({
+        error: 'No tienes permisos para realizar esta acción.',
+      });
+    }
+    
+    // Crear datos de ejemplo
+    const data = [
+      { cedula_estudiante: '1234567890', cedula_representante: '0987654321' },
+      { cedula_estudiante: '1111111111', cedula_representante: '2222222222' },
+      { cedula_estudiante: '3333333333', cedula_representante: '4444444444' },
+    ];
+
+    // Crear hoja de cálculo
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Asociaciones');
+
+    // Generar buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Enviar archivo
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=plantilla_asociaciones.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error al generar plantilla:', error);
+    next(error);
+  }
+};
+
+/**
+ * Procesar carga masiva de asociaciones estudiante-representante
+ */
+export const bulkAssociate = async (req, res, next) => {
+  try {
+    // Solo administradores y secretaría pueden hacer carga masiva
+    if (!['ADMIN', 'SECRETARIA'].includes(req.user.rol)) {
+      return res.status(403).json({
+        error: 'No tienes permisos para realizar esta acción.',
+      });
+    }
+
+    const { asociaciones } = req.body;
+
+    if (!Array.isArray(asociaciones) || asociaciones.length === 0) {
+      return res.status(400).json({
+        error: 'Debe proporcionar un array de asociaciones.',
+      });
+    }
+
+    const resultados = {
+      exitosos: [],
+      errores: [],
+      omitidos: [],
+    };
+
+    // Procesar cada asociación
+    for (let i = 0; i < asociaciones.length; i++) {
+      const { cedulaEstudiante, cedulaRepresentante } = asociaciones[i];
+      const lineNumber = i + 2; // +2 porque empezamos en fila 2 del Excel (fila 1 son headers)
+
+      try {
+        // Validar que se proporcionaron ambos campos
+        if (!cedulaEstudiante || !cedulaRepresentante) {
+          resultados.errores.push({
+            linea: lineNumber,
+            cedulaEstudiante: cedulaEstudiante || 'N/A',
+            cedulaRepresentante: cedulaRepresentante || 'N/A',
+            error: 'Faltan datos obligatorios (cédula estudiante o representante)',
+          });
+          continue;
+        }
+
+        // Buscar estudiante por número de identificación
+        const estudiante = await prisma.student.findFirst({
+          where: {
+            user: {
+              numeroIdentificacion: String(cedulaEstudiante).trim(),
+            },
+            retirado: false,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                nombre: true,
+                apellido: true,
+                numeroIdentificacion: true,
+                institucionId: true,
+              },
+            },
+            representante: {
+              include: {
+                user: {
+                  select: {
+                    nombre: true,
+                    apellido: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (!estudiante) {
+          resultados.errores.push({
+            linea: lineNumber,
+            cedulaEstudiante: String(cedulaEstudiante),
+            cedulaRepresentante: String(cedulaRepresentante),
+            error: `Estudiante con cédula ${cedulaEstudiante} no encontrado`,
+          });
+          continue;
+        }
+
+        // Buscar representante por número de identificación
+        const representante = await prisma.representante.findFirst({
+          where: {
+            user: {
+              numeroIdentificacion: String(cedulaRepresentante).trim(),
+              estado: 'ACTIVO',
+            },
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                nombre: true,
+                apellido: true,
+                numeroIdentificacion: true,
+                institucionId: true,
+              },
+            },
+          },
+        });
+
+        if (!representante) {
+          resultados.errores.push({
+            linea: lineNumber,
+            cedulaEstudiante: String(cedulaEstudiante),
+            cedulaRepresentante: String(cedulaRepresentante),
+            error: `Representante con cédula ${cedulaRepresentante} no encontrado`,
+          });
+          continue;
+        }
+
+        // Verificar que pertenecen a la misma institución
+        if (estudiante.user.institucionId !== representante.user.institucionId) {
+          resultados.errores.push({
+            linea: lineNumber,
+            cedulaEstudiante: String(cedulaEstudiante),
+            cedulaRepresentante: String(cedulaRepresentante),
+            error: 'El estudiante y el representante pertenecen a diferentes instituciones',
+          });
+          continue;
+        }
+
+        // Verificar si el estudiante ya tiene este representante asignado
+        if (estudiante.representanteId === representante.id) {
+          resultados.omitidos.push({
+            linea: lineNumber,
+            estudiante: `${estudiante.user.nombre} ${estudiante.user.apellido}`,
+            cedulaEstudiante: estudiante.user.numeroIdentificacion,
+            representante: `${representante.user.nombre} ${representante.user.apellido}`,
+            cedulaRepresentante: representante.user.numeroIdentificacion,
+            razon: 'Ya está asociado con este representante',
+          });
+          continue;
+        }
+
+        // Asociar el estudiante con el representante
+        await prisma.student.update({
+          where: { id: estudiante.id },
+          data: {
+            representanteId: representante.id,
+          },
+        });
+
+        resultados.exitosos.push({
+          linea: lineNumber,
+          estudiante: `${estudiante.user.nombre} ${estudiante.user.apellido}`,
+          cedulaEstudiante: estudiante.user.numeroIdentificacion,
+          representante: `${representante.user.nombre} ${representante.user.apellido}`,
+          cedulaRepresentante: representante.user.numeroIdentificacion,
+          representanteAnterior: estudiante.representante
+            ? `${estudiante.representante.user.nombre} ${estudiante.representante.user.apellido}`
+            : 'Ninguno',
+        });
+      } catch (error) {
+        resultados.errores.push({
+          linea: lineNumber,
+          cedulaEstudiante: String(cedulaEstudiante),
+          cedulaRepresentante: String(cedulaRepresentante),
+          error: error.message || 'Error al procesar esta asociación',
+        });
+      }
+    }
+
+    res.json({
+      message: 'Procesamiento de carga masiva completado',
+      resumen: {
+        total: asociaciones.length,
+        exitosos: resultados.exitosos.length,
+        errores: resultados.errores.length,
+        omitidos: resultados.omitidos.length,
+      },
+      detalles: resultados,
     });
   } catch (error) {
     next(error);
