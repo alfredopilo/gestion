@@ -309,6 +309,8 @@ model Student {
   representante   Representante?        @relation(fields: [representanteId], references: [id])
   user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   profileValues   StudentProfileValue[]
+  notificaciones  Notification[]
+  tareas          TareaEntrega[]
 
   @@map("students")
 }
@@ -428,6 +430,7 @@ model Insumo {
   fechaDeber     DateTime  @map("fecha_deber")
   fechaEntrega   DateTime? @map("fecha_entrega")
   activo         Boolean   @default(true)
+  recibirTarea   Boolean   @default(false) @map("recibir_tarea")
   orden          Int?
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -435,6 +438,8 @@ model Insumo {
   materia        Subject   @relation(fields: [materiaId], references: [id], onDelete: Cascade)
   subPeriodo     SubPeriod @relation(fields: [subPeriodoId], references: [id], onDelete: Cascade)
   calificaciones Grade[]
+  notificaciones Notification[]
+  entregas       TareaEntrega[]
 
   @@unique([cursoId, materiaId, subPeriodoId, nombre])
   @@map("insumos")
@@ -561,4 +566,53 @@ enum StudentProfileFieldType {
   MULTISELECT
   BOOLEAN
   IMAGE
+}
+
+enum TipoNotificacion {
+  TAREA
+  GENERAL
+}
+
+enum EstadoEntrega {
+  PENDIENTE
+  ENTREGADA
+  CALIFICADA
+}
+
+model Notification {
+  id            String           @id @default(dbgenerated("gen_random_uuid()::text"))
+  estudianteId  String           @map("estudiante_id")
+  insumoId      String?          @map("insumo_id")
+  titulo        String
+  mensaje       String
+  tipo          TipoNotificacion @default(TAREA)
+  leido         Boolean          @default(false)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at")
+  estudiante    Student          @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  insumo        Insumo?          @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@index([estudianteId, leido])
+  @@index([estudianteId, createdAt])
+  @@map("notifications")
+}
+
+model TareaEntrega {
+  id            String       @id @default(dbgenerated("gen_random_uuid()::text"))
+  estudianteId  String       @map("estudiante_id")
+  insumoId      String       @map("insumo_id")
+  archivoNombre String       @map("archivo_nombre")
+  archivoRuta   String       @map("archivo_ruta")
+  fechaEntrega  DateTime     @default(now()) @map("fecha_entrega")
+  observaciones String?
+  estado        EstadoEntrega @default(ENTREGADA)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at")
+  estudiante    Student      @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  insumo        Insumo       @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@unique([estudianteId, insumoId])
+  @@index([insumoId])
+  @@index([estudianteId])
+  @@map("tarea_entregas")
 }

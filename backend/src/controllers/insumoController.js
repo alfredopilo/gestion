@@ -3,6 +3,54 @@ import { createInsumoSchema, updateInsumoSchema } from '../utils/validators.js';
 import { getInsumoInstitutionFilter, verifyCourseBelongsToInstitution, getInstitutionFilter } from '../utils/institutionFilter.js';
 
 /**
+ * Función auxiliar para crear notificaciones cuando se activa recibirTarea
+ */
+async function createNotificationsForInsumo(insumo) {
+  try {
+    // Obtener todos los estudiantes activos del curso
+    const estudiantes = await prisma.student.findMany({
+      where: {
+        grupoId: insumo.cursoId,
+        retirado: false,
+        user: {
+          estado: 'ACTIVO',
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (estudiantes.length === 0) {
+      return;
+    }
+
+    // Crear notificaciones para cada estudiante
+    const fechaEntregaStr = insumo.fechaEntrega 
+      ? new Date(insumo.fechaEntrega).toLocaleDateString('es-ES')
+      : 'sin fecha límite';
+
+    const notifications = estudiantes.map(estudiante => ({
+      estudianteId: estudiante.id,
+      insumoId: insumo.id,
+      titulo: `Nueva tarea: ${insumo.nombre}`,
+      mensaje: `Tienes una nueva tarea en ${insumo.materia?.nombre || 'la materia'}. Fecha de entrega: ${fechaEntregaStr}.`,
+      tipo: 'TAREA',
+      leido: false,
+    }));
+
+    // Crear todas las notificaciones en una sola transacción
+    await prisma.notification.createMany({
+      data: notifications,
+      skipDuplicates: true,
+    });
+  } catch (error) {
+    console.error('Error al crear notificaciones para insumo:', error);
+    // No lanzar el error para no interrumpir la creación/actualización del insumo
+  }
+}
+
+/**
  * Obtener todos los insumos
  */
 export const getInsumos = async (req, res, next) => {
@@ -239,8 +287,25 @@ export const createInsumo = async (req, res, next) => {
             },
           },
         },
+        materia: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+        curso: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
       },
     });
+
+    // Si recibirTarea está activado, crear notificaciones para todos los estudiantes del curso
+    if (insumo.recibirTarea) {
+      await createNotificationsForInsumo(insumo);
+    }
 
     res.status(201).json({
       message: 'Insumo creado exitosamente.',
@@ -318,6 +383,11 @@ export const updateInsumo = async (req, res, next) => {
       }
     }
 
+    // Verificar si recibirTarea está siendo activado (cambiado de false a true)
+    const isActivatingRecibirTarea = 
+      validatedData.recibirTarea === true && 
+      insumo.recibirTarea === false;
+
     const updatedInsumo = await prisma.insumo.update({
       where: { id },
       data: updateData,
@@ -335,8 +405,25 @@ export const updateInsumo = async (req, res, next) => {
             },
           },
         },
+        materia: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+        curso: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
       },
     });
+
+    // Si se está activando recibirTarea, crear notificaciones para todos los estudiantes del curso
+    if (isActivatingRecibirTarea) {
+      await createNotificationsForInsumo(updatedInsumo);
+    }
 
     res.json({
       message: 'Insumo actualizado exitosamente.',

@@ -25,6 +25,7 @@ const Insumos = () => {
     fechaDeber: '',
     fechaEntrega: '',
     activo: true,
+    recibirTarea: false,
     orden: '',
   });
 
@@ -189,6 +190,7 @@ const Insumos = () => {
       fechaDeber: '',
       fechaEntrega: '',
       activo: true,
+      recibirTarea: false,
       orden: '',
     });
     setShowModal(true);
@@ -221,6 +223,7 @@ const Insumos = () => {
       fechaDeber: formatDateForInput(insumo.fechaDeber),
       fechaEntrega: formatDateForInput(insumo.fechaEntrega),
       activo: insumo.activo,
+      recibirTarea: insumo.recibirTarea || false,
       orden: insumo.orden || '',
     });
     setShowModal(true);
@@ -235,6 +238,7 @@ const Insumos = () => {
       fechaDeber: '',
       fechaEntrega: '',
       activo: true,
+      recibirTarea: false,
       orden: '',
     });
   };
@@ -296,6 +300,7 @@ const Insumos = () => {
           fechaDeber: formatDateForBackend(formData.fechaDeber),
           fechaEntrega: formData.fechaEntrega ? formatDateForBackend(formData.fechaEntrega) : null,
           activo: formData.activo,
+          recibirTarea: formData.recibirTarea,
           orden: formData.orden ? parseInt(formData.orden) : undefined,
         };
       } else {
@@ -307,6 +312,7 @@ const Insumos = () => {
           subPeriodoId: selectedSubPeriod.id,
           fechaDeber: formatDateForBackend(formData.fechaDeber),
           fechaEntrega: formData.fechaEntrega ? formatDateForBackend(formData.fechaEntrega) : null,
+          recibirTarea: formData.recibirTarea,
           orden: formData.orden ? parseInt(formData.orden) : undefined,
         };
       }
@@ -680,6 +686,21 @@ const Insumos = () => {
                   />
                   <span className="text-sm font-medium text-gray-700">Activo</span>
                 </label>
+              </div>
+
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.recibirTarea}
+                    onChange={(e) => setFormData({ ...formData, recibirTarea: e.target.checked })}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Recibir tarea</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Los estudiantes recibirán una notificación cuando esta opción esté activa
+                </p>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

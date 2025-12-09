@@ -81,7 +81,10 @@ export const login = async (req, res, next) => {
       const representante = await prisma.representante.findUnique({
         where: { userId: user.id },
         include: {
-          estudiantes: {
+          students: {
+            where: {
+              retirado: false,
+            },
             include: {
               user: {
                 select: {
@@ -90,7 +93,14 @@ export const login = async (req, res, next) => {
                   email: true,
                 },
               },
-              grupo: true,
+              grupo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  nivel: true,
+                  paralelo: true,
+                },
+              },
             },
           },
         },
@@ -175,6 +185,35 @@ export const getProfile = async (req, res, next) => {
         },
       });
       additionalInfo = { teacher };
+    } else if (req.user.rol === 'REPRESENTANTE') {
+      const representante = await prisma.representante.findUnique({
+        where: { userId: user.id },
+        include: {
+          students: {
+            where: {
+              retirado: false,
+            },
+            include: {
+              user: {
+                select: {
+                  nombre: true,
+                  apellido: true,
+                  email: true,
+                },
+              },
+              grupo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  nivel: true,
+                  paralelo: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      additionalInfo = { representante };
     }
 
     res.json({

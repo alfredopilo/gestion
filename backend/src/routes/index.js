@@ -23,6 +23,9 @@ import supplementaryRoutes from './supplementaryRoutes.js';
 import promotionRoutes from './promotionRoutes.js';
 import backupRoutes from './backupRoutes.js';
 import resetRoutes from './resetRoutes.js';
+import representanteRoutes from './representanteRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
+import tareaEntregaRoutes from './tareaEntregaRoutes.js';
 
 const router = express.Router();
 
@@ -50,6 +53,9 @@ router.use('/supplementary', supplementaryRoutes);
 router.use('/promotion', promotionRoutes);
 router.use('/backup', backupRoutes);
 router.use('/reset', resetRoutes);
+router.use('/representantes', representanteRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/tareas', tareaEntregaRoutes);
 
 export default router;
 

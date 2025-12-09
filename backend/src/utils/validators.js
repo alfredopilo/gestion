@@ -333,6 +333,7 @@ export const createInsumoSchema = z.object({
     { message: 'Fecha de entrega inválida' }
   ),
   activo: z.boolean().optional().default(true),
+  recibirTarea: z.boolean().optional().default(false),
   orden: z.number().int().positive().optional(),
 });
 
@@ -356,6 +357,7 @@ export const updateInsumoSchema = z.object({
     { message: 'Fecha de entrega inválida' }
   ),
   activo: z.boolean().optional(),
+  recibirTarea: z.boolean().optional(),
   orden: z.number().int().positive().optional(),
 });
 

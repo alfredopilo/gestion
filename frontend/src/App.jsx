@@ -11,6 +11,8 @@ import Layout from './components/Layout';
 import Users from './pages/Users';
 import Students from './pages/Students';
 import StudentDetail from './pages/StudentDetail';
+import StudentDetailRepresentante from './pages/StudentDetailRepresentante';
+import AssociateStudents from './pages/AssociateStudents';
 import Courses from './pages/Courses';
 import CourseDetail from './pages/CourseDetail';
 import Subjects from './pages/Subjects';
@@ -33,6 +35,7 @@ import StudentProfileTemplate from './pages/StudentProfileTemplate';
 import Supplementary from './pages/Supplementary';
 import SchoolPromotion from './pages/SchoolPromotion';
 import DatabaseBackup from './pages/DatabaseBackup';
+import MisTareas from './pages/MisTareas';
 
 // Componente que renderiza el dashboard según el rol
 function DashboardByRole() {
@@ -75,6 +78,8 @@ function App() {
             <Route path="users" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><Users /></ProtectedRoute>} />
             <Route path="students" element={<ProtectedRoute><Students /></ProtectedRoute>} />
             <Route path="students/:id" element={<ProtectedRoute><StudentDetail /></ProtectedRoute>} />
+            <Route path="representantes/students/:studentId" element={<ProtectedRoute requiredRole={['REPRESENTANTE']}><StudentDetailRepresentante /></ProtectedRoute>} />
+            <Route path="associate-students" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><AssociateStudents /></ProtectedRoute>} />
             <Route path="courses" element={<ProtectedRoute><Courses /></ProtectedRoute>} />
             <Route path="courses/:id" element={<ProtectedRoute><CourseDetail /></ProtectedRoute>} />
             <Route path="subjects" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><Subjects /></ProtectedRoute>} />
@@ -94,6 +99,7 @@ function App() {
             <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
             <Route path="schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+            <Route path="mis-tareas" element={<ProtectedRoute requiredRole={['ESTUDIANTE']}><MisTareas /></ProtectedRoute>} />
             <Route path="general-settings" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GeneralSettings /></ProtectedRoute>} />
             <Route path="institution-settings" element={<ProtectedRoute requiredRole={['ADMIN']}><InstitutionSettings /></ProtectedRoute>} />
           </Route>
