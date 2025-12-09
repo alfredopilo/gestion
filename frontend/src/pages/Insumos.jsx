@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 const Insumos = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -575,6 +577,15 @@ const Insumos = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         {(user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA' || user?.rol === 'PROFESOR') && (
                           <>
+                            {insumo.recibirTarea && (
+                              <button
+                                onClick={() => navigate(`/insumos/${insumo.id}/entregas`)}
+                                className="text-indigo-600 hover:text-indigo-900 mr-4"
+                                title="Ver Entregas"
+                              >
+                                Entregas
+                              </button>
+                            )}
                             <button
                               onClick={() => handleEditInsumo(insumo)}
                               className="text-primary-600 hover:text-primary-900 mr-4"

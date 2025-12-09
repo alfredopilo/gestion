@@ -26,6 +26,7 @@ import Profile from './pages/Profile';
 import InstitutionSettings from './pages/InstitutionSettings';
 import GeneralSettings from './pages/GeneralSettings';
 import Insumos from './pages/Insumos';
+import TaskReview from './pages/TaskReview';
 import Reports from './pages/Reports';
 import Schedule from './pages/Schedule';
 import ReportCards from './pages/ReportCards';
@@ -88,6 +89,7 @@ function App() {
             <Route path="grades" element={<ProtectedRoute><Grades /></ProtectedRoute>} />
             <Route path="grade-entry" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><GradeEntry /></ProtectedRoute>} />
             <Route path="insumos" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Insumos /></ProtectedRoute>} />
+            <Route path="insumos/:insumoId/entregas" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><TaskReview /></ProtectedRoute>} />
             <Route path="reports" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><Reports /></ProtectedRoute>} />
             <Route path="report-cards" element={<ProtectedRoute requiredRole={['PROFESOR', 'ADMIN', 'SECRETARIA']}><ReportCards /></ProtectedRoute>} />
             <Route path="historical-report-cards" element={<ProtectedRoute><HistoricalReportCards /></ProtectedRoute>} />
