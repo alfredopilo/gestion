@@ -120,9 +120,11 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-      console.log(`📚 Documentación API en http://localhost:${PORT}/api-docs`);
+    // Escuchar en todas las interfaces de red (0.0.0.0) para permitir conexiones externas
+    const HOST = process.env.HOST || '0.0.0.0';
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 Servidor corriendo en http://${HOST}:${PORT}`);
+      console.log(`📚 Documentación API en http://${HOST}:${PORT}/api-docs`);
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);
