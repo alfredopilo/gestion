@@ -1,5 +1,17 @@
 version: '3.8'
 
+# Sistema de Gestión Escolar - Docker Compose
+# 
+# Para instalar: ./install.sh
+# Para actualizar: ./update.sh
+# 
+# Los scripts de instalación y actualización incluyen:
+# - Verificación de requisitos
+# - Construcción de imágenes
+# - Aplicación automática de migraciones de Prisma
+# - Resolución automática de migraciones fallidas (error P3009)
+# - Verificación final de servicios
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -33,6 +45,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-mi_secreto_jwt_super_seguro_2024}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       PORT: 3000
+      HOST: 0.0.0.0  # Escuchar en todas las interfaces para VPS
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     depends_on:
