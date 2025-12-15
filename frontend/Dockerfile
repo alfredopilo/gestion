@@ -1,6 +1,10 @@
 # Etapa 1: Construcción
 FROM node:20-alpine as build
 
+# Aceptar argumento de build para VITE_API_URL (se pasa desde docker-compose)
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 
 COPY package*.json ./

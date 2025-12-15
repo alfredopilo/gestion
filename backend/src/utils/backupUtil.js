@@ -232,21 +232,60 @@ export async function restoreDatabaseBackup(backupFilePath) {
     console.log('Filtrando comandos problemáticos del SQL...');
     let sqlContent = readFileSync(sqlFilePath, 'utf8');
     
-    // Lista de parámetros no reconocidos que deben ser filtrados
+    // Lista expandida de parámetros y comandos problemáticos que deben ser filtrados
     const problematicParams = [
       'transaction_timeout',
-      'idle_in_transaction_session_timeout', // Otro parámetro común que puede no estar disponible
+      'idle_in_transaction_session_timeout',
+      'lock_timeout',
+      'statement_timeout',
+      'search_path', // Puede causar problemas si se restaura en otra base
     ];
     
-    // Filtrar líneas que contienen SET con parámetros problemáticos
+    // Comandos SQL que deben ser filtrados (específicos de la base de datos origen)
+    const problematicCommands = [
+      'CREATE DATABASE',
+      'ALTER DATABASE',
+      'DROP DATABASE',
+      '\\connect',
+      '\\c ', // Comando de conexión de psql
+      'SET search_path', // Puede causar problemas
+      'COMMENT ON DATABASE',
+      'ALTER DATABASE.*SET',
+    ];
+    
+    // Filtrar líneas problemáticas
     const lines = sqlContent.split('\n');
     const filteredLines = lines.filter(line => {
-      const trimmedLine = line.trim().toUpperCase();
-      // Si es un comando SET, verificar si contiene parámetros problemáticos
-      if (trimmedLine.startsWith('SET ') || trimmedLine.startsWith('SELECT SET_CONFIG')) {
-        const lowerLine = line.toLowerCase();
-        return !problematicParams.some(param => lowerLine.includes(param));
+      const trimmedLine = line.trim();
+      const upperLine = trimmedLine.toUpperCase();
+      const lowerLine = trimmedLine.toLowerCase();
+      
+      // Filtrar líneas vacías o comentarios que no afectan
+      if (!trimmedLine || trimmedLine.startsWith('--')) {
+        return true; // Mantener comentarios
       }
+      
+      // Filtrar comandos específicos de la base de datos origen
+      if (problematicCommands.some(cmd => {
+        const cmdUpper = cmd.toUpperCase();
+        return upperLine.startsWith(cmdUpper) || 
+               upperLine.includes(cmdUpper.replace('.*', ''));
+      })) {
+        console.log(`Filtrando comando problemático: ${trimmedLine.substring(0, 50)}...`);
+        return false;
+      }
+      
+      // Filtrar comandos SET con parámetros problemáticos
+      if (upperLine.startsWith('SET ') || upperLine.startsWith('SELECT SET_CONFIG')) {
+        const hasProblematicParam = problematicParams.some(param => 
+          lowerLine.includes(param.toLowerCase())
+        );
+        if (hasProblematicParam) {
+          console.log(`Filtrando SET problemático: ${trimmedLine.substring(0, 50)}...`);
+          return false;
+        }
+      }
+      
       return true; // Mantener todas las demás líneas
     });
     
@@ -304,20 +343,43 @@ export async function restoreDatabaseBackup(backupFilePath) {
 
       psqlProcess.on('close', (code) => {
         if (code !== 0) {
-          // psql puede escribir errores en stderr incluso en casos normales
-          // Filtrar advertencias comunes y errores de parámetros no reconocidos
-          const hasRealError = stderrData && 
-            !stderrData.includes('NOTICE') && 
-            !stderrData.includes('WARNING') &&
-            !stderrData.includes('already exists') &&
-            !stderrData.includes('unrecognized configuration parameter'); // Ignorar parámetros no reconocidos
+          // Mejorar el filtrado de errores para mostrar solo errores reales
+          const errorMessages = stderrData || stdoutData;
+          
+          // Errores que pueden ser ignorados (advertencias normales)
+          const ignorableErrors = [
+            'NOTICE',
+            'WARNING',
+            'already exists',
+            'unrecognized configuration parameter',
+            'does not exist, skipping', // Extensiones o objetos que no existen
+            'relation.*does not exist', // Algunas relaciones pueden no existir
+          ];
+          
+          // Verificar si hay errores reales
+          const hasRealError = errorMessages && 
+            !ignorableErrors.some(ignorable => 
+              errorMessages.toLowerCase().includes(ignorable.toLowerCase())
+            ) &&
+            (errorMessages.includes('ERROR') || 
+             errorMessages.includes('FATAL') ||
+             errorMessages.includes('syntax error'));
           
           if (hasRealError) {
-            reject(new Error(`psql falló con código ${code}: ${stderrData || stdoutData}`));
+            // Extraer el mensaje de error más relevante
+            const errorLines = errorMessages.split('\n').filter(line => 
+              line.includes('ERROR') || line.includes('FATAL')
+            );
+            const errorMessage = errorLines.length > 0 
+              ? errorLines[0] 
+              : errorMessages.substring(0, 500); // Limitar a 500 caracteres
+            
+            console.error('Error completo de psql:', errorMessages);
+            reject(new Error(`Error al restaurar backup: ${errorMessage}`));
           } else {
             // Advertencias normales, continuar
             if (stderrData) {
-              console.warn('Advertencias de psql:', stderrData);
+              console.warn('Advertencias de psql (ignoradas):', stderrData.substring(0, 200));
             }
             resolve();
           }

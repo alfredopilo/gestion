@@ -59,6 +59,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Lee VITE_API_URL del archivo .env en la raíz del proyecto
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:3000/api/v1}
     container_name: gestion-escolar-frontend
     restart: unless-stopped
     ports:
