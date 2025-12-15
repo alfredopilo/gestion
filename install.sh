@@ -309,6 +309,28 @@ else
     print_success "Base de datos poblada con datos iniciales"
 fi
 
+# Preguntar si desea importar datos de ejemplo
+echo ""
+print_info "¿Deseas importar datos de ejemplo desde archivos exportados? (s/n)"
+read -r import_response
+if [[ "$import_response" =~ ^[Ss]$ ]]; then
+    DATA_DIR="backend/prisma/seed-data"
+    if [ -d "$DATA_DIR" ] && [ "$(find "$DATA_DIR" -name "*.json" 2>/dev/null | wc -l)" -gt 0 ]; then
+        print_info "Importando datos de ejemplo..."
+        if $DOCKER_COMPOSE_CMD exec -T backend npm run restore:data; then
+            print_success "Datos de ejemplo importados correctamente"
+        else
+            print_warning "Error al importar datos de ejemplo (puede que ya existan)"
+        fi
+    else
+        print_warning "No se encontraron archivos de datos para importar en $DATA_DIR"
+        print_info "Para importar datos:"
+        echo "   1. Exporta los datos desde tu base local: ./export-data.sh"
+        echo "   2. Transfiere la carpeta backend/prisma/seed-data al VPS"
+        echo "   3. Ejecuta: ./import-data.sh"
+    fi
+fi
+
 # ============================================
 # PASO 7: Verificación Final
 # ============================================
@@ -369,8 +391,13 @@ echo "   • Estado migraciones: $DOCKER_COMPOSE_CMD exec backend npx prisma mig
 echo "   • Aplicar migraciones: $DOCKER_COMPOSE_CMD exec backend npm run prisma:migrate:deploy"
 echo "   • Regenerar cliente: $DOCKER_COMPOSE_CMD exec backend npm run prisma:generate"
 echo ""
+echo "📦 Comandos de Datos:"
+echo "   • Exportar datos (local): ./export-data.sh"
+echo "   • Importar datos (VPS): ./import-data.sh"
+echo ""
 echo "📖 Para más información, consulta:"
 echo "   • VERIFICACION_VPS.md - Guía completa de verificación"
 echo "   • CONFIGURACION_VPS.md - Configuración para VPS"
+echo "   • GUIA_IMPORTACION_DATOS.md - Guía de exportación/importación de datos"
 echo ""
 
