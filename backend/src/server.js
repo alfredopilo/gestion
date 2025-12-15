@@ -56,19 +56,51 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 // ============================================
 // CORS - DEBE SER EL PRIMER MIDDLEWARE
 // ============================================
-// Configuración CORS permisiva para desarrollo
+// Configuración CORS mejorada para manejar archivos multipart/form-data
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-institution-id');
+  // Permitir todos los orígenes
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  
+  // Headers permitidos - incluir todos los necesarios para multipart/form-data
+  res.header('Access-Control-Allow-Headers', 
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-institution-id, Content-Disposition'
+  );
+  
+  // Métodos permitidos
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  
+  // Permitir credenciales si es necesario
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Exponer headers personalizados si es necesario
+  res.header('Access-Control-Expose-Headers', 'Content-Disposition');
+  
+  // Manejar solicitudes OPTIONS (preflight) - DEBE responder antes de cualquier otro middleware
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
+  
   next();
 });
 
-// También mantenemos el middleware de cors por si acaso
-app.use(cors());
+// Configuración adicional de CORS con opciones específicas
+app.use(cors({
+  origin: '*', // Permitir todos los orígenes
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'x-institution-id',
+    'Content-Disposition'
+  ],
+  exposedHeaders: ['Content-Disposition'],
+  credentials: true,
+  maxAge: 86400 // 24 horas para cachear preflight
+}));
 
 // Middlewares adicionales
 // Helmet configurado para no interferir con CORS
