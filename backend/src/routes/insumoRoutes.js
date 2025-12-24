@@ -14,8 +14,8 @@ router.use(authenticate);
 
 router.get('/', getInsumos);
 router.get('/:id', getInsumoById);
-router.post('/', authorize('ADMIN', 'SECRETARIA'), createInsumo);
-router.put('/:id', authorize('ADMIN', 'SECRETARIA'), updateInsumo);
+router.post('/', authorize('ADMIN', 'SECRETARIA', 'PROFESOR'), createInsumo);
+router.put('/:id', authorize('ADMIN', 'SECRETARIA', 'PROFESOR'), updateInsumo);
 router.delete('/:id', authorize('ADMIN'), deleteInsumo);
 
 export default router;

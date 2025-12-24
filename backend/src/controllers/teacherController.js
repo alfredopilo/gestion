@@ -55,6 +55,10 @@ export const getTeachers = async (req, res, next) => {
  */
 export const getMyAssignments = async (req, res, next) => {
   try {
+    console.log('🎯 =====GET MY ASSIGNMENTS INICIADO=====');
+    console.log('👤 Usuario:', { id: req.user.id, email: req.user.email, rol: req.user.rol });
+    console.log('🏢 Institución en request:', req.institutionId);
+    
     // Verificar que el usuario es un profesor
     if (req.user.rol !== 'PROFESOR') {
       return res.status(403).json({
@@ -68,37 +72,49 @@ export const getMyAssignments = async (req, res, next) => {
     });
 
     if (!teacher) {
+      console.log('❌ No se encontró el registro de teacher para el usuario');
       return res.status(404).json({
         error: 'No se encontró el registro de profesor.',
       });
     }
 
+    console.log('🔍 Teacher encontrado:', { id: teacher.id, userId: teacher.userId });
+
     // Filtrar por institución a través de los cursos
     const courseFilter = await getCourseInstitutionFilter(req, prisma);
-    const courseIds = courseFilter.anioLectivoId?.in 
-      ? (await prisma.course.findMany({
-          where: courseFilter,
-          select: { id: true },
-        })).map(c => c.id)
-      : [];
+    console.log('🔍 Course filter aplicado:', JSON.stringify(courseFilter, null, 2));
+    
+    // Obtener todos los cursos que cumplen con el filtro
+    let courseIds = [];
+    if (Object.keys(courseFilter).length > 0) {
+      // Si hay filtro, buscar cursos que cumplan el filtro
+      const courses = await prisma.course.findMany({
+        where: courseFilter,
+        select: { id: true },
+      });
+      courseIds = courses.map(c => c.id);
+    }
 
-    // Si no hay cursos de la institución, retornar vacío (excepto para ADMIN)
-    if (courseIds.length === 0 && req.user?.rol !== 'ADMIN') {
+    console.log('🔍 Course IDs filtrados:', courseIds.length, courseIds);
+
+    // Obtener todas las asignaciones del docente
+    const whereClause = {
+      docenteId: teacher.id,
+    };
+
+    // Si hay filtro de cursos específicos, aplicarlo
+    if (courseIds.length > 0) {
+      whereClause.cursoId = { in: courseIds };
+    } else if (Object.keys(courseFilter).length > 0 && req.user?.rol !== 'ADMIN') {
+      // Si hay filtro pero no hay cursos que lo cumplan, retornar vacío
+      console.log('⚠️ No se encontraron cursos para la institución del docente');
       return res.json({
         data: [],
         total: 0,
       });
     }
 
-    // Obtener todas las asignaciones del docente filtradas por institución
-    const whereClause = {
-      docenteId: teacher.id,
-    };
-
-    // Si hay filtro de institución, aplicarlo
-    if (courseIds.length > 0) {
-      whereClause.cursoId = { in: courseIds };
-    }
+    console.log('🔍 Where clause para asignaciones:', JSON.stringify(whereClause, null, 2));
 
     const assignments = await prisma.courseSubjectAssignment.findMany({
       where: whereClause,
@@ -111,6 +127,11 @@ export const getMyAssignments = async (req, res, next) => {
                 id: true,
                 nombre: true,
                 activo: true,
+              },
+            },
+            _count: {
+              select: {
+                estudiantes: true,
               },
             },
           },
@@ -128,6 +149,14 @@ export const getMyAssignments = async (req, res, next) => {
       },
     });
 
+    console.log('✅ Asignaciones encontradas:', assignments.length);
+    if (assignments.length > 0) {
+      console.log('📚 Primera asignación:', {
+        curso: assignments[0].curso.nombre,
+        materia: assignments[0].materia.nombre,
+      });
+    }
+
     // Agrupar por curso y materia
     const groupedAssignments = {};
     assignments.forEach(assignment => {
@@ -141,6 +170,7 @@ export const getMyAssignments = async (req, res, next) => {
             paralelo: assignment.curso.paralelo,
             periodo: assignment.curso.periodo,
             anioLectivo: assignment.curso.anioLectivo,
+            _count: assignment.curso._count,
           },
           materias: [],
         };
@@ -153,11 +183,15 @@ export const getMyAssignments = async (req, res, next) => {
       });
     });
 
+    const result = Object.values(groupedAssignments);
+    console.log('📤 Respuesta final:', { total: result.length, data: result });
+
     res.json({
-      data: Object.values(groupedAssignments),
+      data: result,
       total: assignments.length,
     });
   } catch (error) {
+    console.error('💥 Error en getMyAssignments:', error);
     next(error);
   }
 };
