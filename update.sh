@@ -89,10 +89,64 @@ else
 fi
 
 # ============================================
-# PASO 2: Verificar Servicios
+# PASO 2: Configurar VITE_API_URL
 # ============================================
 echo ""
-echo "📋 PASO 2: Verificando servicios Docker..."
+echo "📋 PASO 2: Configurando URL del API..."
+echo ""
+
+# Verificar si ya existe frontend/.env
+update_ip=""
+if [ -f frontend/.env ]; then
+    current_url=$(grep "VITE_API_URL" frontend/.env | cut -d'=' -f2 || echo "")
+    if [ -n "$current_url" ]; then
+        print_info "URL actual del API: $current_url"
+        print_info "¿Deseas actualizar la IP del servidor? (s/n)"
+        read -r update_ip
+        if [[ ! "$update_ip" =~ ^[Ss]$ ]]; then
+            print_info "Manteniendo configuración actual"
+            server_ip="SKIP"
+        fi
+    fi
+fi
+
+# Si se necesita actualizar o no existe configuración
+if [ "$server_ip" != "SKIP" ] && ([ ! -f frontend/.env ] || [[ "$update_ip" =~ ^[Ss]$ ]]); then
+    print_info "Ingresa la IP o dominio del servidor (ejemplo: 142.93.17.71 o tu-dominio.com)"
+    print_info "Presiona Enter para usar localhost (solo desarrollo local)"
+    read -r server_ip
+    
+    if [ -z "$server_ip" ]; then
+        server_ip="localhost"
+        print_info "Usando localhost para desarrollo local"
+    else
+        print_success "IP/Dominio configurado: $server_ip"
+    fi
+    
+    # Crear o actualizar frontend/.env
+    print_info "Configurando frontend/.env con VITE_API_URL=http://$server_ip:3000/api/v1"
+    mkdir -p frontend
+    echo "VITE_API_URL=http://$server_ip:3000/api/v1" > frontend/.env
+    print_success "Archivo frontend/.env creado/actualizado"
+    
+    # También actualizar .env en la raíz si existe
+    if [ -f .env ]; then
+        if grep -q "VITE_API_URL" .env; then
+            sed -i.bak "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip:3000/api/v1|" .env 2>/dev/null || \
+            sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip:3000/api/v1|" .env
+            print_success "VITE_API_URL actualizado en .env"
+        else
+            echo "VITE_API_URL=http://$server_ip:3000/api/v1" >> .env
+            print_success "VITE_API_URL agregado a .env"
+        fi
+    fi
+fi
+
+# ============================================
+# PASO 3: Verificar Servicios
+# ============================================
+echo ""
+echo "📋 PASO 3: Verificando servicios Docker..."
 echo ""
 
 if ! $DOCKER_COMPOSE_CMD ps &> /dev/null; then
@@ -110,10 +164,10 @@ fi
 print_success "Servicios Docker verificados"
 
 # ============================================
-# PASO 3: Reconstruir Contenedores
+# PASO 4: Reconstruir Contenedores
 # ============================================
 echo ""
-echo "📋 PASO 3: Reconstruyendo contenedores..."
+echo "📋 PASO 4: Reconstruyendo contenedores..."
 echo ""
 
 print_info "Deteniendo servicios..."
@@ -136,10 +190,10 @@ else
 fi
 
 # ============================================
-# PASO 4: Esperar a que los Servicios Estén Listos
+# PASO 5: Esperar a que los Servicios Estén Listos
 # ============================================
 echo ""
-echo "📋 PASO 4: Esperando a que los servicios estén listos..."
+echo "📋 PASO 5: Esperando a que los servicios estén listos..."
 echo ""
 
 print_info "Esperando a que PostgreSQL esté listo..."
@@ -166,10 +220,10 @@ print_info "Esperando a que el backend inicie..."
 sleep 5
 
 # ============================================
-# PASO 5: Actualizar Base de Datos
+# PASO 6: Actualizar Base de Datos
 # ============================================
 echo ""
-echo "📋 PASO 5: Actualizando base de datos..."
+echo "📋 PASO 6: Actualizando base de datos..."
 echo ""
 
 # Regenerar cliente de Prisma
@@ -234,10 +288,10 @@ else
 fi
 
 # ============================================
-# PASO 6: Limpieza y Verificación
+# PASO 7: Limpieza y Verificación
 # ============================================
 echo ""
-echo "📋 PASO 6: Limpieza y verificación final..."
+echo "📋 PASO 7: Limpieza y verificación final..."
 echo ""
 
 # Limpiar imágenes antiguas (opcional)
