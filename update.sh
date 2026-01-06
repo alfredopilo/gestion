@@ -162,6 +162,13 @@ echo ""
 echo "📋 PASO 7: Actualizando permisos..."
 echo ""
 
+print_info "Copiando archivo de seed al contenedor..."
+if [ -f "backend/prisma/seed-permissions.js" ]; then
+    $DOCKER_COMPOSE_CMD cp backend/prisma/seed-permissions.js backend:/app/prisma/seed-permissions.js 2>/dev/null || {
+        print_warning "No se pudo copiar el archivo, puede que ya exista"
+    }
+fi
+
 print_info "Ejecutando seed de permisos..."
 if $DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1 | grep -v "already exists"; then
     print_success "Permisos actualizados"
