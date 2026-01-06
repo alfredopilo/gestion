@@ -162,18 +162,31 @@ echo ""
 echo "📋 PASO 7: Actualizando permisos..."
 echo ""
 
-print_info "Copiando archivo de seed al contenedor..."
-if [ -f "backend/prisma/seed-permissions.js" ]; then
-    $DOCKER_COMPOSE_CMD cp backend/prisma/seed-permissions.js backend:/app/prisma/seed-permissions.js 2>/dev/null || {
-        print_warning "No se pudo copiar el archivo, puede que ya exista"
-    }
-fi
+print_info "Verificando que el backend esté listo..."
+max_attempts=20
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+    if $DOCKER_COMPOSE_CMD exec -T backend sh -c "exit 0" &> /dev/null; then
+        print_success "Backend está listo"
+        break
+    fi
+    attempt=$((attempt + 1))
+    if [ $attempt -eq $max_attempts ]; then
+        print_error "Backend no respondió a tiempo"
+        exit 1
+    fi
+    sleep 2
+done
 
 print_info "Ejecutando seed de permisos..."
-if $DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1 | grep -v "already exists"; then
-    print_success "Permisos actualizados"
+seed_output=$($DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1)
+if echo "$seed_output" | grep -q "Seed completado\|✅"; then
+    print_success "Permisos actualizados correctamente"
+elif echo "$seed_output" | grep -q "already exists"; then
+    print_success "Permisos ya existen (normal)"
 else
-    print_warning "Algunos permisos pueden ya existir (esto es normal)"
+    print_warning "Verificar manualmente los permisos"
+    echo "$seed_output" | tail -5
 fi
 
 # ============================================
