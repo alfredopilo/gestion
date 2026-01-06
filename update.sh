@@ -204,18 +204,51 @@ else
 fi
 
 # ============================================
-# PASO 9: Reconstruir y reiniciar contenedores
+# PASO 9: Reconstruir y reiniciar contenedores (OPTIMIZADO)
 # ============================================
 echo ""
 echo "📋 PASO 9: Reconstruyendo contenedores..."
 echo ""
 
-print_info "Reconstruyendo imágenes..."
-if $DOCKER_COMPOSE_CMD build; then
-    print_success "Imágenes reconstruidas"
+# Preguntar si se desea reconstruir
+print_info "¿Deseas reconstruir las imágenes? Esto puede tardar varios minutos. (s/n)"
+read -r rebuild_response
+
+if [[ "$rebuild_response" =~ ^[Ss]$ ]]; then
+    print_info "Reconstruyendo imágenes (esto puede tardar varios minutos)..."
+    print_info "Usando DOCKER_BUILDKIT para acelerar el proceso..."
+    
+    # Usar DOCKER_BUILDKIT para builds más rápidos y sin provenance
+    export DOCKER_BUILDKIT=1
+    export BUILDKIT_PROGRESS=plain
+    
+    # Build con timeout implícito y sin provenance (más rápido)
+    print_info "Construyendo backend..."
+    if timeout 600 $DOCKER_COMPOSE_CMD build --progress=plain --no-cache backend 2>&1 | tee /tmp/build-backend.log; then
+        print_success "Backend reconstruido"
+    else
+        print_warning "Build de backend tardó mucho o falló, intentando sin --no-cache..."
+        if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain backend 2>&1 | tee /tmp/build-backend.log; then
+            print_success "Backend reconstruido (con cache)"
+        else
+            print_error "Error al reconstruir backend"
+            print_info "Continuando con imágenes existentes..."
+        fi
+    fi
+    
+    print_info "Construyendo frontend..."
+    if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain --no-cache frontend 2>&1 | tee /tmp/build-frontend.log; then
+        print_success "Frontend reconstruido"
+    else
+        print_warning "Build de frontend tardó mucho, intentando sin --no-cache..."
+        if timeout 180 $DOCKER_COMPOSE_CMD build --progress=plain frontend 2>&1 | tee /tmp/build-frontend.log; then
+            print_success "Frontend reconstruido (con cache)"
+        else
+            print_warning "Error al reconstruir frontend, usando imagen existente"
+        fi
+    fi
 else
-    print_error "Error al reconstruir imágenes"
-    exit 1
+    print_info "Saltando reconstrucción de imágenes, usando las existentes"
 fi
 
 print_info "Reiniciando contenedores..."
