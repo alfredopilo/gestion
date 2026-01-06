@@ -16,12 +16,26 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Timeout más corto para carga inicial (5 segundos)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       // Obtener perfil del usuario
-      api.get('/auth/profile')
+      api.get('/auth/profile', { 
+        signal: controller.signal,
+        timeout: 5000
+      })
         .then(response => {
+          clearTimeout(timeoutId);
           setUser(response.data);
         })
-        .catch(() => {
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          // Si es timeout, continuar sin autenticar
+          if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
+            console.warn('Timeout al cargar perfil, continuando...');
+          }
           localStorage.removeItem('token');
           delete api.defaults.headers.common['Authorization'];
         })

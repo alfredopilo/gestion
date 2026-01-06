@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cors from 'cors';
@@ -13,6 +14,11 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Crear servidor HTTP con keep-alive optimizado
+const server = http.createServer(app);
+server.keepAliveTimeout = 65000; // 65 segundos (más que el timeout de proxies)
+server.headersTimeout = 66000; // Ligeramente más que keepAliveTimeout
 
 // Swagger configuration
 const swaggerOptions = {
@@ -152,11 +158,24 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await connectDB();
+    
+    // Pre-conectar a la base de datos (warmup) para evitar cold start
+    console.log('🔥 Precalentando conexión a base de datos...');
+    const prisma = (await import('./config/database.js')).default;
+    try {
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`; // Query simple para "despertar" la BD
+      console.log('✅ Base de datos precalentada');
+    } catch (error) {
+      console.warn('⚠️  Warmup de BD falló:', error.message);
+    }
+    
     // Escuchar en todas las interfaces de red (0.0.0.0) para permitir conexiones externas
     const HOST = process.env.HOST || '0.0.0.0';
-    app.listen(PORT, HOST, () => {
+    server.listen(PORT, HOST, () => {
       console.log(`🚀 Servidor corriendo en http://${HOST}:${PORT}`);
       console.log(`📚 Documentación API en http://${HOST}:${PORT}/api-docs`);
+      console.log(`⚡ Keep-alive habilitado para conexiones rápidas`);
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);

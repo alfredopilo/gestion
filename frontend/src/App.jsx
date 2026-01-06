@@ -1,44 +1,59 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+
+// Páginas cargadas inmediatamente (críticas)
 import Login from './pages/Login';
-import DashboardAdmin from './pages/DashboardAdmin';
-import DashboardProfesor from './pages/DashboardProfesor';
-import DashboardEstudiante from './pages/DashboardEstudiante';
-import DashboardRepresentante from './pages/DashboardRepresentante';
 import Layout from './components/Layout';
-import Users from './pages/Users';
-import Students from './pages/Students';
-import StudentDetail from './pages/StudentDetail';
-import StudentDetailRepresentante from './pages/StudentDetailRepresentante';
-import AssociateStudents from './pages/AssociateStudents';
-import Courses from './pages/Courses';
-import CourseDetail from './pages/CourseDetail';
-import Subjects from './pages/Subjects';
-import SubjectAssignments from './pages/SubjectAssignments';
-import Periods from './pages/Periods';
-import Grades from './pages/Grades';
-import GradeEntry from './pages/GradeEntry';
-import Attendance from './pages/Attendance';
-import Payments from './pages/Payments';
 import Profile from './pages/Profile';
-import InstitutionSettings from './pages/InstitutionSettings';
-import GeneralSettings from './pages/GeneralSettings';
-import Insumos from './pages/Insumos';
-import TaskReview from './pages/TaskReview';
-import Reports from './pages/Reports';
-import Schedule from './pages/Schedule';
-import ReportCards from './pages/ReportCards';
-import HistoricalReportCards from './pages/HistoricalReportCards';
-import GradeScales from './pages/GradeScales';
-import StudentProfileTemplate from './pages/StudentProfileTemplate';
-import Supplementary from './pages/Supplementary';
-import SchoolPromotion from './pages/SchoolPromotion';
-import DatabaseBackup from './pages/DatabaseBackup';
-import MisTareas from './pages/MisTareas';
-import PermissionManagement from './pages/PermissionManagement';
-import AccessLogs from './pages/AccessLogs';
+
+// Lazy loading de páginas pesadas
+const DashboardAdmin = lazy(() => import('./pages/DashboardAdmin'));
+const DashboardProfesor = lazy(() => import('./pages/DashboardProfesor'));
+const DashboardEstudiante = lazy(() => import('./pages/DashboardEstudiante'));
+const DashboardRepresentante = lazy(() => import('./pages/DashboardRepresentante'));
+const Users = lazy(() => import('./pages/Users'));
+const Students = lazy(() => import('./pages/Students'));
+const StudentDetail = lazy(() => import('./pages/StudentDetail'));
+const StudentDetailRepresentante = lazy(() => import('./pages/StudentDetailRepresentante'));
+const AssociateStudents = lazy(() => import('./pages/AssociateStudents'));
+const Courses = lazy(() => import('./pages/Courses'));
+const CourseDetail = lazy(() => import('./pages/CourseDetail'));
+const Subjects = lazy(() => import('./pages/Subjects'));
+const SubjectAssignments = lazy(() => import('./pages/SubjectAssignments'));
+const Periods = lazy(() => import('./pages/Periods'));
+const Grades = lazy(() => import('./pages/Grades'));
+const GradeEntry = lazy(() => import('./pages/GradeEntry'));
+const Attendance = lazy(() => import('./pages/Attendance'));
+const Payments = lazy(() => import('./pages/Payments'));
+const InstitutionSettings = lazy(() => import('./pages/InstitutionSettings'));
+const GeneralSettings = lazy(() => import('./pages/GeneralSettings'));
+const Insumos = lazy(() => import('./pages/Insumos'));
+const TaskReview = lazy(() => import('./pages/TaskReview'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Schedule = lazy(() => import('./pages/Schedule'));
+const ReportCards = lazy(() => import('./pages/ReportCards'));
+const HistoricalReportCards = lazy(() => import('./pages/HistoricalReportCards'));
+const GradeScales = lazy(() => import('./pages/GradeScales'));
+const StudentProfileTemplate = lazy(() => import('./pages/StudentProfileTemplate'));
+const Supplementary = lazy(() => import('./pages/Supplementary'));
+const SchoolPromotion = lazy(() => import('./pages/SchoolPromotion'));
+const DatabaseBackup = lazy(() => import('./pages/DatabaseBackup'));
+const MisTareas = lazy(() => import('./pages/MisTareas'));
+const PermissionManagement = lazy(() => import('./pages/PermissionManagement'));
+const AccessLogs = lazy(() => import('./pages/AccessLogs'));
+
+// Loading component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <div className="text-center">
+      <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary-600 border-t-transparent mb-4"></div>
+      <p className="text-gray-600 font-medium">Cargando...</p>
+    </div>
+  </div>
+);
 
 // Componente que renderiza el dashboard según el rol
 function DashboardByRole() {
@@ -65,8 +80,9 @@ function App() {
     <AuthProvider>
       <Router>
         <Toaster position="top-right" />
-        <Routes>
-          <Route path="/login" element={<Login />} />
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
           
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
@@ -110,6 +126,7 @@ function App() {
             <Route path="access-logs" element={<ProtectedRoute requiredRole={['ADMIN']}><AccessLogs /></ProtectedRoute>} />
           </Route>
         </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );
