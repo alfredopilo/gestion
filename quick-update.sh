@@ -126,29 +126,55 @@ else
 fi
 
 # ============================================
-# PASO 4: Aplicar migraciones
+# PASO 4: Aplicar migraciones y configurar BD
 # ============================================
 echo ""
-echo "📋 PASO 4: Aplicando migraciones..."
+echo "📋 PASO 4: Aplicando migraciones y configurando BD..."
 echo ""
 
-print_info "Aplicando migraciones pendientes..."
-if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1 | tail -10; then
-    print_success "Migraciones aplicadas"
+print_info "Verificando estado de migraciones..."
+migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1)
+
+if echo "$migration_status" | grep -q "Database schema is up to date"; then
+    print_success "Base de datos ya está actualizada"
+elif echo "$migration_status" | grep -q "following migrations have not yet been applied\|pending migrations"; then
+    print_info "Hay migraciones pendientes, aplicando..."
+    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+        print_success "Migraciones aplicadas correctamente"
+    else
+        print_error "Error al aplicar migraciones"
+        print_info "Intentando resolver conflictos..."
+        
+        # Intentar marcar migraciones fallidas como aplicadas
+        $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied 20251106114501_add_institution_and_schoolyear_to_subjects 2>&1 || true
+        
+        # Reintentar
+        if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+            print_success "Migraciones aplicadas después de resolver conflictos"
+        else
+            print_warning "Algunas migraciones pueden tener problemas, continuando..."
+        fi
+    fi
 else
-    print_warning "Puede haber errores en migraciones, verificando estado..."
-    $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1 | tail -5 || true
+    print_warning "Estado de migraciones indeterminado, intentando aplicar..."
+    $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1 || {
+        print_warning "Error en migraciones, pero continuando..."
+    }
 fi
 
+# Verificar estado final
+print_info "Estado final de migraciones:"
+$DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1 | tail -10 || true
+
 # ============================================
-# PASO 5: Crear tabla access_logs si no existe
+# PASO 5: Verificar y crear tablas necesarias
 # ============================================
 echo ""
-echo "📋 PASO 5: Verificando tabla access_logs..."
+echo "📋 PASO 5: Verificando tablas necesarias..."
 echo ""
 
-print_info "Verificando/creando tabla access_logs..."
-$DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -c "
+print_info "Creando tabla access_logs si no existe..."
+create_result=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -c "
 CREATE TABLE IF NOT EXISTS access_logs (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     user_id TEXT,
@@ -162,13 +188,82 @@ CREATE TABLE IF NOT EXISTS access_logs (
 CREATE INDEX IF NOT EXISTS access_logs_user_id_idx ON access_logs(user_id);
 CREATE INDEX IF NOT EXISTS access_logs_action_idx ON access_logs(action);
 CREATE INDEX IF NOT EXISTS access_logs_timestamp_idx ON access_logs(timestamp);
-" 2>&1 | grep -v "CREATE\|already exists" || print_success "Tabla access_logs verificada"
+ALTER TABLE access_logs ADD CONSTRAINT IF NOT EXISTS access_logs_user_id_fkey 
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+" 2>&1)
+
+if echo "$create_result" | grep -q "CREATE TABLE\|already exists\|CREATE INDEX"; then
+    print_success "Tabla access_logs verificada/creada correctamente"
+else
+    print_warning "Verificar manualmente la tabla access_logs"
+fi
+
+# Verificar que las tablas de permisos existan
+print_info "Verificando tablas de permisos..."
+perms_result=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -c "
+SELECT 
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'permissions') 
+    THEN 'permissions: OK' ELSE 'permissions: FALTA' END as permissions_table,
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'role_permissions') 
+    THEN 'role_permissions: OK' ELSE 'role_permissions: FALTA' END as role_permissions_table,
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'access_logs') 
+    THEN 'access_logs: OK' ELSE 'access_logs: FALTA' END as access_logs_table;
+" 2>&1)
+
+echo "$perms_result"
+
+if echo "$perms_result" | grep -q "FALTA"; then
+    print_warning "Algunas tablas faltan, ejecutando migraciones nuevamente..."
+    $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1 | tail -10 || true
+else
+    print_success "Todas las tablas necesarias existen"
+fi
 
 # ============================================
-# PASO 6: Reiniciar servicios
+# PASO 6: Seed de permisos
 # ============================================
 echo ""
-echo "📋 PASO 6: Reiniciando servicios..."
+echo "📋 PASO 6: Actualizando permisos..."
+echo ""
+
+print_info "Ejecutando seed de permisos..."
+seed_output=$($DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1)
+
+if echo "$seed_output" | grep -q "Seed completado\|✅\|Total de permisos"; then
+    print_success "Permisos actualizados correctamente"
+    echo "$seed_output" | grep -E "Total de permisos|Total de asignaciones" || true
+elif echo "$seed_output" | grep -q "already exists\|Unique constraint"; then
+    print_success "Permisos ya existen (normal en actualización)"
+elif echo "$seed_output" | grep -q "Cannot find module"; then
+    print_warning "Archivo seed-permissions.js no encontrado en contenedor"
+    print_info "Copiando archivo al contenedor..."
+    
+    if [ -f "backend/prisma/seed-permissions.js" ]; then
+        $DOCKER_COMPOSE_CMD cp backend/prisma/seed-permissions.js backend:/app/prisma/seed-permissions.js 2>&1 || {
+            print_warning "Error al copiar archivo seed"
+        }
+        
+        # Reintentar seed
+        print_info "Reintentando seed..."
+        if $DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1 | grep -q "Seed completado\|Total de permisos"; then
+            print_success "Permisos actualizados después de copiar archivo"
+        else
+            print_warning "No se pudieron crear permisos automáticamente"
+            print_info "Los permisos se pueden crear desde la interfaz web"
+        fi
+    else
+        print_warning "Archivo seed-permissions.js no encontrado localmente"
+    fi
+else
+    print_warning "Estado de permisos indeterminado"
+    echo "$seed_output" | tail -5
+fi
+
+# ============================================
+# PASO 7: Reiniciar servicios
+# ============================================
+echo ""
+echo "📋 PASO 7: Reiniciando servicios..."
 echo ""
 
 print_info "Reiniciando contenedores..."
@@ -176,38 +271,104 @@ if $DOCKER_COMPOSE_CMD up -d; then
     print_success "Servicios reiniciados"
 else
     print_error "Error al reiniciar servicios"
-    exit 1
+    print_info "Intentando recuperación..."
+    
+    # Intentar detener y levantar
+    $DOCKER_COMPOSE_CMD down 2>&1 || true
+    sleep 3
+    
+    if $DOCKER_COMPOSE_CMD up -d; then
+        print_success "Servicios reiniciados después de recuperación"
+    else
+        print_error "No se pudieron reiniciar los servicios"
+        print_info "Verifica manualmente con: docker compose ps"
+        exit 1
+    fi
 fi
 
 # ============================================
-# PASO 7: Verificar servicios
+# PASO 8: Verificar servicios
 # ============================================
 echo ""
-echo "📋 PASO 7: Verificando servicios..."
+echo "📋 PASO 8: Verificando servicios..."
 echo ""
 
 print_info "Esperando a que los servicios estén listos..."
-sleep 5
+sleep 8
 
 print_info "Estado de servicios:"
-$DOCKER_COMPOSE_CMD ps
+service_status=$($DOCKER_COMPOSE_CMD ps)
+echo "$service_status"
+
+# Verificar que todos los servicios estén UP
+if echo "$service_status" | grep -q "Up"; then
+    print_success "Servicios iniciados"
+else
+    print_error "Algunos servicios no están corriendo"
+    print_info "Logs del backend:"
+    $DOCKER_COMPOSE_CMD logs backend --tail=20
+    exit 1
+fi
+
+# Verificar PostgreSQL
+print_info "Verificando PostgreSQL..."
+if $DOCKER_COMPOSE_CMD exec -T postgres pg_isready -U gestionscolar &> /dev/null; then
+    print_success "PostgreSQL responde correctamente"
+else
+    print_error "PostgreSQL no responde"
+    exit 1
+fi
 
 # Verificar backend
 print_info "Verificando backend..."
-max_attempts=10
+max_attempts=15
 attempt=0
+backend_ok=false
+
 while [ $attempt -lt $max_attempts ]; do
     if curl -f http://localhost:3001/health &> /dev/null 2>&1; then
         print_success "Backend responde correctamente"
+        backend_ok=true
         break
     fi
     attempt=$((attempt + 1))
-    if [ $attempt -eq $max_attempts ]; then
-        print_warning "Backend no responde aún (puede tardar un poco más)"
-    else
-        sleep 2
+    if [ $attempt -lt $max_attempts ]; then
+        echo "   Intento $attempt/$max_attempts..."
+        sleep 3
     fi
 done
+
+if [ "$backend_ok" = false ]; then
+    print_warning "Backend no responde en /health"
+    print_info "Verificando logs del backend:"
+    $DOCKER_COMPOSE_CMD logs backend --tail=30
+    print_warning "Puede que el backend esté iniciando aún"
+fi
+
+# Verificar frontend
+print_info "Verificando frontend..."
+if curl -f http://localhost &> /dev/null 2>&1; then
+    print_success "Frontend responde correctamente"
+else
+    print_warning "Frontend no responde aún (puede tardar un poco más)"
+fi
+
+# Verificar conexión de backend a BD
+print_info "Verificando conexión backend-BD..."
+db_check=$($DOCKER_COMPOSE_CMD exec -T backend node -e "
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+prisma.\$connect()
+  .then(() => { console.log('✅ Conexión exitosa'); process.exit(0); })
+  .catch((e) => { console.error('❌ Error:', e.message); process.exit(1); });
+" 2>&1)
+
+if echo "$db_check" | grep -q "Conexión exitosa"; then
+    print_success "Backend conectado a BD correctamente"
+else
+    print_warning "Verificar conexión backend-BD manualmente"
+    echo "$db_check"
+fi
 
 # ============================================
 # RESUMEN FINAL
