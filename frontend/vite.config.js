@@ -16,12 +16,11 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 1000,
-    // Minificación mejorada
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Eliminar console.log en producción
-      },
+    // Minificación con esbuild (más rápido que terser y viene incluido)
+    minify: 'esbuild',
+    // Eliminar console.log en producción
+    esbuild: {
+      drop: ['console', 'debugger'],
     },
   },
   server: {
