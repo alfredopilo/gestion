@@ -91,6 +91,16 @@ export const authenticate = async (req, res, next) => {
         accessibleInstitutionIds.add(userRecord.institucionId);
       }
 
+      // Cargar permisos del rol del usuario
+      const rolePermissions = await prisma.rolePermission.findMany({
+        where: { rol: userRecord.rol },
+        include: {
+          permission: true,
+        },
+      });
+
+      const permissions = rolePermissions.map(rp => rp.permission);
+
       req.user = {
         id: userRecord.id,
         nombre: userRecord.nombre,
@@ -102,6 +112,7 @@ export const authenticate = async (req, res, next) => {
         institucion: userRecord.institucion ?? null,
         instituciones,
         accessibleInstitutionIds: Array.from(accessibleInstitutionIds),
+        permissions,
       };
 
       // Obtener institución activa del sistema
@@ -185,3 +196,35 @@ export const authorize = (...roles) => {
   };
 };
 
+/**
+ * Middleware para verificar permisos específicos
+ * @param {string} modulo - El módulo a verificar (ej: 'estudiantes', 'calificaciones')
+ * @param {string} accion - La acción a verificar (ej: 'ver', 'crear', 'editar', 'eliminar')
+ */
+export const checkPermission = (modulo, accion) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ 
+        error: 'Usuario no autenticado.' 
+      });
+    }
+
+    // Admin siempre tiene todos los permisos
+    if (req.user.rol === 'ADMIN') {
+      return next();
+    }
+
+    // Verificar si el usuario tiene el permiso específico
+    const hasPermission = req.user.permissions?.some(
+      p => p.modulo === modulo && p.accion === accion
+    );
+
+    if (!hasPermission) {
+      return res.status(403).json({ 
+        error: `No tienes permiso para ${accion} en el módulo ${modulo}.` 
+      });
+    }
+
+    next();
+  };
+};

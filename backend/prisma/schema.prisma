@@ -516,6 +516,7 @@ model User {
   student              Student?
   teacher              Teacher?
   userInstitutions     UserInstitution[]
+  accessLogs           AccessLog[]
   institucion          Institution       @relation("InstitutionUsuarios", fields: [institucionId], references: [id], onDelete: Cascade)
 
   @@unique([numeroIdentificacion, institucionId])
@@ -615,4 +616,45 @@ model TareaEntrega {
   @@index([insumoId])
   @@index([estudianteId])
   @@map("tarea_entregas")
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  nombre          String           @unique
+  descripcion     String?
+  modulo          String
+  accion          String
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at")
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  rol          Rol
+  permissionId String     @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([rol, permissionId])
+  @@map("role_permissions")
+}
+
+model AccessLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  email     String?
+  action    String
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  details   Json?
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("access_logs")
 }

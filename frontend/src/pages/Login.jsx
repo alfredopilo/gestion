@@ -29,63 +29,117 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-500 to-primary-700 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-xl">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Gestión Escolar
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Inicia sesión en tu cuenta
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="numeroIdentificacion" className="sr-only">
-                Número de Identificación
-              </label>
-              <input
-                id="numeroIdentificacion"
-                name="numeroIdentificacion"
-                type="text"
-                autoComplete="username"
-                required
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Número de Identificación"
-                value={numeroIdentificacion}
-                onChange={(e) => setNumeroIdentificacion(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Contraseña
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-700 via-primary-800 to-primary-950 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Elementos decorativos de fondo */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{animationDelay: '1s'}}></div>
+      </div>
+
+      <div className="max-w-md w-full space-y-8 relative z-10">
+        {/* Logo/Icono */}
+        <div className="text-center animate-fade-in">
+          <div className="flex justify-center mb-6">
+            <div className="bg-white p-4 rounded-2xl shadow-strong">
+              <svg className="w-16 h-16 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
             </div>
           </div>
+          <h2 className="text-4xl font-bold text-white mb-2">
+            Gestión Escolar
+          </h2>
+          <p className="text-primary-100 text-lg">
+            Sistema de Administración Educativa
+          </p>
+        </div>
 
-          <div>
+        {/* Card de login */}
+        <div className="bg-white rounded-2xl shadow-strong p-8 animate-slide-up">
+          <div className="mb-6">
+            <h3 className="text-2xl font-semibold text-gray-900 text-center mb-2">
+              Iniciar Sesión
+            </h3>
+            <p className="text-gray-600 text-center text-sm">
+              Ingresa tus credenciales para continuar
+            </p>
+          </div>
+
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="numeroIdentificacion" className="block text-sm font-medium text-gray-700 mb-2">
+                  Número de Identificación
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <input
+                    id="numeroIdentificacion"
+                    name="numeroIdentificacion"
+                    type="text"
+                    autoComplete="username"
+                    required
+                    className="input-field pl-10"
+                    placeholder="Ingresa tu identificación"
+                    value={numeroIdentificacion}
+                    onChange={(e) => setNumeroIdentificacion(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    className="input-field pl-10"
+                    placeholder="Ingresa tu contraseña"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-3 text-base font-semibold"
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Iniciando sesión...
+                </span>
+              ) : (
+                'Iniciar Sesión'
+              )}
             </button>
-          </div>
+          </form>
+        </div>
 
-        </form>
+        {/* Footer */}
+        <p className="text-center text-primary-100 text-sm animate-fade-in">
+          © 2026 Sistema de Gestión Escolar - Todos los derechos reservados
+        </p>
       </div>
     </div>
   );

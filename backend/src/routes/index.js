@@ -26,6 +26,8 @@ import resetRoutes from './resetRoutes.js';
 import representanteRoutes from './representanteRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import tareaEntregaRoutes from './tareaEntregaRoutes.js';
+import permissionRoutes from './permissionRoutes.js';
+import logRoutes from './logRoutes.js';
 
 const router = express.Router();
 
@@ -56,6 +58,8 @@ router.use('/reset', resetRoutes);
 router.use('/representantes', representanteRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/tareas', tareaEntregaRoutes);
+router.use('/', permissionRoutes);
+router.use('/logs', logRoutes);
 
 export default router;
 

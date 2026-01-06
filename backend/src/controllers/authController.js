@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
 import { generateToken } from '../utils/jwt.js';
 import { loginSchema, updateProfileSchema } from '../utils/validators.js';
+import { logAction, logLoginFailed } from '../middleware/logging.js';
 
 /**
  * Login de usuario
@@ -21,6 +22,8 @@ export const login = async (req, res, next) => {
     });
 
     if (!user) {
+      // Registrar intento de login fallido
+      await logLoginFailed(numeroIdentificacion, 'Usuario no encontrado', req);
       return res.status(401).json({
         error: 'Credenciales inválidas.',
       });
@@ -30,6 +33,8 @@ export const login = async (req, res, next) => {
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!isValidPassword) {
+      // Registrar intento de login fallido
+      await logLoginFailed(user.email, 'Contraseña incorrecta', req);
       return res.status(401).json({
         error: 'Credenciales inválidas.',
       });
@@ -37,6 +42,8 @@ export const login = async (req, res, next) => {
 
     // Verificar que el usuario esté activo
     if (user.estado !== 'ACTIVO') {
+      // Registrar intento de login con usuario inactivo
+      await logLoginFailed(user.email, `Usuario con estado: ${user.estado}`, req);
       return res.status(403).json({
         error: 'Usuario inactivo. Contacte al administrador.',
       });
@@ -108,6 +115,13 @@ export const login = async (req, res, next) => {
       additionalInfo = { representante };
     }
 
+    // Registrar login exitoso
+    await logAction(user.id, 'LOGIN', {
+      email: user.email,
+      rol: user.rol,
+      institucionId: user.institucionId,
+    }, req);
+
     res.json({
       message: 'Login exitoso',
       token,
@@ -122,6 +136,10 @@ export const login = async (req, res, next) => {
       },
     });
   } catch (error) {
+    // Si es un error de validación o autenticación, registrar el intento fallido
+    if (req.body?.numeroIdentificacion) {
+      await logLoginFailed(req.body.numeroIdentificacion, error.message, req);
+    }
     next(error);
   }
 };
@@ -219,6 +237,7 @@ export const getProfile = async (req, res, next) => {
     res.json({
       ...user,
       ...additionalInfo,
+      permissions: req.user.permissions || [],
     });
   } catch (error) {
     next(error);
@@ -344,3 +363,21 @@ export const changePassword = async (req, res, next) => {
   }
 };
 
+/**
+ * Logout de usuario (registra la acción)
+ */
+export const logout = async (req, res, next) => {
+  try {
+    // Registrar logout
+    await logAction(req.user.id, 'LOGOUT', {
+      email: req.user.email,
+      rol: req.user.rol,
+    }, req);
+
+    res.json({
+      message: 'Sesión cerrada exitosamente.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};

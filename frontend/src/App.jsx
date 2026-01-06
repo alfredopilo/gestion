@@ -37,6 +37,8 @@ import Supplementary from './pages/Supplementary';
 import SchoolPromotion from './pages/SchoolPromotion';
 import DatabaseBackup from './pages/DatabaseBackup';
 import MisTareas from './pages/MisTareas';
+import PermissionManagement from './pages/PermissionManagement';
+import AccessLogs from './pages/AccessLogs';
 
 // Componente que renderiza el dashboard según el rol
 function DashboardByRole() {
@@ -104,6 +106,8 @@ function App() {
             <Route path="mis-tareas" element={<ProtectedRoute requiredRole={['ESTUDIANTE']}><MisTareas /></ProtectedRoute>} />
             <Route path="general-settings" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GeneralSettings /></ProtectedRoute>} />
             <Route path="institution-settings" element={<ProtectedRoute requiredRole={['ADMIN']}><InstitutionSettings /></ProtectedRoute>} />
+            <Route path="permission-management" element={<ProtectedRoute requiredRole={['ADMIN']}><PermissionManagement /></ProtectedRoute>} />
+            <Route path="access-logs" element={<ProtectedRoute requiredRole={['ADMIN']}><AccessLogs /></ProtectedRoute>} />
           </Route>
         </Routes>
       </Router>

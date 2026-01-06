@@ -182,6 +182,8 @@ const Layout = () => {
         { name: 'Configuración General', href: '/general-settings', roles: ['ADMIN', 'SECRETARIA'] },
         { name: 'Configuración Institución', href: '/institution-settings', roles: ['ADMIN'] },
         { name: 'Ficha del Estudiante', href: '/student-profile-template', roles: ['ADMIN', 'SECRETARIA'] },
+        { name: 'Gestión de Permisos', href: '/permission-management', roles: ['ADMIN'] },
+        { name: 'Logs de Acceso', href: '/access-logs', roles: ['ADMIN'] },
       ]
     },
   ];
@@ -310,8 +312,74 @@ const Layout = () => {
           </button>
         </div>
 
+        {/* NUEVO: Información de Usuario e Institución - Siempre visible en la parte superior */}
+        {sidebarOpen && (
+          <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-primary-50 to-white">
+            {/* Selector de Institución */}
+            {institutions.length > 0 && (
+              <div className="mb-3">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Institución
+                </label>
+                <select
+                  value={selectedInstitutionId || ''}
+                  onChange={(e) => {
+                    const institutionId = e.target.value || null;
+                    changeInstitution(institutionId);
+                  }}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                >
+                  {institutions.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.nombre} {inst.activa && '✓'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {/* Info Usuario */}
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
+                {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {user?.nombre} {user?.apellido}
+                </p>
+                <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+              </div>
+            </div>
+            
+            {/* Botones Perfil y Cerrar Sesión */}
+            <div className="flex gap-2">
+              <Link 
+                to="/profile" 
+                className="flex-1 text-center px-3 py-2 text-xs font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+              >
+                Perfil
+              </Link>
+              <button 
+                onClick={logout}
+                className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-danger-600 rounded-lg hover:bg-danger-700 transition-colors"
+              >
+                Salir
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Versión colapsada - Solo avatar */}
+        {!sidebarOpen && (
+          <div className="py-4 border-b border-gray-200 flex justify-center">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
+              {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+            </div>
+          </div>
+        )}
+
         {/* Menú de navegación */}
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-y-auto py-4 max-h-[calc(100vh-24rem)] custom-scrollbar">
           <div className="space-y-1 px-2">
             {filteredNav.map((item) => {
               if (item.children) {
@@ -386,76 +454,6 @@ const Layout = () => {
             })}
           </div>
         </nav>
-
-        {/* Selector de Institución */}
-        {institutions.length > 0 && (
-          <div className="border-t border-gray-200 p-4">
-            {sidebarOpen ? (
-              <>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
-                  Institución
-                </label>
-                <select
-                  value={selectedInstitutionId || ''}
-                  onChange={(e) => {
-                    const institutionId = e.target.value || null;
-                    changeInstitution(institutionId);
-                  }}
-                  className="w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  {institutions.map((inst) => (
-                    <option key={inst.id} value={inst.id}>
-                      {inst.nombre} {inst.activa && '(Activa)'}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : (
-              <div className="flex justify-center">
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Footer del sidebar - Información del usuario */}
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                <span className="text-primary-600 text-sm font-semibold">
-                  {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
-                </span>
-              </div>
-            </div>
-            {sidebarOpen && (
-              <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.nombre} {user?.apellido}
-                </p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-              </div>
-            )}
-          </div>
-          {sidebarOpen && (
-            <div className="mt-3 space-y-1">
-              <Link
-                to="/profile"
-                className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-              >
-                Perfil
-              </Link>
-              <button
-                onClick={logout}
-                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
 
       {/* Overlay para móvil */}
@@ -483,8 +481,64 @@ const Layout = () => {
           </button>
         </div>
 
+        {/* Información de Usuario e Institución Móvil */}
+        <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-primary-50 to-white">
+          {/* Selector de Institución */}
+          {institutions.length > 0 && (
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Institución
+              </label>
+              <select
+                value={selectedInstitutionId || ''}
+                onChange={(e) => {
+                  const institutionId = e.target.value || null;
+                  changeInstitution(institutionId);
+                }}
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+              >
+                {institutions.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.nombre} {inst.activa && '✓'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Info Usuario */}
+          <div className="flex items-center space-x-3 mb-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
+              {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {user?.nombre} {user?.apellido}
+              </p>
+              <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+            </div>
+          </div>
+          
+          {/* Botones Perfil y Cerrar Sesión */}
+          <div className="flex gap-2">
+            <Link 
+              to="/profile"
+              onClick={() => setSidebarOpen(false)}
+              className="flex-1 text-center px-3 py-2 text-xs font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+            >
+              Perfil
+            </Link>
+            <button 
+              onClick={logout}
+              className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-danger-600 rounded-lg hover:bg-danger-700 transition-colors"
+            >
+              Salir
+            </button>
+          </div>
+        </div>
+
         {/* Menú de navegación móvil */}
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-y-auto py-4 max-h-[calc(100vh-24rem)] custom-scrollbar">
           <div className="space-y-1 px-2">
             {filteredNav.map((item) => {
               if (item.children) {
@@ -557,61 +611,6 @@ const Layout = () => {
             })}
           </div>
         </nav>
-
-        {/* Selector de Institución móvil */}
-        {institutions.length > 0 && (
-          <div className="border-t border-gray-200 p-4">
-            <label className="block text-xs font-medium text-gray-700 mb-2">
-              Institución
-            </label>
-            <select
-              value={selectedInstitutionId || ''}
-              onChange={(e) => {
-                const institutionId = e.target.value || null;
-                changeInstitution(institutionId);
-              }}
-              className="w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-            >
-              {institutions.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.nombre} {inst.activa && '(Activa)'}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Footer del sidebar móvil */}
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex items-center mb-3">
-            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-              <span className="text-primary-600 text-sm font-semibold">
-                {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
-              </span>
-            </div>
-            <div className="ml-3 flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.nombre} {user?.apellido}
-              </p>
-              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Link
-              to="/profile"
-              onClick={() => setSidebarOpen(false)}
-              className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-            >
-              Perfil
-            </Link>
-            <button
-              onClick={logout}
-              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md"
-            >
-              Cerrar Sesión
-            </button>
-          </div>
-        </div>
       </aside>
 
       {/* Contenido principal */}

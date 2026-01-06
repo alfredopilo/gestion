@@ -1,19 +1,22 @@
 #!/bin/bash
 
-# Script de actualización automática para Sistema de Gestión Escolar
-# Este script actualiza el sistema, aplica migraciones y resuelve
-# automáticamente migraciones fallidas si es necesario
+# Script de actualización para Sistema de Gestión Escolar
+# Aplica cambios, migraciones y actualiza contenedores
 
 set -e  # Salir si hay algún error
 
-# Colores para los mensajes
+echo "🔄 Actualización del Sistema de Gestión Escolar"
+echo "=============================================="
+echo ""
+
+# Colores para output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Función para imprimir mensajes
+# Funciones de impresión
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
@@ -30,317 +33,234 @@ print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
-# Verificar si es docker-compose o docker compose
+# Detectar comando de Docker Compose
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker-compose"
 else
     DOCKER_COMPOSE_CMD="docker compose"
 fi
 
-# Función para resolver migraciones fallidas
-resolve_failed_migrations() {
-    print_warning "Detectadas migraciones fallidas. Intentando resolver automáticamente..."
-    
-    # Obtener lista de migraciones fallidas desde la BD
-    local failed_migrations=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
-        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | \
-        tr -d ' ' | grep -v '^$' || echo "")
-    
-    if [ -z "$failed_migrations" ]; then
-        print_warning "No se pudieron identificar migraciones fallidas automáticamente"
-        return 1
-    fi
-    
-    # Resolver cada migración fallida
-    while IFS= read -r migration; do
-        if [ -n "$migration" ]; then
-            print_info "Resolviendo migración fallida: $migration"
-            if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$migration" 2>&1; then
-                print_success "Migración $migration resuelta"
-            else
-                print_error "Error al resolver migración $migration"
-                return 1
-            fi
-        fi
-    done <<< "$failed_migrations"
-    
-    return 0
-}
-
-echo "🔄 Actualización del Sistema de Gestión Escolar"
-echo "=============================================="
+# ============================================
+# PASO 1: Pull de cambios (si es un repositorio git)
+# ============================================
+echo "📋 PASO 1: Verificando cambios..."
 echo ""
 
-# ============================================
-# PASO 1: Actualizar Código desde Git
-# ============================================
-echo "📋 PASO 1: Actualizando código desde Git..."
-echo ""
-
-if [ -d .git ]; then
-    print_info "Descargando últimos cambios de Git..."
-    if git pull; then
-        print_success "Código actualizado desde Git"
-    else
-        print_warning "Error al actualizar desde Git (puede que no sea un repositorio Git)"
+if [ -d ".git" ]; then
+    print_info "Detectado repositorio Git"
+    read -p "¿Deseas hacer pull de los últimos cambios? (s/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Ss]$ ]]; then
+        print_info "Haciendo pull de cambios..."
+        git pull || print_warning "Error al hacer pull, continuando de todos modos..."
+        print_success "Cambios actualizados desde repositorio"
     fi
 else
-    print_warning "No es un repositorio Git, saltando actualización de código"
+    print_info "No es un repositorio Git, saltando paso de pull"
 fi
 
 # ============================================
-# PASO 2: Configurar VITE_API_URL
+# PASO 2: Backup de base de datos (opcional)
 # ============================================
 echo ""
-echo "📋 PASO 2: Configurando URL del API..."
+echo "📋 PASO 2: Backup de base de datos..."
 echo ""
 
-# Verificar si ya existe frontend/.env
-update_ip=""
-if [ -f frontend/.env ]; then
-    current_url=$(grep "VITE_API_URL" frontend/.env | cut -d'=' -f2 || echo "")
-    if [ -n "$current_url" ]; then
-        print_info "URL actual del API: $current_url"
-        print_info "¿Deseas actualizar la IP del servidor? (s/n)"
-        read -r update_ip
-        if [[ ! "$update_ip" =~ ^[Ss]$ ]]; then
-            print_info "Manteniendo configuración actual"
-            server_ip="SKIP"
-        fi
-    fi
-fi
-
-# Si se necesita actualizar o no existe configuración
-if [ "$server_ip" != "SKIP" ] && ([ ! -f frontend/.env ] || [[ "$update_ip" =~ ^[Ss]$ ]]); then
-    print_info "Ingresa la IP o dominio del servidor (ejemplo: 142.93.17.71 o tu-dominio.com)"
-    print_info "Presiona Enter para usar localhost (solo desarrollo local)"
-    read -r server_ip
-    
-    if [ -z "$server_ip" ]; then
-        server_ip="localhost"
-        print_info "Usando localhost para desarrollo local"
-    else
-        print_success "IP/Dominio configurado: $server_ip"
-    fi
-    
-    # Crear o actualizar frontend/.env
-    print_info "Configurando frontend/.env con VITE_API_URL=http://$server_ip:3000/api/v1"
-    mkdir -p frontend
-    echo "VITE_API_URL=http://$server_ip:3000/api/v1" > frontend/.env
-    print_success "Archivo frontend/.env creado/actualizado"
-    
-    # También actualizar .env en la raíz si existe
-    if [ -f .env ]; then
-        if grep -q "VITE_API_URL" .env; then
-            sed -i.bak "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip:3000/api/v1|" .env 2>/dev/null || \
-            sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip:3000/api/v1|" .env
-            print_success "VITE_API_URL actualizado en .env"
-        else
-            echo "VITE_API_URL=http://$server_ip:3000/api/v1" >> .env
-            print_success "VITE_API_URL agregado a .env"
-        fi
+read -p "¿Deseas hacer un backup de la base de datos antes de actualizar? (s/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Ss]$ ]]; then
+    print_info "Creando backup de base de datos..."
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    $DOCKER_COMPOSE_CMD exec -T postgres pg_dump -U gestionscolar gestion_escolar > "backup_${timestamp}.sql" 2>/dev/null || {
+        print_warning "Error al crear backup, continuando..."
+    }
+    if [ -f "backup_${timestamp}.sql" ]; then
+        print_success "Backup creado: backup_${timestamp}.sql"
     fi
 fi
 
 # ============================================
-# PASO 3: Verificar Servicios
+# PASO 3: Instalar dependencias backend
 # ============================================
 echo ""
-echo "📋 PASO 3: Verificando servicios Docker..."
+echo "📋 PASO 3: Actualizando dependencias backend..."
 echo ""
 
-if ! $DOCKER_COMPOSE_CMD ps &> /dev/null; then
-    print_error "No se puede acceder a Docker Compose"
-    exit 1
-fi
-
-# Verificar si los servicios están corriendo
-if ! $DOCKER_COMPOSE_CMD ps | grep -q "Up"; then
-    print_warning "Los servicios no están corriendo. Iniciándolos..."
-    $DOCKER_COMPOSE_CMD up -d
-    sleep 5
-fi
-
-print_success "Servicios Docker verificados"
-
-# ============================================
-# PASO 4: Reconstruir Contenedores
-# ============================================
-echo ""
-echo "📋 PASO 4: Reconstruyendo contenedores..."
-echo ""
-
-print_info "Deteniendo servicios..."
-$DOCKER_COMPOSE_CMD down
-
-print_info "Construyendo imágenes con nuevas dependencias..."
-if $DOCKER_COMPOSE_CMD build --no-cache; then
-    print_success "Imágenes construidas correctamente"
+print_info "Instalando dependencias del backend..."
+if $DOCKER_COMPOSE_CMD exec -T backend npm install 2>&1 | grep -v "npm WARN"; then
+    print_success "Dependencias del backend actualizadas"
 else
-    print_error "Error al construir imágenes"
-    exit 1
+    print_warning "Puede haber advertencias en las dependencias, continuando..."
 fi
 
-print_info "Levantando contenedores..."
-if $DOCKER_COMPOSE_CMD up -d; then
-    print_success "Contenedores levantados"
+# ============================================
+# PASO 4: Generar Prisma Client
+# ============================================
+echo ""
+echo "📋 PASO 4: Regenerando Prisma Client..."
+echo ""
+
+print_info "Generando Prisma Client..."
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma generate; then
+    print_success "Prisma Client regenerado"
 else
-    print_error "Error al levantar contenedores"
+    print_error "Error al regenerar Prisma Client"
     exit 1
 fi
 
 # ============================================
-# PASO 5: Esperar a que los Servicios Estén Listos
+# PASO 5: Ejecutar migraciones pendientes
 # ============================================
 echo ""
-echo "📋 PASO 5: Esperando a que los servicios estén listos..."
+echo "📋 PASO 5: Aplicando migraciones de base de datos..."
 echo ""
 
-print_info "Esperando a que PostgreSQL esté listo..."
-max_attempts=30
-attempt=0
-while [ $attempt -lt $max_attempts ]; do
-    if $DOCKER_COMPOSE_CMD exec -T postgres pg_isready -U gestionscolar &> /dev/null; then
-        print_success "PostgreSQL está listo"
-        break
-    fi
-    attempt=$((attempt + 1))
-    echo "   Intento $attempt/$max_attempts..."
-    sleep 2
-done
-
-if [ $attempt -eq $max_attempts ]; then
-    print_error "PostgreSQL no respondió a tiempo"
-    exit 1
-fi
-
-sleep 3
-
-print_info "Esperando a que el backend inicie..."
-sleep 5
-
-# ============================================
-# PASO 6: Actualizar Base de Datos
-# ============================================
-echo ""
-echo "📋 PASO 6: Actualizando base de datos..."
-echo ""
-
-# Regenerar cliente de Prisma
-print_info "Regenerando cliente de Prisma..."
-if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:generate; then
-    print_success "Cliente de Prisma regenerado"
-else
-    print_error "Error al regenerar cliente de Prisma"
-    exit 1
-fi
-
-# Verificar estado de migraciones
-print_info "Verificando estado de migraciones..."
+print_info "Verificando migraciones pendientes..."
 migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1)
 
-# Verificar si hay migraciones fallidas
-if echo "$migration_status" | grep -q "failed migrations\|P3009"; then
-    print_warning "Se detectaron migraciones fallidas"
-    if resolve_failed_migrations; then
-        print_success "Migraciones fallidas resueltas"
+if echo "$migration_status" | grep -q "Database schema is up to date"; then
+    print_success "No hay migraciones pendientes"
+elif echo "$migration_status" | grep -q "following migrations have not yet been applied"; then
+    print_info "Hay migraciones pendientes, aplicando..."
+    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy; then
+        print_success "Migraciones aplicadas correctamente"
     else
-        print_error "No se pudieron resolver las migraciones fallidas automáticamente"
-        print_info "Resuélvelas manualmente con:"
-        echo "   $DOCKER_COMPOSE_CMD exec backend npx prisma migrate resolve --rolled-back NOMBRE_MIGRACION"
+        print_error "Error al aplicar migraciones"
+        print_info "Verifica los logs con: $DOCKER_COMPOSE_CMD logs backend"
         exit 1
     fi
-fi
-
-# Aplicar migraciones
-print_info "Aplicando migraciones de base de datos..."
-if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy; then
-    print_success "Migraciones aplicadas correctamente"
 else
-    print_error "Error al aplicar migraciones"
-    
-    # Verificar si es error P3009 (migraciones fallidas)
-    if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy 2>&1 | grep -q "P3009"; then
-        print_warning "Error P3009 detectado. Intentando resolver migraciones fallidas..."
-        if resolve_failed_migrations; then
-            print_info "Reintentando aplicar migraciones..."
-            if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy; then
-                print_success "Migraciones aplicadas después de resolver conflictos"
-            else
-                print_error "Error persistente al aplicar migraciones"
-                exit 1
-            fi
-        else
-            exit 1
-        fi
-    else
-        print_info "Verifica los logs: $DOCKER_COMPOSE_CMD logs backend"
-        exit 1
-    fi
-fi
-
-# Verificar estado final
-print_info "Verificando estado final de migraciones..."
-if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status | grep -q "Database schema is up to date\|All migrations have been applied"; then
-    print_success "Base de datos sincronizada correctamente"
-else
-    print_warning "Verifica el estado de las migraciones manualmente"
+    print_warning "Estado de migraciones indeterminado, intentando aplicar..."
+    $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy || {
+        print_warning "Puede haber un problema con las migraciones"
+    }
 fi
 
 # ============================================
-# PASO 7: Limpieza y Verificación
+# PASO 6: Ejecutar Script SQL para access_logs
 # ============================================
 echo ""
-echo "📋 PASO 7: Limpieza y verificación final..."
+echo "📋 PASO 6: Verificando tabla access_logs..."
 echo ""
 
-# Limpiar imágenes antiguas (opcional)
-print_info "Limpiando imágenes antiguas de Docker..."
-if docker image prune -f; then
-    print_success "Limpieza completada"
+if [ -f "create_access_logs_table.sql" ]; then
+    print_info "Verificando/creando tabla access_logs..."
+    $DOCKER_COMPOSE_CMD cp create_access_logs_table.sql backend:/tmp/create_access_logs_table.sql
+    if $DOCKER_COMPOSE_CMD exec -T backend psql postgresql://gestionscolar:gestionscolar2024@postgres:5432/gestion_escolar -f /tmp/create_access_logs_table.sql 2>&1 | grep -q "CREATE TABLE\|already exists"; then
+        print_success "Tabla access_logs verificada/creada"
+    else
+        print_warning "La tabla access_logs puede ya existir o hubo un error menor"
+    fi
 else
-    print_warning "Error en la limpieza (no crítico)"
+    print_info "Script de access_logs no encontrado, puede que ya esté aplicado"
 fi
 
-# Verificar servicios
-print_info "Verificando estado de servicios..."
-sleep 3
+# ============================================
+# PASO 7: Seed de permisos (idempotente)
+# ============================================
+echo ""
+echo "📋 PASO 7: Actualizando permisos..."
+echo ""
+
+print_info "Ejecutando seed de permisos..."
+if $DOCKER_COMPOSE_CMD exec -T backend node prisma/seed-permissions.js 2>&1 | grep -v "already exists"; then
+    print_success "Permisos actualizados"
+else
+    print_warning "Algunos permisos pueden ya existir (esto es normal)"
+fi
+
+# ============================================
+# PASO 8: Instalar dependencias frontend
+# ============================================
+echo ""
+echo "📋 PASO 8: Actualizando dependencias frontend..."
+echo ""
+
+print_info "Instalando dependencias del frontend..."
+if $DOCKER_COMPOSE_CMD exec -T frontend npm install 2>&1 | grep -v "npm WARN"; then
+    print_success "Dependencias del frontend actualizadas"
+else
+    print_warning "Puede haber advertencias en las dependencias, continuando..."
+fi
+
+# ============================================
+# PASO 9: Reconstruir y reiniciar contenedores
+# ============================================
+echo ""
+echo "📋 PASO 9: Reconstruyendo contenedores..."
+echo ""
+
+print_info "Reconstruyendo imágenes..."
+if $DOCKER_COMPOSE_CMD build; then
+    print_success "Imágenes reconstruidas"
+else
+    print_error "Error al reconstruir imágenes"
+    exit 1
+fi
+
+print_info "Reiniciando contenedores..."
+if $DOCKER_COMPOSE_CMD up -d; then
+    print_success "Contenedores reiniciados"
+else
+    print_error "Error al reiniciar contenedores"
+    exit 1
+fi
+
+# ============================================
+# PASO 10: Verificar servicios
+# ============================================
+echo ""
+echo "📋 PASO 10: Verificando servicios..."
+echo ""
+
+print_info "Esperando a que los servicios estén listos..."
+sleep 5
 
 if $DOCKER_COMPOSE_CMD ps | grep -q "Up"; then
-    print_success "Todos los servicios están corriendo"
-    echo ""
+    print_success "Servicios corriendo correctamente"
     $DOCKER_COMPOSE_CMD ps
 else
     print_warning "Algunos servicios pueden no estar corriendo"
     $DOCKER_COMPOSE_CMD ps
 fi
 
-# Verificar backend
+# Verificar backend health
 print_info "Verificando salud del backend..."
-sleep 2
-if curl -f http://localhost:3000/health &> /dev/null; then
-    print_success "Backend responde correctamente"
-else
-    print_warning "Backend no responde aún (puede tardar unos segundos más)"
-fi
+sleep 3
+max_attempts=10
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+    if curl -f http://localhost:3001/health &> /dev/null; then
+        print_success "Backend responde correctamente"
+        break
+    fi
+    attempt=$((attempt + 1))
+    if [ $attempt -eq $max_attempts ]; then
+        print_warning "Backend no responde aún (puede tardar un poco más)"
+    else
+        sleep 2
+    fi
+done
 
 # ============================================
 # RESUMEN FINAL
 # ============================================
 echo ""
 echo "=============================================="
-echo "✅ ¡Actualización completada exitosamente!"
+echo "🎉 ¡Actualización completada!"
 echo "=============================================="
 echo ""
-echo "📍 Accesos:"
+echo "📍 Servicios:"
 echo "   • Frontend:        http://localhost"
-echo "   • Backend API:      http://localhost:3000"
-echo "   • API Docs:        http://localhost:3000/api-docs"
-echo "   • Health Check:    http://localhost:3000/health"
+echo "   • Backend API:     http://localhost:3001"
 echo ""
 echo "📚 Comandos útiles:"
 echo "   • Ver logs:        $DOCKER_COMPOSE_CMD logs -f"
-echo "   • Estado:          $DOCKER_COMPOSE_CMD ps"
-echo "   • Estado migraciones: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
+echo "   • Ver estado:      $DOCKER_COMPOSE_CMD ps"
+echo "   • Reiniciar:       $DOCKER_COMPOSE_CMD restart"
 echo ""
-
+echo "🔍 Si hay problemas:"
+echo "   • Logs backend:    $DOCKER_COMPOSE_CMD logs -f backend"
+echo "   • Logs frontend:   $DOCKER_COMPOSE_CMD logs -f frontend"
+echo "   • Logs DB:         $DOCKER_COMPOSE_CMD logs -f postgres"
+echo ""

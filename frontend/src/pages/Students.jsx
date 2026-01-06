@@ -205,23 +205,85 @@ const Students = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Estudiantes</h1>
-        <button
-          onClick={fetchStudents}
-          className="text-primary-600 hover:text-primary-700 text-sm flex items-center"
-          title="Actualizar lista"
-        >
-          <span className="mr-1">🔄</span> Actualizar
-        </button>
+    <div className="p-6 space-y-6 animate-fade-in">
+      {/* Header moderno con gradiente */}
+      <div className="bg-gradient-to-r from-primary-600 to-primary-800 rounded-xl shadow-medium p-6 text-white">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight mb-2">Estudiantes</h1>
+            <p className="text-primary-100">Gestión de estudiantes del sistema educativo</p>
+          </div>
+          <button
+            onClick={fetchStudents}
+            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200"
+            title="Actualizar lista"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="font-medium">Actualizar</span>
+          </button>
+        </div>
+        
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-3 gap-4 mt-6">
+          <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{students.length}</p>
+                <p className="text-sm text-primary-100">Estudiantes</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{students.filter(s => s.user?.estado === 'ACTIVO').length}</p>
+                <p className="text-sm text-primary-100">Activos</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white bg-opacity-10 backdrop-blur rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{courses.length}</p>
+                <p className="text-sm text-primary-100">Cursos</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white shadow rounded-lg p-4 mb-6">
+      {/* Filtros mejorados con iconos */}
+      <div className="card p-6 animate-slide-up">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          Filtros de Búsqueda
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Búsqueda */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
+              <svg className="w-4 h-4 inline mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
               Buscar
             </label>
             <div className="flex gap-2">
@@ -230,25 +292,32 @@ const Students = () => {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyPress={handleSearchKeyPress}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2"
-                placeholder="Número de identificación, nombre, apellido, email o matrícula..."
+                className="flex-1 input-field"
+                placeholder="Nombre, ID, email..."
               />
               <button
                 onClick={handleSearch}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 whitespace-nowrap"
+                className="btn-primary whitespace-nowrap"
               >
-                Buscar
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </button>
             </div>
           </div>
+          
+          {/* Filtro por Curso */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filtrar por Curso
+              <svg className="w-4 h-4 inline mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              Curso
             </label>
             <select
               value={filters.grupoId}
               onChange={(e) => handleFilterChange('grupoId', e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2"
+              className="input-field"
             >
               <option value="">Todos los cursos</option>
               {courses.map((course) => (
@@ -258,22 +327,29 @@ const Students = () => {
               ))}
             </select>
           </div>
+          
+          {/* Filtro por Estado */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filtrar por Estado
+              <svg className="w-4 h-4 inline mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Estado
             </label>
             <select
               value={filters.estado}
               onChange={(e) => handleFilterChange('estado', e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2"
+              className="input-field"
             >
-              <option value="">Todos los estados</option>
+              <option value="">Todos</option>
               <option value="ACTIVO">Activo</option>
               <option value="INACTIVO">Inactivo</option>
               <option value="SUSPENDIDO">Suspendido</option>
             </select>
           </div>
-          <div>
+          
+          {/* Acciones */}
+          <div className="space-y-2">
             <label className="flex items-center space-x-2 mt-2">
               <input
                 type="checkbox"
@@ -281,13 +357,11 @@ const Students = () => {
                 onChange={(e) => handleFilterChange('includeRetired', e.target.checked)}
                 className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-sm text-gray-700">Incluir estudiantes retirados</span>
+              <span className="text-sm text-gray-700">Incluir retirados</span>
             </label>
-          </div>
-          <div className="flex items-end">
             <button
               onClick={clearFilters}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+              className="w-full btn-outline text-sm"
             >
               Limpiar Filtros
             </button>
@@ -295,107 +369,166 @@ const Students = () => {
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+      <div className="card animate-slide-up" style={{ animationDelay: '0.1s' }}>
+        <div className="table-container">
+          <table className="modern-table">
+            <thead>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Número de Identificación
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                    </svg>
+                    <span>ID</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Nombre
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span>Estudiante</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Email
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>Email</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Curso
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span>Curso</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Matrícula
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Matrícula</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Estado
+                <th className="px-6 py-4">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Estado</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Acciones
-                </th>
+                <th className="px-6 py-4">Acciones</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody>
               {!filters.grupoId && !filters.estado && !filters.search.trim() ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <td colSpan="7">
+                    <div className="empty-state">
+                      <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
-                      <p className="text-lg font-medium text-gray-700 mb-2">Aplica filtros para ver estudiantes</p>
-                      <p className="text-sm text-gray-500">Usa los filtros de búsqueda, curso o estado para mostrar los estudiantes</p>
+                      <h3 className="empty-state-title">Aplica filtros para ver estudiantes</h3>
+                      <p className="empty-state-description">Usa los filtros de búsqueda, curso o estado para mostrar los estudiantes</p>
                     </div>
                   </td>
                 </tr>
               ) : students.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                    No se encontraron estudiantes con los filtros aplicados
+                  <td colSpan="7">
+                    <div className="empty-state">
+                      <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <h3 className="empty-state-title">No se encontraron estudiantes</h3>
+                      <p className="empty-state-description">Intenta cambiar los filtros de búsqueda</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 students.map((student) => (
-                  <tr key={student.id} className={`hover:bg-gray-50 ${student._isPending ? 'bg-yellow-50' : ''} ${student.retirado ? 'bg-red-50' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {student.user?.numeroIdentificacion ?? '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {student._isPending ? (
-                        <span className="text-gray-900 font-medium">
-                          {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
-                          <span className="ml-2 text-xs text-yellow-600">(Pendiente de registro)</span>
-                        </span>
-                      ) : (
-                        <Link
-                          to={`/students/${student.id}`}
-                          className="text-primary-600 hover:text-primary-900 font-medium"
-                        >
-                          {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {student.user?.email || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {student.grupo ? (
-                        <span className="text-blue-600">{student.grupo.nombre}</span>
-                      ) : (
-                        <span className="text-gray-400">Sin asignar</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {student.matricula || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        student.user?.estado === 'ACTIVO' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {student.user?.estado || 'N/A'}
+                  <tr key={student.id} className={`${student._isPending ? 'bg-warning-50' : ''} ${student.retirado ? 'bg-danger-50' : ''}`}>
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm font-medium text-gray-900">
+                        {student.user?.numeroIdentificacion ?? '-'}
                       </span>
-                      {student._isPending && (
-                        <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          Pendiente
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        {/* Avatar con iniciales */}
+                        <div className="avatar avatar-md bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-md">
+                          {student.user?.nombre?.charAt(0) || 'S'}{student.user?.apellido?.charAt(0) || 'N'}
+                        </div>
+                        <div>
+                          {student._isPending ? (
+                            <span className="text-gray-900 font-semibold block">
+                              {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
+                            </span>
+                          ) : (
+                            <Link
+                              to={`/students/${student.id}`}
+                              className="text-primary-600 hover:text-primary-800 font-semibold transition-colors block"
+                            >
+                              {student.user?.apellido || ''} {student.user?.nombre || 'Sin nombre'}
+                            </Link>
+                          )}
+                          {student._isPending && (
+                            <span className="badge badge-warning text-xs mt-1">Pendiente de registro</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center text-sm text-gray-600">
+                        <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        {student.user?.email || '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {student.grupo ? (
+                        <span className="badge badge-primary">
+                          {student.grupo.nombre}
                         </span>
-                      )}
-                      {student.retirado && (
-                        <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                          Retirado
-                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-sm">Sin asignar</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm text-gray-600">
+                        {student.matricula || '-'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`badge ${
+                          student.user?.estado === 'ACTIVO' 
+                            ? 'badge-success' 
+                            : student.user?.estado === 'SUSPENDIDO'
+                            ? 'badge-warning'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          <span className={`status-dot mr-1.5 ${
+                            student.user?.estado === 'ACTIVO' 
+                              ? 'status-dot-success' 
+                              : student.user?.estado === 'SUSPENDIDO'
+                              ? 'status-dot-warning'
+                              : 'bg-gray-500'
+                          }`}></span>
+                          {student.user?.estado || 'N/A'}
+                        </span>
+                        {student.retirado && (
+                          <span className="badge badge-danger">Retirado</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
                       {!student._isPending && (
                         <div className="flex space-x-2">
                           {student.retirado ? (
@@ -405,7 +538,7 @@ const Students = () => {
                                   setSelectedStudent({ ...student, reactivationMode: 'reactivate' });
                                   setShowReactivationModal(true);
                                 }}
-                                className="text-blue-600 hover:text-blue-900 text-sm"
+                                className="text-info-600 hover:text-info-800 text-sm font-medium transition-colors"
                                 title="Reactivar con segunda matrícula"
                               >
                                 Reactivar
@@ -415,25 +548,23 @@ const Students = () => {
                                   setSelectedStudent({ ...student, reactivationMode: 'transfer' });
                                   setShowReactivationModal(true);
                                 }}
-                                className="text-green-600 hover:text-green-900 text-sm"
+                                className="text-success-600 hover:text-success-800 text-sm font-medium transition-colors"
                                 title="Transferir a otra institución"
                               >
                                 Transferir
                               </button>
                             </>
                           ) : (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setSelectedStudent(student);
-                                  setShowWithdrawalModal(true);
-                                }}
-                                className="text-red-600 hover:text-red-900 text-sm"
-                                title="Retirar estudiante"
-                              >
-                                Retirar
-                              </button>
-                            </>
+                            <button
+                              onClick={() => {
+                                setSelectedStudent(student);
+                                setShowWithdrawalModal(true);
+                              }}
+                              className="text-danger-600 hover:text-danger-800 text-sm font-medium transition-colors"
+                              title="Retirar estudiante"
+                            >
+                              Retirar
+                            </button>
                           )}
                         </div>
                       )}
