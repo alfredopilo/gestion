@@ -111,8 +111,8 @@ export const createSchoolYear = async (req, res, next) => {
     
     console.log('Datos básicos validados:', JSON.stringify(validatedBasicData, null, 2));
 
-    // Obtener la institución activa o del usuario si no se proporciona institucionId
-    let institucionId = req.body.institucionId;
+    // Obtener la institución del header/usuario si no se proporciona institucionId
+    let institucionId = req.body.institucionId || req.institutionId;
     if (!institucionId) {
       // Obtener la institución activa del sistema
       const activeInstitution = await prisma.institution.findFirst({
