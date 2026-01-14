@@ -69,11 +69,11 @@ print_info "¿Deseas reconstruir el backend? (s/n)"
 read -r rebuild_response
 
 if [[ "$rebuild_response" =~ ^[Ss]$ ]]; then
-    print_info "Reconstruyendo backend (esto puede tardar 2-5 minutos)..."
+    print_info "Reconstruyendo backend (usando caché para acelerar, ~1-2 minutos)..."
     export DOCKER_BUILDKIT=1
     
-    # Build con timeout y sin provenance
-    if timeout 600 $DOCKER_COMPOSE_CMD build --progress=plain backend 2>&1 | grep -E "(Step|CACHED|DONE|ERROR|Built)" | tail -20; then
+    # Build con caché (mucho más rápido que --no-cache)
+    if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain backend 2>&1 | grep -E "(Step|CACHED|DONE|ERROR|Built)" | tail -20; then
         print_success "Backend reconstruido"
     else
         print_warning "Build puede haber tardado mucho, verificando..."

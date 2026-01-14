@@ -7,10 +7,17 @@ ENV VITE_API_URL=$VITE_API_URL
 
 WORKDIR /app
 
+# Copiar solo archivos de dependencias primero (mejor caché)
 COPY package*.json ./
-RUN npm install
 
+# Instalar dependencias (se cachará si no cambian package*.json)
+# Usar npm ci para instalación determinista y más rápida
+RUN npm ci --prefer-offline --no-audit
+
+# Copiar el resto del código fuente (solo se reconstruye si cambia el código)
 COPY . .
+
+# Build de la aplicación (solo se ejecuta si cambia el código fuente)
 RUN npm run build
 
 # Etapa 2: Servidor Producción (Nginx)

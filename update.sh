@@ -215,37 +215,39 @@ print_info "¿Deseas reconstruir las imágenes? Esto puede tardar varios minutos
 read -r rebuild_response
 
 if [[ "$rebuild_response" =~ ^[Ss]$ ]]; then
-    print_info "Reconstruyendo imágenes (esto puede tardar varios minutos)..."
-    print_info "Usando DOCKER_BUILDKIT para acelerar el proceso..."
+    print_info "Reconstruyendo imágenes (usando caché para acelerar)..."
+    print_info "Usando DOCKER_BUILDKIT para builds más rápidos..."
     
-    # Usar DOCKER_BUILDKIT para builds más rápidos y sin provenance
+    # Usar DOCKER_BUILDKIT para builds más rápidos
     export DOCKER_BUILDKIT=1
     export BUILDKIT_PROGRESS=plain
     
-    # Build con timeout implícito y sin provenance (más rápido)
+    # Preguntar si se desea forzar reconstrucción completa (sin caché)
+    print_info "¿Deseas forzar reconstrucción completa sin caché? (más lento pero garantiza limpieza) (s/n)"
+    read -r no_cache_response
+    
+    if [[ "$no_cache_response" =~ ^[Ss]$ ]]; then
+        BUILD_FLAGS="--no-cache"
+        print_info "Reconstrucción completa sin caché (puede tardar 5-10 minutos)..."
+    else
+        BUILD_FLAGS=""
+        print_info "Reconstrucción con caché (más rápido, ~1-3 minutos)..."
+    fi
+    
+    # Build con caché por defecto (mucho más rápido)
     print_info "Construyendo backend..."
-    if timeout 600 $DOCKER_COMPOSE_CMD build --progress=plain --no-cache backend 2>&1 | tee /tmp/build-backend.log; then
+    if timeout 600 $DOCKER_COMPOSE_CMD build --progress=plain $BUILD_FLAGS backend 2>&1 | tee /tmp/build-backend.log; then
         print_success "Backend reconstruido"
     else
-        print_warning "Build de backend tardó mucho o falló, intentando sin --no-cache..."
-        if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain backend 2>&1 | tee /tmp/build-backend.log; then
-            print_success "Backend reconstruido (con cache)"
-        else
-            print_error "Error al reconstruir backend"
-            print_info "Continuando con imágenes existentes..."
-        fi
+        print_warning "Build de backend tardó mucho o falló"
+        print_info "Continuando con imágenes existentes..."
     fi
     
     print_info "Construyendo frontend..."
-    if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain --no-cache frontend 2>&1 | tee /tmp/build-frontend.log; then
+    if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain $BUILD_FLAGS frontend 2>&1 | tee /tmp/build-frontend.log; then
         print_success "Frontend reconstruido"
     else
-        print_warning "Build de frontend tardó mucho, intentando sin --no-cache..."
-        if timeout 180 $DOCKER_COMPOSE_CMD build --progress=plain frontend 2>&1 | tee /tmp/build-frontend.log; then
-            print_success "Frontend reconstruido (con cache)"
-        else
-            print_warning "Error al reconstruir frontend, usando imagen existente"
-        fi
+        print_warning "Build de frontend tardó mucho, usando imagen existente"
     fi
 else
     print_info "Saltando reconstrucción de imágenes, usando las existentes"

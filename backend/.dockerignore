@@ -1,0 +1,58 @@
+# Archivos y directorios a excluir del contexto de Docker
+# Esto acelera el build al reducir el tamaño del contexto
+
+# Dependencias (se instalan dentro del contenedor)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Archivos de desarrollo
+.env.local
+.env.development
+.env.test
+*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Testing
+coverage
+.nyc_output
+test
+tests
+__tests__
+*.test.js
+*.spec.js
+
+# Documentación
+README.md
+*.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Uploads (se generan en runtime, no deben estar en la imagen)
+uploads/*
+!uploads/.gitkeep
+
+# Scripts de desarrollo (opcional, comentar si se necesitan)
+# scripts/*
