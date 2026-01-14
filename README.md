@@ -49,9 +49,45 @@ Aplicación web completa para la administración integral de una institución ed
 
 > 💡 **Recomendación**: Usa Docker Compose para una instalación más sencilla y sin conflictos de dependencias.
 
+### 🌐 Requisitos para VPS
+
+Si vas a instalar en un VPS (servidor remoto):
+
+- **RAM mínima:** 2GB (recomendado 4GB)
+- **CPU:** 1 core (recomendado 2 cores)
+- **Disco:** 20GB SSD (recomendado 40GB)
+- **Sistema Operativo:** Ubuntu 20.04+ / Debian 11+ / CentOS 8+
+
+> 📖 **Ver guía completa:** [VPS-GUIA-RAPIDA.md](./VPS-GUIA-RAPIDA.md) para instrucciones específicas de VPS
+
 ## 🚀 Instalación Rápida
 
-### ⚡ Opción 1: Instalación Automática (Más Fácil)
+### 🌐 Instalación en VPS (Servidor Remoto)
+
+Si vas a instalar en un VPS, usa el script optimizado:
+
+```bash
+# 1. Clonar repositorio en el VPS
+git clone <url-del-repositorio>
+cd gestion-escolar
+
+# 2. Dar permisos de ejecución a scripts
+chmod +x install.sh vps-update.sh vps-cleanup.sh deploy-vps.sh
+
+# 3. Ejecutar instalación
+./install.sh
+
+# 4. Para actualizaciones futuras (MUCHO MÁS RÁPIDO)
+./vps-update.sh
+```
+
+**Scripts disponibles para VPS:**
+- `vps-update.sh` - Actualización optimizada (2-3 min en lugar de 10-20 min)
+- `vps-cleanup.sh` - Liberar espacio en disco
+- `deploy-vps.sh` - Deploy automatizado (git pull + actualización inteligente)
+- Ver guía completa: [VPS-GUIA-RAPIDA.md](./VPS-GUIA-RAPIDA.md)
+
+### ⚡ Opción 1: Instalación Automática Local (Más Fácil)
 
 **Linux/Mac:**
 ```bash
