@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { createSubjectSchema } from '../utils/validators.js';
 import { getSubjectInstitutionFilter, getActiveSchoolYear, getInstitutionFilter } from '../utils/institutionFilter.js';
+import XLSX from 'xlsx';
 
 /**
  * Obtener todas las materias
@@ -481,6 +482,265 @@ export const deleteSubject = async (req, res, next) => {
       message: 'Materia eliminada exitosamente.',
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Descargar plantilla Excel para importación de materias
+ */
+export const getImportSubjectsTemplate = (req, res) => {
+  try {
+    // Crear un nuevo workbook
+    const workbook = XLSX.utils.book_new();
+
+    // Definir los datos para la hoja de Excel
+    const data = [
+      ['nombre', 'codigo', 'creditos', 'horas'],
+      ['Matemáticas Avanzadas', 'MAT-301', '4', '40'],
+      ['Lengua y Literatura', 'LYL-201', '3', '30'],
+      ['Ciencias Naturales', 'CCN-101', '3', '35'],
+    ];
+
+    // Crear la hoja de trabajo desde el array
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+
+    // Configurar el ancho de las columnas para mejor visualización
+    worksheet['!cols'] = [
+      { wch: 30 }, // nombre
+      { wch: 15 }, // codigo
+      { wch: 10 }, // creditos
+      { wch: 10 }, // horas
+    ];
+
+    // Agregar la hoja al workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Materias');
+
+    // Generar el buffer del archivo Excel
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Configurar los headers de la respuesta
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="plantilla_importacion_materias.xlsx"');
+    res.status(200).send(excelBuffer);
+  } catch (error) {
+    console.error('Error al generar plantilla Excel:', error);
+    res.status(500).json({ error: 'Error al generar la plantilla Excel' });
+  }
+};
+
+/**
+ * Importar materias desde archivo Excel
+ */
+export const importSubjects = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'No se proporcionó ningún archivo',
+      });
+    }
+
+    // Obtener institución del request
+    const institutionId = getInstitutionFilter(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución. Debe estar autenticado.',
+      });
+    }
+
+    // Obtener año lectivo activo de la institución
+    let anioLectivoId = null;
+    const activeSchoolYear = await prisma.schoolYear.findFirst({
+      where: {
+        institucionId: institutionId,
+        activo: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (activeSchoolYear) {
+      anioLectivoId = activeSchoolYear.id;
+    } else {
+      // Si no hay activo, buscar el más reciente
+      const latestSchoolYear = await prisma.schoolYear.findFirst({
+        where: {
+          institucionId: institutionId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (!latestSchoolYear) {
+        return res.status(400).json({
+          error: 'No se encontró un año lectivo para la institución. Debe crear un año lectivo primero.',
+        });
+      }
+
+      anioLectivoId = latestSchoolYear.id;
+    }
+
+    // Leer archivo Excel
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({
+        error: 'El archivo debe incluir encabezados y al menos una fila de datos.',
+      });
+    }
+
+    // Mapeo de encabezados
+    const headerMap = {
+      nombre: 'nombre',
+      codigo: 'codigo',
+      creditos: 'creditos',
+      horas: 'horas',
+    };
+
+    // Procesar headers
+    const rawHeaders = jsonData[0].map(header => String(header).trim());
+    const headers = rawHeaders.map(header => headerMap[header.toLowerCase()] ?? header);
+
+    // Validar encabezados requeridos
+    const requiredHeaders = ['nombre', 'codigo'];
+    const missingHeaders = requiredHeaders.filter(required => !headers.includes(required));
+    if (missingHeaders.length > 0) {
+      return res.status(400).json({
+        error: `Faltan las columnas obligatorias: ${missingHeaders.join(', ')}`,
+      });
+    }
+
+    // Procesar filas de datos
+    const results = {
+      procesados: 0,
+      creados: 0,
+      actualizados: 0,
+      errores: [],
+    };
+
+    for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex += 1) {
+      const row = jsonData[rowIndex];
+      const rowNumber = rowIndex + 1;
+
+      // Saltar filas vacías
+      if (!row || row.every(cell => !cell || String(cell).trim() === '')) {
+        continue;
+      }
+
+      try {
+        // Construir objeto de la fila
+        const record = {};
+        headers.forEach((header, columnIndex) => {
+          if (!header) return;
+          const value = row[columnIndex] !== undefined && row[columnIndex] !== null 
+            ? String(row[columnIndex]).trim() 
+            : '';
+          if (value !== '') {
+            record[header] = value;
+          }
+        });
+
+        // Validar campos obligatorios
+        if (!record.nombre || !record.codigo) {
+          results.errores.push({
+            fila: rowNumber,
+            error: 'Faltan campos obligatorios (nombre y/o codigo)',
+          });
+          continue;
+        }
+
+        // Procesar campos opcionales
+        const nombre = record.nombre.trim();
+        const codigo = record.codigo.trim();
+        let creditos = null;
+        let horas = null;
+
+        if (record.creditos) {
+          const creditosValue = parseInt(record.creditos);
+          if (isNaN(creditosValue) || creditosValue < 0) {
+            results.errores.push({
+              fila: rowNumber,
+              error: 'El valor de créditos debe ser un número entero positivo',
+            });
+            continue;
+          }
+          creditos = creditosValue;
+        }
+
+        if (record.horas) {
+          const horasValue = parseInt(record.horas);
+          if (isNaN(horasValue) || horasValue < 0) {
+            results.errores.push({
+              fila: rowNumber,
+              error: 'El valor de horas debe ser un número entero positivo',
+            });
+            continue;
+          }
+          horas = horasValue;
+        }
+
+        // Verificar si ya existe una materia con el mismo código
+        const existingSubject = await prisma.subject.findFirst({
+          where: {
+            codigo: codigo,
+            institucionId: institutionId,
+            anioLectivoId: anioLectivoId,
+          },
+        });
+
+        if (existingSubject) {
+          // Actualizar materia existente
+          await prisma.subject.update({
+            where: { id: existingSubject.id },
+            data: {
+              nombre: nombre,
+              creditos: creditos,
+              horas: horas,
+            },
+          });
+          results.actualizados += 1;
+        } else {
+          // Crear nueva materia
+          await prisma.subject.create({
+            data: {
+              nombre: nombre,
+              codigo: codigo,
+              creditos: creditos,
+              horas: horas,
+              institucionId: institutionId,
+              anioLectivoId: anioLectivoId,
+            },
+          });
+          results.creados += 1;
+        }
+
+        results.procesados += 1;
+      } catch (error) {
+        console.error(`Error al procesar fila ${rowNumber}:`, error);
+        results.errores.push({
+          fila: rowNumber,
+          error: error.message || 'Error desconocido al procesar esta fila',
+        });
+      }
+    }
+
+    res.json({
+      message: 'Importación procesada correctamente.',
+      resumen: {
+        procesados: results.procesados,
+        creados: results.creados,
+        actualizados: results.actualizados,
+        errores: results.errores.length,
+      },
+      errores: results.errores,
+    });
+  } catch (error) {
+    console.error('Error en importación de materias:', error);
     next(error);
   }
 };
