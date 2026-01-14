@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -223,13 +224,18 @@ const Users = () => {
 
     setImportError('');
     try {
-      const text = await file.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
+      // Leer el archivo Excel
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Obtener la primera hoja
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convertir la hoja a JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-      if (lines.length < 2) {
+      if (jsonData.length < 2) {
         throw new Error('El archivo debe incluir encabezados y al menos una fila de datos.');
       }
 
@@ -247,7 +253,8 @@ const Users = () => {
         password: 'password',
       };
 
-      const rawHeaders = lines[0].split(',').map(header => header.trim().replace(/"/g, ''));
+      // Procesar headers
+      const rawHeaders = jsonData[0].map(header => String(header).trim());
       const headers = rawHeaders.map(header => headerMap[header.toLowerCase()] ?? header);
 
       const requiredHeaders = ['nombre', 'apellido', 'numeroIdentificacion'];
@@ -256,21 +263,28 @@ const Users = () => {
         throw new Error(`Faltan las columnas obligatorias: ${missingHeaders.join(', ')}`);
       }
 
+      // Procesar filas de datos
       const parsedTeachers = [];
-      for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
-        const values = lines[lineIndex].split(',').map(value => value.trim().replace(/"/g, ''));
-        if (values.length === 1 && values[0] === '') {
+      for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex += 1) {
+        const row = jsonData[rowIndex];
+        
+        // Saltar filas vacías
+        if (!row || row.every(cell => !cell || String(cell).trim() === '')) {
           continue;
         }
+
         const record = {};
         headers.forEach((header, columnIndex) => {
           if (!header) return;
-          const value = values[columnIndex] ?? '';
+          const value = row[columnIndex] !== undefined && row[columnIndex] !== null 
+            ? String(row[columnIndex]).trim() 
+            : '';
           if (value !== '') {
             record[header] = value;
           }
         });
-        if (Object.keys(record).length > 0) {
+
+        if (Object.keys(record).length > 0 && record.nombre && record.apellido && record.numeroIdentificacion) {
           parsedTeachers.push(record);
         }
       }
@@ -284,7 +298,7 @@ const Users = () => {
       setImportSummary(null);
       setImportDetails(null);
     } catch (error) {
-      console.error('Error al procesar el archivo CSV:', error);
+      console.error('Error al procesar el archivo Excel:', error);
       setImportPreview([]);
       setImportFileName('');
       setImportSummary(null);
@@ -303,7 +317,7 @@ const Users = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'plantilla_importacion_profesores.csv');
+      link.setAttribute('download', 'plantilla_importacion_profesores.xlsx');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -756,7 +770,7 @@ const Users = () => {
           <div className="bg-white p-6 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h2 className="text-xl font-bold">Importar Profesores mediante CSV</h2>
+                <h2 className="text-xl font-bold">Importar Profesores mediante Excel</h2>
                 <p className="text-sm text-gray-600 mt-1">
                   Usa la plantilla para asegurar los encabezados correctos:{' '}
                   <span className="font-mono text-xs">
@@ -777,11 +791,11 @@ const Users = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Archivo CSV <span className="text-red-500">*</span>
+                  Archivo Excel <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleImportFile}
                   className="w-full text-sm text-gray-700"
                   disabled={importLoading}

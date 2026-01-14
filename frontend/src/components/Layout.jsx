@@ -292,14 +292,17 @@ const Layout = () => {
       <aside className={`hidden lg:block bg-white border-r border-gray-200 transition-all duration-300 ${
         sidebarOpen ? 'w-64' : 'w-20'
       } fixed h-screen z-30`}>
-        {/* Header del sidebar */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+        {/* Header del sidebar con degradado */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-purple-200/50 bg-gradient-to-r from-primary-600 to-purple-700 relative overflow-hidden">
+          {/* Efecto de brillo animado */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+          
           {sidebarOpen && (
-            <h1 className="text-xl font-bold text-primary-600">Gestión Escolar</h1>
+            <h1 className="text-xl font-bold text-white drop-shadow-lg relative z-10">Gestión Escolar</h1>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/20 backdrop-blur-sm transition-all duration-300 relative z-10"
             aria-label="Toggle sidebar"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -314,37 +317,55 @@ const Layout = () => {
 
         {/* NUEVO: Información de Usuario e Institución - Siempre visible en la parte superior */}
         {sidebarOpen && (
-          <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-primary-50 to-white">
+          <div className="p-4 border-b border-purple-200/50 bg-gradient-to-br from-primary-50 via-purple-50/30 to-white relative overflow-hidden">
+            {/* Decorative gradient blobs */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl -z-10" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-500/10 to-transparent rounded-full blur-2xl -z-10" />
+            
             {/* Selector de Institución */}
             {institutions.length > 0 && (
-              <div className="mb-3">
+              <div className="mb-3 relative">
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Institución
                 </label>
-                <select
-                  value={selectedInstitutionId || ''}
-                  onChange={(e) => {
-                    const institutionId = e.target.value || null;
-                    changeInstitution(institutionId);
-                  }}
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-                >
-                  {institutions.map((inst) => (
-                    <option key={inst.id} value={inst.id}>
-                      {inst.nombre} {inst.activa && '✓'}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={selectedInstitutionId || ''}
+                    onChange={(e) => {
+                      const institutionId = e.target.value || null;
+                      changeInstitution(institutionId);
+                    }}
+                    className="w-full text-sm border-2 border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent hover:border-purple-300 transition-all appearance-none"
+                  >
+                    {institutions.map((inst) => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.nombre} {inst.activa && '✓'}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             )}
             
             {/* Info Usuario */}
             <div className="flex items-center space-x-3 mb-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-                {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+              {/* Avatar con anillo degradado animado */}
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+                  {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+                </div>
+                {/* Anillo pulsante */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+                {/* Anillo estático con blur */}
+                <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-bold text-gray-900 truncate">
                   {user?.nombre} {user?.apellido}
                 </p>
                 <p className="text-xs text-gray-600 truncate">{user?.email}</p>
@@ -355,13 +376,13 @@ const Layout = () => {
             <div className="flex gap-2">
               <Link 
                 to="/profile" 
-                className="flex-1 text-center px-3 py-2 text-xs font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+                className="flex-1 text-center px-3 py-2 text-xs font-semibold text-primary-700 bg-white border-2 border-primary-300 rounded-lg hover:bg-gradient-to-r hover:from-primary-600 hover:to-purple-600 hover:text-white hover:border-transparent transition-all duration-300 shadow-sm hover:shadow-md"
               >
                 Perfil
               </Link>
               <button 
                 onClick={logout}
-                className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-danger-600 rounded-lg hover:bg-danger-700 transition-colors"
+                className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
               >
                 Salir
               </button>
@@ -371,9 +392,15 @@ const Layout = () => {
 
         {/* Versión colapsada - Solo avatar */}
         {!sidebarOpen && (
-          <div className="py-4 border-b border-gray-200 flex justify-center">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-              {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+          <div className="py-4 border-b border-purple-200/50 flex justify-center bg-gradient-to-br from-primary-50/50 to-purple-50/30">
+            <div className="relative">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+                {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+              </div>
+              {/* Anillo pulsante */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+              {/* Anillo estático con blur */}
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
             </div>
           </div>
         )}
@@ -392,20 +419,29 @@ const Layout = () => {
                   <div key={item.name}>
                     <button
                       onClick={() => sidebarOpen && toggleMenu(item.name)}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
                         hasActiveChild(item)
-                          ? 'bg-primary-100 text-primary-700'
-                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                          ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
+                          : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
                       }`}
                       title={!sidebarOpen ? item.name : ''}
                     >
-                      <div className="flex items-center">
+                      {/* Borde degradado al hover */}
+                      {!hasActiveChild(item) && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                      )}
+                      {/* Borde degradado para item activo */}
+                      {hasActiveChild(item) && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                      )}
+                      
+                      <div className="flex items-center relative z-10">
                         <span className="flex-shrink-0">{icons[item.name]}</span>
                         {sidebarOpen && <span className="ml-3">{item.name}</span>}
                       </div>
                       {sidebarOpen && (
                         <svg
-                          className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
+                          className={`w-4 h-4 transition-transform duration-300 relative z-10 ${isExpanded ? 'transform rotate-90' : ''}`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -420,12 +456,16 @@ const Layout = () => {
                           <Link
                             key={child.name}
                             to={child.href}
-                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-300 relative group ${
                               isActive(child.href)
-                                ? 'bg-primary-100 text-primary-700'
-                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                ? 'bg-gradient-to-r from-primary-50 to-purple-50 text-primary-700'
+                                : 'text-gray-600 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/20 hover:text-gray-900'
                             }`}
                           >
+                            {/* Indicador de item activo */}
+                            {isActive(child.href) && (
+                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-gradient-to-b from-primary-600 to-purple-700 rounded-full" />
+                            )}
                             <span className="flex-shrink-0">{icons[child.name]}</span>
                             <span className="ml-3">{child.name}</span>
                           </Link>
@@ -440,15 +480,24 @@ const Layout = () => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
                     isActive(item.href)
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
+                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
                   }`}
                   title={!sidebarOpen ? item.name : ''}
                 >
-                  <span className="flex-shrink-0">{icons[item.name]}</span>
-                  {sidebarOpen && <span className="ml-3">{item.name}</span>}
+                  {/* Borde degradado al hover */}
+                  {!isActive(item.href) && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                  )}
+                  {/* Borde degradado para item activo */}
+                  {isActive(item.href) && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                  )}
+                  
+                  <span className="flex-shrink-0 relative z-10">{icons[item.name]}</span>
+                  {sidebarOpen && <span className="ml-3 relative z-10">{item.name}</span>}
                 </Link>
               );
             })}
@@ -468,12 +517,15 @@ const Layout = () => {
       <aside className={`lg:hidden fixed left-0 top-0 h-full bg-white border-r border-gray-200 transition-transform duration-300 z-30 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } w-64`}>
-        {/* Header del sidebar móvil */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-primary-600">Gestión Escolar</h1>
+        {/* Header del sidebar móvil con degradado */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-purple-200/50 bg-gradient-to-r from-primary-600 to-purple-700 relative overflow-hidden">
+          {/* Efecto de brillo animado */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+          
+          <h1 className="text-xl font-bold text-white drop-shadow-lg relative z-10">Gestión Escolar</h1>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/20 backdrop-blur-sm transition-all duration-300 relative z-10"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -482,37 +534,55 @@ const Layout = () => {
         </div>
 
         {/* Información de Usuario e Institución Móvil */}
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-primary-50 to-white">
+        <div className="p-4 border-b border-purple-200/50 bg-gradient-to-br from-primary-50 via-purple-50/30 to-white relative overflow-hidden">
+          {/* Decorative gradient blobs */}
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl -z-10" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-500/10 to-transparent rounded-full blur-2xl -z-10" />
+          
           {/* Selector de Institución */}
           {institutions.length > 0 && (
-            <div className="mb-3">
+            <div className="mb-3 relative">
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Institución
               </label>
-              <select
-                value={selectedInstitutionId || ''}
-                onChange={(e) => {
-                  const institutionId = e.target.value || null;
-                  changeInstitution(institutionId);
-                }}
-                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
-              >
-                {institutions.map((inst) => (
-                  <option key={inst.id} value={inst.id}>
-                    {inst.nombre} {inst.activa && '✓'}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedInstitutionId || ''}
+                  onChange={(e) => {
+                    const institutionId = e.target.value || null;
+                    changeInstitution(institutionId);
+                  }}
+                  className="w-full text-sm border-2 border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent hover:border-purple-300 transition-all appearance-none"
+                >
+                  {institutions.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.nombre} {inst.activa && '✓'}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
             </div>
           )}
           
           {/* Info Usuario */}
           <div className="flex items-center space-x-3 mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-semibold shadow-md">
-              {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+            {/* Avatar con anillo degradado animado */}
+            <div className="relative">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+                {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
+              </div>
+              {/* Anillo pulsante */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+              {/* Anillo estático con blur */}
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
+              <p className="text-sm font-bold text-gray-900 truncate">
                 {user?.nombre} {user?.apellido}
               </p>
               <p className="text-xs text-gray-600 truncate">{user?.email}</p>
@@ -524,13 +594,13 @@ const Layout = () => {
             <Link 
               to="/profile"
               onClick={() => setSidebarOpen(false)}
-              className="flex-1 text-center px-3 py-2 text-xs font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+              className="flex-1 text-center px-3 py-2 text-xs font-semibold text-primary-700 bg-white border-2 border-primary-300 rounded-lg hover:bg-gradient-to-r hover:from-primary-600 hover:to-purple-600 hover:text-white hover:border-transparent transition-all duration-300 shadow-sm hover:shadow-md"
             >
               Perfil
             </Link>
             <button 
               onClick={logout}
-              className="flex-1 text-center px-3 py-2 text-xs font-medium text-white bg-danger-600 rounded-lg hover:bg-danger-700 transition-colors"
+              className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
             >
               Salir
             </button>
@@ -551,18 +621,27 @@ const Layout = () => {
                   <div key={item.name}>
                     <button
                       onClick={() => toggleMenu(item.name)}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
                         hasActiveChild(item)
-                          ? 'bg-primary-100 text-primary-700'
-                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                          ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
+                          : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
                       }`}
                     >
-                      <div className="flex items-center">
+                      {/* Borde degradado al hover */}
+                      {!hasActiveChild(item) && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                      )}
+                      {/* Borde degradado para item activo */}
+                      {hasActiveChild(item) && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                      )}
+                      
+                      <div className="flex items-center relative z-10">
                         <span className="flex-shrink-0">{icons[item.name]}</span>
                         <span className="ml-3">{item.name}</span>
                       </div>
                       <svg
-                        className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
+                        className={`w-4 h-4 transition-transform duration-300 relative z-10 ${isExpanded ? 'transform rotate-90' : ''}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -577,12 +656,16 @@ const Layout = () => {
                             key={child.name}
                             to={child.href}
                             onClick={() => setSidebarOpen(false)}
-                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-300 relative group ${
                               isActive(child.href)
-                                ? 'bg-primary-100 text-primary-700'
-                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                ? 'bg-gradient-to-r from-primary-50 to-purple-50 text-primary-700'
+                                : 'text-gray-600 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/20 hover:text-gray-900'
                             }`}
                           >
+                            {/* Indicador de item activo */}
+                            {isActive(child.href) && (
+                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-gradient-to-b from-primary-600 to-purple-700 rounded-full" />
+                            )}
                             <span className="flex-shrink-0">{icons[child.name]}</span>
                             <span className="ml-3">{child.name}</span>
                           </Link>
@@ -598,14 +681,23 @@ const Layout = () => {
                   key={item.name}
                   to={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
                     isActive(item.href)
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
+                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
                   }`}
                 >
-                  <span className="flex-shrink-0">{icons[item.name]}</span>
-                  <span className="ml-3">{item.name}</span>
+                  {/* Borde degradado al hover */}
+                  {!isActive(item.href) && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                  )}
+                  {/* Borde degradado para item activo */}
+                  {isActive(item.href) && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                  )}
+                  
+                  <span className="flex-shrink-0 relative z-10">{icons[item.name]}</span>
+                  <span className="ml-3 relative z-10">{item.name}</span>
                 </Link>
               );
             })}
@@ -616,23 +708,25 @@ const Layout = () => {
       {/* Contenido principal */}
       <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>
         {/* Top bar para móvil */}
-        <div className="lg:hidden bg-white shadow-sm border-b h-16 flex items-center justify-between px-4 sticky top-0 z-10">
+        <div className="lg:hidden bg-gradient-to-r from-white via-blue-50/30 to-purple-50/30 shadow-md border-b border-purple-100/50 h-16 flex items-center justify-between px-4 sticky top-0 z-10 backdrop-blur-sm">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            className="p-2 rounded-lg text-gray-600 hover:text-primary-600 hover:bg-white/80 backdrop-blur-sm shadow-sm transition-all duration-300"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold text-primary-600">Gestión Escolar</h1>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent drop-shadow-sm">
+            Gestión Escolar
+          </h1>
           <div className="w-10">
             {user?.rol === 'ESTUDIANTE' && <NotificationBadge />}
           </div>
         </div>
 
         {/* Top bar para desktop */}
-        <div className="hidden lg:block bg-white shadow-sm border-b h-16 flex items-center justify-end px-6 sticky top-0 z-10">
+        <div className="hidden lg:flex bg-gradient-to-r from-white via-blue-50/20 to-purple-50/20 shadow-sm border-b border-purple-100/50 h-16 items-center justify-end px-6 sticky top-0 z-10 backdrop-blur-sm">
           {user?.rol === 'ESTUDIANTE' && <NotificationBadge />}
         </div>
 

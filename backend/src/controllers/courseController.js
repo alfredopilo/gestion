@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
+import XLSX from 'xlsx';
 import prisma from '../config/database.js';
 import { createCourseSchema, updateCourseSchema, importStudentsSchema } from '../utils/validators.js';
 import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, verifyPeriodBelongsToInstitution, getActiveSchoolYear, getInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
@@ -684,54 +685,50 @@ export const importStudents = async (req, res, next) => {
 };
 
 /**
- * Descargar plantilla CSV para importación de estudiantes
+ * Descargar plantilla Excel para importación de estudiantes
  */
 export const getImportStudentsTemplate = (req, res) => {
-  const headers = [
-    'nombre',
-    'apellido',
-    'numeroIdentificacion',
-    'email',
-    'telefono',
-    'direccion',
-    'genero',
-    'fechaNacimiento',
-    'password',
-  ];
+  try {
+    // Crear un nuevo workbook
+    const workbook = XLSX.utils.book_new();
 
-  const sampleRows = [
-    [
-      'Juan',
-      'Pérez',
-      '0102030405',
-      'juan.perez@correo.com',
-      '0987654321',
-      'Av. Siempre Viva 123',
-      'Masculino',
-      '2008-05-12',
-      'Juan2025!',
-    ],
-    [
-      'Ana',
-      'Gómez',
-      '0605040302',
-      'ana.gomez@correo.com',
-      '',
-      '',
-      'Femenino',
-      '2007-11-28',
-      '',
-    ],
-  ];
+    // Definir los datos para la hoja de Excel
+    const data = [
+      ['nombre', 'apellido', 'numeroIdentificacion', 'email', 'telefono', 'direccion', 'genero', 'fechaNacimiento', 'password'],
+      ['Juan', 'Pérez', '0102030405', 'juan.perez@correo.com', '0987654321', 'Av. Siempre Viva 123', 'Masculino', '2008-05-12', 'Juan2025!'],
+      ['Ana', 'Gómez', '0605040302', 'ana.gomez@correo.com', '', '', 'Femenino', '2007-11-28', ''],
+    ];
 
-  const csvContent = [
-    headers.join(','),
-    ...sampleRows.map(row => row.map(value => `"${value}"`).join(',')),
-  ].join('\n');
+    // Crear la hoja de trabajo desde el array
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
 
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="plantilla_importacion_estudiantes.csv"');
-  res.status(200).send(csvContent);
+    // Configurar el ancho de las columnas para mejor visualización
+    worksheet['!cols'] = [
+      { wch: 15 }, // nombre
+      { wch: 15 }, // apellido
+      { wch: 20 }, // numeroIdentificacion
+      { wch: 30 }, // email
+      { wch: 15 }, // telefono
+      { wch: 25 }, // direccion
+      { wch: 15 }, // genero
+      { wch: 18 }, // fechaNacimiento
+      { wch: 15 }, // password
+    ];
+
+    // Agregar la hoja al workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Estudiantes');
+
+    // Generar el buffer del archivo Excel
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Configurar los headers de la respuesta
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="plantilla_importacion_estudiantes.xlsx"');
+    res.status(200).send(excelBuffer);
+  } catch (error) {
+    console.error('Error al generar plantilla Excel:', error);
+    res.status(500).json({ error: 'Error al generar la plantilla Excel' });
+  }
 };
 
 /**
