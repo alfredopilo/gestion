@@ -172,10 +172,11 @@ export const createSchoolYear = async (req, res, next) => {
       });
     }
 
-    // Verificar que no exista un año escolar con el mismo nombre (global, sin importar institución)
+    // Verificar que no exista un año escolar con el mismo nombre en la misma institución
     const existingSchoolYear = await prisma.schoolYear.findFirst({
       where: {
         nombre: validatedData.nombre,
+        institucionId: validatedData.institucionId,
       },
     });
 
@@ -283,12 +284,13 @@ export const updateSchoolYear = async (req, res, next) => {
       validatedData.nombre = `${validatedData.ano}-${validatedData.ano + 1}`;
     }
 
-    // Si se está cambiando el nombre, verificar que no exista otro con el mismo nombre
+    // Si se está cambiando el nombre, verificar que no exista otro con el mismo nombre en la misma institución
     if (validatedData.nombre && validatedData.nombre !== schoolYear.nombre) {
       const existingSchoolYear = await prisma.schoolYear.findFirst({
         where: {
           nombre: validatedData.nombre,
           id: { not: id },
+          institucionId: schoolYear.institucionId,
         },
       });
 
