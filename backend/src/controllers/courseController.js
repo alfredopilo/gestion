@@ -732,6 +732,239 @@ export const getImportStudentsTemplate = (req, res) => {
 };
 
 /**
+ * Descargar plantilla Excel para importación de cursos
+ */
+export const getImportCoursesTemplate = (req, res) => {
+  try {
+    const workbook = XLSX.utils.book_new();
+
+    const data = [
+      ['nombre', 'nivel', 'paralelo', 'capacidad', 'sortOrder'],
+      ['Primero de Bachillerato', 'Bachillerato', 'A', '30', '1'],
+      ['Segundo de Primaria', 'Primaria', 'B', '25', '2'],
+      ['Tercero de Primaria', 'Primaria', '', '28', '3'],
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet['!cols'] = [
+      { wch: 30 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cursos');
+
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="plantilla_importacion_cursos.xlsx"');
+    res.status(200).send(excelBuffer);
+  } catch (error) {
+    console.error('Error al generar plantilla Excel de cursos:', error);
+    res.status(500).json({ error: 'Error al generar la plantilla Excel' });
+  }
+};
+
+/**
+ * Importar cursos desde archivo Excel
+ */
+export const importCourses = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'No se proporcionó ningún archivo',
+      });
+    }
+
+    const institutionId = getInstitutionFilter(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución. Debe estar autenticado.',
+      });
+    }
+
+    const activeSchoolYear = await getActiveSchoolYear(req, prisma);
+    if (!activeSchoolYear) {
+      return res.status(400).json({
+        error: 'No hay un año escolar activo configurado para esta institución.',
+      });
+    }
+
+    if (activeSchoolYear.institucionId !== institutionId && req.user?.rol !== 'ADMIN') {
+      return res.status(400).json({
+        error: 'El año escolar activo no pertenece a la institución seleccionada.',
+      });
+    }
+
+    const anioLectivoId = activeSchoolYear.id;
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({
+        error: 'El archivo debe incluir encabezados y al menos una fila de datos.',
+      });
+    }
+
+    const headerMap = {
+      nombre: 'nombre',
+      nivel: 'nivel',
+      paralelo: 'paralelo',
+      capacidad: 'capacidad',
+      sortorder: 'sortOrder',
+      'sort order': 'sortOrder',
+      orden: 'sortOrder',
+      'orden de listado': 'sortOrder',
+    };
+
+    const rawHeaders = jsonData[0].map(header => String(header).trim());
+    const headers = rawHeaders.map(header => headerMap[header.toLowerCase()] ?? header);
+
+    const requiredHeaders = ['nombre', 'nivel'];
+    const missingHeaders = requiredHeaders.filter(required => !headers.includes(required));
+    if (missingHeaders.length > 0) {
+      return res.status(400).json({
+        error: `Faltan las columnas obligatorias: ${missingHeaders.join(', ')}`,
+      });
+    }
+
+    const results = {
+      procesados: 0,
+      creados: 0,
+      actualizados: 0,
+      errores: [],
+    };
+
+    for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex += 1) {
+      const row = jsonData[rowIndex];
+      const rowNumber = rowIndex + 1;
+
+      if (!row || row.every(cell => !cell || String(cell).trim() === '')) {
+        continue;
+      }
+
+      try {
+        const record = {};
+        headers.forEach((header, columnIndex) => {
+          if (!header) return;
+          const value = row[columnIndex] !== undefined && row[columnIndex] !== null
+            ? String(row[columnIndex]).trim()
+            : '';
+          if (value !== '') {
+            record[header] = value;
+          }
+        });
+
+        if (!record.nombre || !record.nivel) {
+          results.errores.push({
+            fila: rowNumber,
+            error: 'Faltan campos obligatorios (nombre y/o nivel)',
+          });
+          continue;
+        }
+
+        const nombre = record.nombre.trim();
+        const nivel = record.nivel.trim();
+        const paralelo = record.paralelo ? record.paralelo.trim() : null;
+
+        let capacidad = null;
+        if (record.capacidad !== undefined) {
+          const capacidadValue = parseInt(record.capacidad, 10);
+          if (Number.isNaN(capacidadValue) || capacidadValue < 0) {
+            results.errores.push({
+              fila: rowNumber,
+              error: 'El valor de capacidad debe ser un número entero positivo',
+            });
+            continue;
+          }
+          capacidad = capacidadValue;
+        }
+
+        let sortOrder = 0;
+        if (record.sortOrder !== undefined) {
+          const sortOrderValue = parseInt(record.sortOrder, 10);
+          if (Number.isNaN(sortOrderValue) || sortOrderValue < 0) {
+            results.errores.push({
+              fila: rowNumber,
+              error: 'El valor de orden debe ser un número entero positivo',
+            });
+            continue;
+          }
+          sortOrder = sortOrderValue;
+        }
+
+        const existingCourse = await prisma.course.findFirst({
+          where: {
+            nombre,
+            nivel,
+            paralelo: paralelo ?? null,
+            anioLectivoId,
+          },
+        });
+
+        if (existingCourse) {
+          await prisma.course.update({
+            where: { id: existingCourse.id },
+            data: {
+              nombre,
+              nivel,
+              paralelo: paralelo ?? null,
+              capacidad,
+              sortOrder,
+            },
+          });
+          results.actualizados += 1;
+        } else {
+          await prisma.course.create({
+            data: {
+              id: randomUUID(),
+              nombre,
+              nivel,
+              paralelo: paralelo ?? null,
+              capacidad,
+              sortOrder,
+              docenteId: null,
+              cursoSiguienteId: null,
+              anioLectivoId,
+              periodoId: null,
+              updatedAt: new Date(),
+            },
+          });
+          results.creados += 1;
+        }
+
+        results.procesados += 1;
+      } catch (error) {
+        console.error(`Error al procesar fila ${rowNumber}:`, error);
+        results.errores.push({
+          fila: rowNumber,
+          error: error.message || 'Error desconocido al procesar esta fila',
+        });
+      }
+    }
+
+    res.json({
+      message: 'Importación procesada correctamente.',
+      resumen: {
+        procesados: results.procesados,
+        creados: results.creados,
+        actualizados: results.actualizados,
+        errores: results.errores.length,
+      },
+      errores: results.errores,
+    });
+  } catch (error) {
+    console.error('Error en importación de cursos:', error);
+    next(error);
+  }
+};
+
+/**
  * Eliminar un curso
  */
 export const deleteCourse = async (req, res, next) => {
