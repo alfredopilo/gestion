@@ -19,11 +19,14 @@ export const getDashboardStats = async (req, res) => {
         }
       }),
       
-      // Contar estudiantes activos (a través de enrollments activos)
-      prisma.enrollment.count({
+      // Contar estudiantes (a través de su user y institución)
+      prisma.student.count({
         where: {
-          ...(institucionId && { institucionId }),
-          activo: true
+          ...(institucionId && { 
+            user: {
+              institucionId
+            }
+          })
         }
       }),
       
@@ -83,10 +86,10 @@ export const getDashboardDetailedStats = async (req, res) => {
     // Ejecutar consultas en paralelo
     const [
       usersCount,
-      enrollmentsCount,
+      studentsCount,
       coursesCount,
       paymentsCount,
-      recentEnrollments,
+      recentStudents,
       paymentSummary
     ] = await Promise.all([
       // Usuarios
@@ -96,11 +99,14 @@ export const getDashboardDetailedStats = async (req, res) => {
         }
       }),
       
-      // Enrollments activos (representa estudiantes inscritos)
-      prisma.enrollment.count({
+      // Estudiantes (a través de su user e institución)
+      prisma.student.count({
         where: {
-          ...(institucionId && { institucionId }),
-          activo: true
+          ...(institucionId && { 
+            user: {
+              institucionId
+            }
+          })
         }
       }),
       
@@ -128,24 +134,22 @@ export const getDashboardDetailedStats = async (req, res) => {
         }
       }),
       
-      // Últimos 5 enrollments (estudiantes inscritos)
-      prisma.enrollment.findMany({
+      // Últimos 5 estudiantes registrados
+      prisma.student.findMany({
         where: {
-          ...(institucionId && { institucionId })
+          ...(institucionId && { 
+            user: {
+              institucionId
+            }
+          })
         },
         select: {
           id: true,
-          matricula: true,
           createdAt: true,
-          student: {
+          user: {
             select: {
-              id: true,
-              user: {
-                select: {
-                  nombre: true,
-                  apellido: true
-                }
-              }
+              nombre: true,
+              apellido: true
             }
           }
         },
@@ -186,12 +190,11 @@ export const getDashboardDetailedStats = async (req, res) => {
     }, {});
 
     // Formatear estudiantes recientes
-    const recentStudents = recentEnrollments.map(enrollment => ({
-      id: enrollment.student.id,
-      nombre: enrollment.student.user.nombre,
-      apellido: enrollment.student.user.apellido,
-      matricula: enrollment.matricula,
-      createdAt: enrollment.createdAt
+    const formattedRecentStudents = recentStudents.map(student => ({
+      id: student.id,
+      nombre: student.user.nombre,
+      apellido: student.user.apellido,
+      createdAt: student.createdAt
     }));
 
     res.json({
@@ -199,11 +202,11 @@ export const getDashboardDetailedStats = async (req, res) => {
       data: {
         totals: {
           users: usersCount,
-          students: enrollmentsCount,
+          students: studentsCount,
           courses: coursesCount,
           payments: paymentsCount
         },
-        recentStudents,
+        recentStudents: formattedRecentStudents,
         paymentsByStatus
       }
     });
