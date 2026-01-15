@@ -538,3 +538,503 @@ export const getFotoCarnet = async (req, res, next) => {
   }
 };
 
+/**
+ * Descargar plantilla Excel para actualización masiva de estudiantes
+ */
+export const getBulkUpdateTemplate = async (req, res, next) => {
+  try {
+    const XLSX = await import('xlsx');
+    const { getInstitutionFilter } = await import('../utils/institutionFilter.js');
+    
+    const institutionId = getInstitutionFilter(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución.',
+      });
+    }
+
+    // Obtener campos personalizados de la institución
+    const profileFields = await prisma.studentProfileField.findMany({
+      where: {
+        section: {
+          institucionId: institutionId,
+          activo: true,
+        },
+      },
+      include: {
+        section: {
+          select: {
+            nombre: true,
+            orden: true,
+          },
+        },
+      },
+      orderBy: [
+        { section: { orden: 'asc' } },
+        { orden: 'asc' },
+      ],
+    });
+
+    // Columnas fijas
+    const fixedColumns = [
+      'numeroIdentificacion',
+      'nombre',
+      'apellido',
+      'email',
+      'telefono',
+      'direccion',
+      'fechaNacimiento',
+      'nacionalidad',
+      'genero',
+      'lugarNacimiento',
+    ];
+
+    // Columnas dinámicas (campos personalizados)
+    const dynamicColumns = profileFields.map(field => field.etiqueta);
+
+    // Todas las columnas
+    const allColumns = [...fixedColumns, ...dynamicColumns];
+
+    // Filas de ejemplo
+    const exampleRows = [
+      [
+        '0102030405',
+        'Juan',
+        'Pérez',
+        'juan.perez@correo.com',
+        '0987654321',
+        'Av. Principal 123',
+        '2010-05-12',
+        'Ecuatoriana',
+        'Masculino',
+        'Quito',
+        ...profileFields.map(field => {
+          // Ejemplos según tipo
+          switch (field.tipo) {
+            case 'NUMBER': return '5';
+            case 'DATE': return '2024-01-15';
+            case 'BOOLEAN': return 'Sí';
+            case 'SELECT': 
+            case 'MULTISELECT':
+              try {
+                const options = field.config?.options || [];
+                return options[0]?.label || '';
+              } catch (e) {
+                return '';
+              }
+            default: return 'Ejemplo';
+          }
+        }),
+      ],
+      [
+        '0605040302',
+        'Ana',
+        'Gómez',
+        'ana.gomez@correo.com',
+        '',
+        '',
+        '2009-11-28',
+        'Ecuatoriana',
+        'Femenino',
+        'Guayaquil',
+        ...profileFields.map(() => ''),
+      ],
+    ];
+
+    const data = [allColumns, ...exampleRows];
+    const worksheet = XLSX.default.utils.aoa_to_sheet(data);
+
+    // Configurar anchos de columna
+    const colWidths = [
+      { wch: 20 }, // numeroIdentificacion
+      { wch: 15 }, // nombre
+      { wch: 15 }, // apellido
+      { wch: 30 }, // email
+      { wch: 15 }, // telefono
+      { wch: 30 }, // direccion
+      { wch: 15 }, // fechaNacimiento
+      { wch: 15 }, // nacionalidad
+      { wch: 12 }, // genero
+      { wch: 20 }, // lugarNacimiento
+      ...profileFields.map(() => ({ wch: 20 })),
+    ];
+    worksheet['!cols'] = colWidths;
+
+    const workbook = XLSX.default.utils.book_new();
+    XLSX.default.utils.book_append_sheet(workbook, worksheet, 'Estudiantes');
+
+    const excelBuffer = XLSX.default.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="plantilla_actualizacion_estudiantes.xlsx"');
+    res.status(200).send(excelBuffer);
+  } catch (error) {
+    console.error('Error al generar plantilla de actualización masiva:', error);
+    next(error);
+  }
+};
+
+/**
+ * Actualización masiva de estudiantes desde Excel
+ */
+export const bulkUpdateStudents = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'No se proporcionó ningún archivo',
+      });
+    }
+
+    const XLSX = await import('xlsx');
+    const { getInstitutionFilter } = await import('../utils/institutionFilter.js');
+    
+    const institutionId = getInstitutionFilter(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución.',
+      });
+    }
+
+    // Obtener campos personalizados de la institución
+    const profileFields = await prisma.studentProfileField.findMany({
+      where: {
+        section: {
+          institucionId: institutionId,
+          activo: true,
+        },
+      },
+      include: {
+        section: true,
+      },
+      orderBy: [
+        { section: { orden: 'asc' } },
+        { orden: 'asc' },
+      ],
+    });
+
+    // Crear mapa de etiqueta -> field para búsqueda rápida
+    const fieldsByLabel = new Map();
+    profileFields.forEach(field => {
+      fieldsByLabel.set(field.etiqueta.toLowerCase().trim(), field);
+    });
+
+    // Leer archivo Excel
+    const workbook = XLSX.default.read(req.file.buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const jsonData = XLSX.default.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({
+        error: 'El archivo debe incluir encabezados y al menos una fila de datos.',
+      });
+    }
+
+    // Mapeo de headers
+    const headerMap = {
+      'numeroidentificacion': 'numeroIdentificacion',
+      'numero identificacion': 'numeroIdentificacion',
+      'numero_identificacion': 'numeroIdentificacion',
+      'fechanacimiento': 'fechaNacimiento',
+      'fecha nacimiento': 'fechaNacimiento',
+      'fecha_nacimiento': 'fechaNacimiento',
+      'lugarnacimiento': 'lugarNacimiento',
+      'lugar nacimiento': 'lugarNacimiento',
+      'lugar_nacimiento': 'lugarNacimiento',
+    };
+
+    // Procesar headers
+    const rawHeaders = jsonData[0].map(header => String(header).trim());
+    const headers = rawHeaders.map(header => {
+      const normalized = header.toLowerCase().trim();
+      return headerMap[normalized] || header;
+    });
+
+    // Validar header obligatorio
+    if (!headers.includes('numeroIdentificacion')) {
+      return res.status(400).json({
+        error: 'Falta la columna obligatoria: numeroIdentificacion',
+      });
+    }
+
+    const results = {
+      procesados: 0,
+      actualizados: 0,
+      omitidos: 0,
+      errores: [],
+    };
+
+    // Procesar cada fila
+    for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex += 1) {
+      const row = jsonData[rowIndex];
+      const rowNumber = rowIndex + 1;
+
+      // Saltar filas vacías
+      if (!row || row.every(cell => !cell || String(cell).trim() === '')) {
+        continue;
+      }
+
+      try {
+        // Construir objeto de la fila
+        const record = {};
+        headers.forEach((header, columnIndex) => {
+          if (!header) return;
+          const value = row[columnIndex] !== undefined && row[columnIndex] !== null 
+            ? String(row[columnIndex]).trim() 
+            : '';
+          record[header] = value;
+        });
+
+        const numeroIdentificacion = record.numeroIdentificacion?.trim();
+        if (!numeroIdentificacion) {
+          results.errores.push({
+            fila: rowNumber,
+            numeroIdentificacion: '-',
+            error: 'Falta el número de identificación',
+          });
+          continue;
+        }
+
+        // Buscar estudiante por numeroIdentificacion en la institución
+        const user = await prisma.user.findFirst({
+          where: {
+            numeroIdentificacion,
+            institucionId: institutionId,
+            rol: 'ESTUDIANTE',
+          },
+          include: {
+            student: true,
+          },
+        });
+
+        if (!user) {
+          results.errores.push({
+            fila: rowNumber,
+            numeroIdentificacion,
+            error: 'Estudiante no encontrado en esta institución',
+          });
+          continue;
+        }
+
+        if (!user.student) {
+          results.errores.push({
+            fila: rowNumber,
+            numeroIdentificacion,
+            error: 'Usuario encontrado pero sin registro de estudiante',
+          });
+          continue;
+        }
+
+        // Preparar actualización de User (solo campos no vacíos)
+        const userUpdate = {};
+        if (record.nombre && record.nombre.trim()) userUpdate.nombre = record.nombre.trim();
+        if (record.apellido && record.apellido.trim()) userUpdate.apellido = record.apellido.trim();
+        if (record.email && record.email.trim()) userUpdate.email = record.email.trim();
+        if (record.telefono !== undefined && record.telefono !== null) {
+          userUpdate.telefono = record.telefono.trim() || null;
+        }
+        if (record.direccion !== undefined && record.direccion !== null) {
+          userUpdate.direccion = record.direccion.trim() || null;
+        }
+
+        // Preparar actualización de Student (solo campos no vacíos)
+        const studentUpdate = {};
+        
+        if (record.fechaNacimiento && record.fechaNacimiento.trim()) {
+          const fecha = new Date(record.fechaNacimiento.trim());
+          if (isNaN(fecha.getTime())) {
+            results.errores.push({
+              fila: rowNumber,
+              numeroIdentificacion,
+              error: 'Fecha de nacimiento inválida',
+            });
+            continue;
+          }
+          studentUpdate.fechaNacimiento = fecha;
+        }
+        
+        if (record.nacionalidad && record.nacionalidad.trim()) {
+          studentUpdate.nacionalidad = record.nacionalidad.trim();
+        }
+        
+        if (record.genero && record.genero.trim()) {
+          studentUpdate.genero = record.genero.trim();
+        }
+        
+        if (record.lugarNacimiento !== undefined && record.lugarNacimiento !== null) {
+          studentUpdate.lugarNacimiento = record.lugarNacimiento.trim() || null;
+        }
+
+        // Preparar actualización de campos personalizados
+        const profileValueUpdates = [];
+        
+        for (const [label, field] of fieldsByLabel.entries()) {
+          // Buscar el valor en el record (case-insensitive)
+          const recordKey = Object.keys(record).find(
+            key => key.toLowerCase().trim() === label
+          );
+          
+          if (!recordKey) continue; // Columna no presente en Excel
+          
+          const rawValue = record[recordKey];
+          
+          // Si está vacío y no es requerido, skip (no actualizar)
+          if (!rawValue || rawValue.trim() === '') {
+            if (field.requerido) {
+              results.errores.push({
+                fila: rowNumber,
+                numeroIdentificacion,
+                error: `El campo "${field.etiqueta}" es requerido`,
+              });
+              throw new Error('Campo requerido vacío');
+            }
+            continue; // No actualizar este campo
+          }
+
+          // Normalizar valor según tipo
+          let normalizedValue = null;
+          
+          try {
+            switch (field.tipo) {
+              case 'NUMBER': {
+                const num = Number(rawValue);
+                if (isNaN(num)) {
+                  throw new Error(`"${field.etiqueta}" debe ser un número válido`);
+                }
+                normalizedValue = num.toString();
+                break;
+              }
+              
+              case 'DATE': {
+                const date = new Date(rawValue);
+                if (isNaN(date.getTime())) {
+                  throw new Error(`"${field.etiqueta}" debe ser una fecha válida`);
+                }
+                normalizedValue = date.toISOString();
+                break;
+              }
+              
+              case 'BOOLEAN': {
+                const lower = rawValue.toLowerCase().trim();
+                const trueValues = ['sí', 'si', 'yes', 'true', '1', 'verdadero'];
+                normalizedValue = trueValues.includes(lower) ? 'true' : 'false';
+                break;
+              }
+              
+              case 'SELECT': {
+                const options = field.config?.options || [];
+                const validLabels = options.map(opt => opt.label.toLowerCase());
+                const validValues = options.map(opt => opt.value.toLowerCase());
+                const inputLower = rawValue.toLowerCase().trim();
+                
+                if (!validLabels.includes(inputLower) && !validValues.includes(inputLower)) {
+                  throw new Error(`"${field.etiqueta}" debe ser una de las opciones válidas`);
+                }
+                normalizedValue = rawValue.trim();
+                break;
+              }
+              
+              case 'MULTISELECT': {
+                const values = rawValue.split(',').map(v => v.trim()).filter(Boolean);
+                if (values.length === 0 && field.requerido) {
+                  throw new Error(`"${field.etiqueta}" requiere al menos una opción`);
+                }
+                normalizedValue = JSON.stringify(values);
+                break;
+              }
+              
+              default:
+                normalizedValue = rawValue.trim();
+            }
+
+            profileValueUpdates.push({
+              fieldId: field.id,
+              value: normalizedValue,
+            });
+          } catch (validationError) {
+            results.errores.push({
+              fila: rowNumber,
+              numeroIdentificacion,
+              error: validationError.message,
+            });
+            throw validationError;
+          }
+        }
+
+        // Ejecutar actualizaciones en transacción
+        await prisma.$transaction(async (tx) => {
+          // Actualizar User si hay cambios
+          if (Object.keys(userUpdate).length > 0) {
+            await tx.user.update({
+              where: { id: user.id },
+              data: userUpdate,
+            });
+          }
+
+          // Actualizar Student si hay cambios
+          if (Object.keys(studentUpdate).length > 0) {
+            await tx.student.update({
+              where: { id: user.student.id },
+              data: studentUpdate,
+            });
+          }
+
+          // Actualizar campos personalizados
+          for (const { fieldId, value } of profileValueUpdates) {
+            if (value === null) {
+              await tx.studentProfileValue.deleteMany({
+                where: {
+                  studentId: user.student.id,
+                  fieldId,
+                },
+              });
+            } else {
+              await tx.studentProfileValue.upsert({
+                where: {
+                  studentId_fieldId: {
+                    studentId: user.student.id,
+                    fieldId,
+                  },
+                },
+                update: { valor: value },
+                create: {
+                  studentId: user.student.id,
+                  fieldId,
+                  valor: value,
+                },
+              });
+            }
+          }
+        });
+
+        results.actualizados += 1;
+        results.procesados += 1;
+      } catch (error) {
+        results.procesados += 1;
+        // Si ya se agregó el error específico, no duplicar
+        if (!results.errores.some(e => e.fila === rowNumber)) {
+          results.errores.push({
+            fila: rowNumber,
+            numeroIdentificacion: record.numeroIdentificacion || '-',
+            error: error.message || 'Error desconocido al procesar esta fila',
+          });
+        }
+      }
+    }
+
+    res.json({
+      message: 'Actualización masiva procesada correctamente.',
+      resumen: {
+        procesados: results.procesados,
+        actualizados: results.actualizados,
+        omitidos: results.omitidos,
+        errores: results.errores.length,
+      },
+      errores: results.errores,
+    });
+  } catch (error) {
+    console.error('Error en actualización masiva:', error);
+    next(error);
+  }
+};
+

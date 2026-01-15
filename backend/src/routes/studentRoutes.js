@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import {
   getStudents,
   getStudentById,
@@ -7,6 +8,8 @@ import {
   deleteStudent,
   uploadFotoCarnet,
   getFotoCarnet,
+  getBulkUpdateTemplate,
+  bulkUpdateStudents,
 } from '../controllers/studentController.js';
 import {
   withdrawStudent,
@@ -27,6 +30,10 @@ router.get('/foto/:filename', getFotoCarnet);
 
 // Aplicar autenticación a todas las demás rutas
 router.use(authenticate);
+
+// Rutas de actualización masiva (deben ir antes de /:id)
+router.get('/bulk-update-template', authorize('ADMIN', 'SECRETARIA'), getBulkUpdateTemplate);
+router.post('/bulk-update', authorize('ADMIN', 'SECRETARIA'), multer({ storage: multer.memoryStorage() }).single('file'), bulkUpdateStudents);
 
 // Rutas de retiros y matrículas (deben ir antes de /:id para evitar conflictos)
 router.post('/:id/withdraw', authorize('ADMIN', 'SECRETARIA'), withdrawStudent);

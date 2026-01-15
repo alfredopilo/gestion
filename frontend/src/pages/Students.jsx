@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import StudentWithdrawalModal from '../components/StudentWithdrawalModal';
 import StudentReactivationModal from '../components/StudentReactivationModal';
 
@@ -26,6 +27,14 @@ const Students = () => {
     total: 0,
     pages: 0,
   });
+  
+  // Estados para actualización masiva
+  const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState([]);
+  const [bulkFileName, setBulkFileName] = useState('');
+  const [bulkSummary, setBulkSummary] = useState(null);
+  const [bulkError, setBulkError] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     fetchCourses();
@@ -181,6 +190,186 @@ const Students = () => {
     fetchStudents();
   };
 
+  // Handlers para actualización masiva
+  const resetBulkState = () => {
+    setBulkPreview([]);
+    setBulkFileName('');
+    setBulkSummary(null);
+    setBulkError('');
+    setBulkLoading(false);
+  };
+
+  const handleOpenBulkUpdateModal = () => {
+    resetBulkState();
+    setShowBulkUpdateModal(true);
+  };
+
+  const handleCloseBulkUpdateModal = () => {
+    resetBulkState();
+    setShowBulkUpdateModal(false);
+  };
+
+  const handleDownloadBulkTemplate = async () => {
+    try {
+      const response = await api.get('/students/bulk-update-template', {
+        responseType: 'blob',
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'plantilla_actualizacion_estudiantes.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Plantilla descargada exitosamente');
+    } catch (error) {
+      console.error('Error al descargar plantilla:', error);
+      toast.error('Error al descargar la plantilla');
+    }
+  };
+
+  const handleBulkFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setBulkError('');
+    try {
+      // Leer el archivo Excel
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Obtener la primera hoja
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convertir la hoja a JSON
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+      if (jsonData.length < 2) {
+        throw new Error('El archivo debe incluir encabezados y al menos una fila de datos.');
+      }
+
+      // Procesar headers
+      const rawHeaders = jsonData[0].map(header => String(header).trim());
+
+      // Validar header obligatorio
+      const hasNumeroId = rawHeaders.some(h => 
+        h.toLowerCase().includes('numeroidentificacion') || 
+        h.toLowerCase().includes('numero identificacion')
+      );
+      
+      if (!hasNumeroId) {
+        throw new Error('Falta la columna obligatoria: numeroIdentificacion');
+      }
+
+      // Procesar filas de datos
+      const parsedData = [];
+      for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex += 1) {
+        const row = jsonData[rowIndex];
+        
+        // Saltar filas vacías
+        if (!row || row.every(cell => !cell || String(cell).trim() === '')) {
+          continue;
+        }
+
+        const record = {};
+        rawHeaders.forEach((header, columnIndex) => {
+          if (!header) return;
+          const value = row[columnIndex] !== undefined && row[columnIndex] !== null 
+            ? String(row[columnIndex]).trim() 
+            : '';
+          record[header] = value;
+        });
+
+        // Verificar que tenga numeroIdentificacion
+        const numeroIdKey = rawHeaders.find(h => 
+          h.toLowerCase().includes('numeroidentificacion') || 
+          h.toLowerCase().includes('numero identificacion')
+        );
+        
+        if (record[numeroIdKey]) {
+          parsedData.push(record);
+        }
+      }
+
+      if (parsedData.length === 0) {
+        throw new Error('No se encontraron registros válidos en el archivo.');
+      }
+
+      setBulkPreview(parsedData);
+      setBulkFileName(file.name);
+      setBulkSummary(null);
+    } catch (error) {
+      console.error('Error al procesar el archivo Excel:', error);
+      setBulkPreview([]);
+      setBulkFileName('');
+      setBulkSummary(null);
+      setBulkError(error.message || 'No se pudo procesar el archivo. Verifica el formato.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleConfirmBulkUpdate = async () => {
+    if (bulkPreview.length === 0) {
+      toast.error('No hay datos para actualizar');
+      return;
+    }
+
+    setBulkLoading(true);
+    setBulkError('');
+
+    try {
+      // Crear FormData con el archivo original
+      const formData = new FormData();
+      
+      // Recrear el archivo Excel desde bulkPreview
+      const workbook = XLSX.utils.book_new();
+      const headers = Object.keys(bulkPreview[0]);
+      const data = [
+        headers,
+        ...bulkPreview.map(item => headers.map(h => item[h] || ''))
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Estudiantes');
+      
+      const excelBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([excelBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
+      formData.append('file', blob, 'estudiantes.xlsx');
+
+      // Enviar al backend
+      const response = await api.post('/students/bulk-update', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setBulkSummary(response.data);
+      setBulkPreview([]);
+      
+      if (response.data.resumen.errores === 0) {
+        toast.success('Actualización completada exitosamente');
+        fetchStudents(); // Refrescar la lista de estudiantes
+      } else {
+        toast.success(`Actualización completada con ${response.data.resumen.errores} error(es)`);
+      }
+    } catch (error) {
+      console.error('Error al actualizar estudiantes:', error);
+      setBulkError(error.response?.data?.error || 'Error al actualizar los estudiantes');
+      toast.error('Error al actualizar los estudiantes');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -213,16 +402,38 @@ const Students = () => {
             <h1 className="text-4xl font-extrabold tracking-tight mb-2">Estudiantes</h1>
             <p className="text-primary-100">Gestión de estudiantes del sistema educativo</p>
           </div>
-          <button
-            onClick={fetchStudents}
-            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200"
-            title="Actualizar lista"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span className="font-medium">Actualizar</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownloadBulkTemplate}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200"
+              title="Descargar plantilla para actualización masiva"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="font-medium">Plantilla</span>
+            </button>
+            <button
+              onClick={handleOpenBulkUpdateModal}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200"
+              title="Actualización masiva de estudiantes"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span className="font-medium">Actualizar Masivo</span>
+            </button>
+            <button
+              onClick={fetchStudents}
+              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all duration-200"
+              title="Actualizar lista"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="font-medium">Actualizar</span>
+            </button>
+          </div>
         </div>
         
         {/* Estadísticas rápidas */}
@@ -678,6 +889,167 @@ const Students = () => {
           }}
           onSuccess={handleReactivationSuccess}
         />
+      )}
+
+      {/* Modal de Actualización Masiva */}
+      {showBulkUpdateModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Actualización Masiva de Estudiantes</h2>
+            
+            {/* Sección de carga de archivo */}
+            {!bulkSummary && (
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                  <label className="flex flex-col items-center cursor-pointer">
+                    <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <span className="text-sm text-gray-600">Haz clic para seleccionar un archivo Excel</span>
+                    <span className="text-xs text-gray-500 mt-1">(.xlsx)</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleBulkFile}
+                      className="hidden"
+                    />
+                  </label>
+                  {bulkFileName && (
+                    <p className="mt-2 text-sm text-green-600 text-center">
+                      Archivo seleccionado: {bulkFileName}
+                    </p>
+                  )}
+                </div>
+
+                {bulkError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    {bulkError}
+                  </div>
+                )}
+
+                {/* Preview de datos */}
+                {bulkPreview.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-2">Vista Previa ({bulkPreview.length} estudiantes)</h3>
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="max-h-96 overflow-auto">
+                        <table className="min-w-full divide-y divide-gray-200 text-xs">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                              {bulkPreview[0] && Object.keys(bulkPreview[0]).slice(0, 8).map((key, idx) => (
+                                <th key={idx} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  {key}
+                                </th>
+                              ))}
+                              {bulkPreview[0] && Object.keys(bulkPreview[0]).length > 8 && (
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                  ... +{Object.keys(bulkPreview[0]).length - 8} campos
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {bulkPreview.slice(0, 10).map((student, index) => (
+                              <tr key={index} className="hover:bg-gray-50">
+                                <td className="px-3 py-2">{index + 1}</td>
+                                {Object.keys(bulkPreview[0]).slice(0, 8).map((key, idx) => (
+                                  <td key={idx} className="px-3 py-2">{student[key] || '-'}</td>
+                                ))}
+                                {Object.keys(bulkPreview[0]).length > 8 && (
+                                  <td className="px-3 py-2 text-gray-400">...</td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {bulkPreview.length > 10 && (
+                        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 text-center">
+                          Mostrando 10 de {bulkPreview.length} registros
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Resultados de la actualización */}
+            {bulkSummary && (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-800 mb-2">Resumen de Actualización</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Procesados</p>
+                      <p className="text-xl font-bold text-gray-900">{bulkSummary.resumen.procesados}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Actualizados</p>
+                      <p className="text-xl font-bold text-green-600">{bulkSummary.resumen.actualizados}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Omitidos</p>
+                      <p className="text-xl font-bold text-yellow-600">{bulkSummary.resumen.omitidos}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Errores</p>
+                      <p className="text-xl font-bold text-red-600">{bulkSummary.resumen.errores}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de errores */}
+                {bulkSummary.errores && bulkSummary.errores.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-red-800 mb-2">Errores Encontrados</h3>
+                    <div className="max-h-64 overflow-y-auto">
+                      <ul className="space-y-2">
+                        {bulkSummary.errores.map((error, index) => (
+                          <li key={index} className="text-sm text-red-700">
+                            <span className="font-semibold">Fila {error.fila}</span>
+                            {error.numeroIdentificacion && error.numeroIdentificacion !== '-' && (
+                              <span className="text-gray-600"> ({error.numeroIdentificacion})</span>
+                            )}
+                            : {error.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Botones */}
+            <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
+              <button
+                type="button"
+                onClick={handleCloseBulkUpdateModal}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                {bulkSummary ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!bulkSummary && bulkPreview.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleConfirmBulkUpdate}
+                  disabled={bulkLoading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {bulkLoading && (
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                  {bulkLoading ? 'Actualizando...' : 'Confirmar Actualización'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
