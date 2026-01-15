@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { getDashboardStats, getDashboardDetailedStats } from '../controllers/dashboardController.js';
 
 const router = express.Router();
@@ -9,13 +9,13 @@ const router = express.Router();
  * GET /api/v1/dashboard/stats
  * Retorna conteos rápidos sin cargar registros completos
  */
-router.get('/stats', authMiddleware, getDashboardStats);
+router.get('/stats', authenticate, getDashboardStats);
 
 /**
  * Ruta para obtener estadísticas detalladas (opcional)
  * GET /api/v1/dashboard/detailed-stats
  * Retorna estadísticas más completas con detalles adicionales
  */
-router.get('/detailed-stats', authMiddleware, getDashboardDetailedStats);
+router.get('/detailed-stats', authenticate, getDashboardDetailedStats);
 
 export default router;
