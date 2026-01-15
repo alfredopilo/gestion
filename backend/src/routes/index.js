@@ -29,10 +29,12 @@ import tareaEntregaRoutes from './tareaEntregaRoutes.js';
 import permissionRoutes from './permissionRoutes.js';
 import logRoutes from './logRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
+import dashboardRoutes from './dashboardRoutes.js';
 
 const router = express.Router();
 
 router.use('/auth', authRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);
 router.use('/students', studentRoutes);
 router.use('/courses', courseRoutes);

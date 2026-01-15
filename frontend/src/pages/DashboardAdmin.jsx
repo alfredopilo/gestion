@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import toast from 'react-hot-toast';
 
 const DashboardAdmin = () => {
   const [stats, setStats] = useState({
@@ -9,28 +10,48 @@ const DashboardAdmin = () => {
     totalCourses: 0,
     totalPayments: 0,
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const [users, students, courses, payments] = await Promise.all([
-        api.get('/users?limit=1'),
-        api.get('/students?limit=1'),
-        api.get('/courses?limit=1'),
-        api.get('/payments?limit=1'),
-      ]);
-
-      setStats({
-        totalUsers: users.data.pagination.total,
-        totalStudents: students.data.pagination.total,
-        totalCourses: courses.data.pagination.total,
-        totalPayments: payments.data.pagination.total,
+      // Usar el nuevo endpoint optimizado con timeout aumentado
+      const response = await api.get('/dashboard/stats', {
+        timeout: 30000 // 30 segundos para VPS lentos
       });
+
+      setStats(response.data.data);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
+      setError(error.message || 'Error al cargar estadísticas');
+      
+      // Mostrar mensaje de error amigable
+      if (error.code === 'ECONNABORTED') {
+        toast.error('La conexión está tardando demasiado. Verifica tu conexión o intenta más tarde.');
+      } else if (error.response?.status === 500) {
+        toast.error('Error en el servidor. Contacta al administrador.');
+      } else if (!error.response) {
+        toast.error('No se puede conectar al servidor. Verifica tu conexión.');
+      } else {
+        toast.error('Error al cargar estadísticas');
+      }
+      
+      // Mantener valores en 0 si hay error
+      setStats({
+        totalUsers: 0,
+        totalStudents: 0,
+        totalCourses: 0,
+        totalPayments: 0,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -89,13 +110,51 @@ const DashboardAdmin = () => {
     <div className="space-y-8">
       {/* Header con animación */}
       <div className="animate-fade-in">
-        <h1 className="text-4xl font-bold text-gradient gradient-primary">
-          Panel de Administración
-        </h1>
-        <p className="mt-3 text-lg text-gray-600">
-          Gestión integral del sistema educativo
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-gradient gradient-primary">
+              Panel de Administración
+            </h1>
+            <p className="mt-3 text-lg text-gray-600">
+              Gestión integral del sistema educativo
+            </p>
+          </div>
+          
+          {/* Botón de refrescar */}
+          {!loading && (
+            <button
+              onClick={fetchStats}
+              className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 transition-all duration-300 shadow-md hover:shadow-lg"
+              title="Refrescar estadísticas"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Mensaje de error si existe */}
+      {error && (
+        <div className="animate-fade-in bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-500 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-red-800 font-medium">Error al cargar estadísticas</p>
+              <p className="text-red-600 text-sm mt-1">{error}</p>
+              <button
+                onClick={fetchStats}
+                className="text-sm text-red-700 underline hover:text-red-900 mt-2"
+              >
+                Intentar nuevamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tarjetas de estadísticas */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 animate-slide-up">
@@ -128,7 +187,17 @@ const DashboardAdmin = () => {
                 {stat.name}
               </dt>
               <dd className="text-4xl font-bold text-white drop-shadow-lg">
-                {stat.value}
+                {loading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-16 h-10 bg-white/20 rounded animate-pulse"></div>
+                    <svg className="animate-spin h-6 w-6 text-white/50" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : (
+                  stat.value
+                )}
               </dd>
               
               {/* Efecto de brillo en la parte inferior */}
