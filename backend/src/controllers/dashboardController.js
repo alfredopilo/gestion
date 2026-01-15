@@ -8,14 +8,14 @@ const prisma = new PrismaClient();
  */
 export const getDashboardStats = async (req, res) => {
   try {
-    const institutionId = req.institutionId;
+    const institucionId = req.institutionId;
 
     // Ejecutar todas las consultas en paralelo con COUNT optimizado
     const [usersCount, studentsCount, coursesCount, paymentsCount] = await Promise.all([
       // Contar usuarios de la institución
       prisma.user.count({
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { institucionId }),
           deletedAt: null
         }
       }),
@@ -23,24 +23,32 @@ export const getDashboardStats = async (req, res) => {
       // Contar estudiantes activos
       prisma.student.count({
         where: {
-          ...(institutionId && { institutionId }),
-          status: 'ACTIVO',
+          ...(institucionId && { institucionId }),
+          estado: 'ACTIVO',
           deletedAt: null
         }
       }),
       
-      // Contar cursos activos
+      // Contar cursos activos (a través del año lectivo y su institución)
       prisma.course.count({
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { 
+            anioLectivo: { 
+              institucionId 
+            } 
+          }),
           deletedAt: null
         }
       }),
       
-      // Contar pagos
+      // Contar pagos (a través del estudiante y su institución)
       prisma.payment.count({
         where: {
-          ...(institutionId && { student: { institutionId } }),
+          ...(institucionId && { 
+            estudiante: { 
+              institucionId 
+            } 
+          }),
           deletedAt: null
         }
       })
@@ -72,7 +80,7 @@ export const getDashboardStats = async (req, res) => {
  */
 export const getDashboardDetailedStats = async (req, res) => {
   try {
-    const institutionId = req.institutionId;
+    const institucionId = req.institutionId;
 
     // Ejecutar consultas en paralelo
     const [
@@ -86,16 +94,16 @@ export const getDashboardDetailedStats = async (req, res) => {
       // Usuarios
       prisma.user.count({
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { institucionId }),
           deletedAt: null
         }
       }),
       
       // Estudiantes por estado
       prisma.student.groupBy({
-        by: ['status'],
+        by: ['estado'],
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { institucionId }),
           deletedAt: null
         },
         _count: {
@@ -103,18 +111,26 @@ export const getDashboardDetailedStats = async (req, res) => {
         }
       }),
       
-      // Cursos
+      // Cursos (a través del año lectivo)
       prisma.course.count({
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { 
+            anioLectivo: { 
+              institucionId 
+            } 
+          }),
           deletedAt: null
         }
       }),
       
-      // Pagos totales
+      // Pagos totales (a través del estudiante)
       prisma.payment.count({
         where: {
-          ...(institutionId && { student: { institutionId } }),
+          ...(institucionId && { 
+            estudiante: { 
+              institucionId 
+            } 
+          }),
           deletedAt: null
         }
       }),
@@ -122,13 +138,13 @@ export const getDashboardDetailedStats = async (req, res) => {
       // Últimos 5 estudiantes registrados
       prisma.student.findMany({
         where: {
-          ...(institutionId && { institutionId }),
+          ...(institucionId && { institucionId }),
           deletedAt: null
         },
         select: {
           id: true,
-          firstName: true,
-          lastName: true,
+          nombre: true,
+          apellido: true,
           createdAt: true
         },
         orderBy: {
@@ -139,31 +155,35 @@ export const getDashboardDetailedStats = async (req, res) => {
       
       // Resumen de pagos
       prisma.payment.groupBy({
-        by: ['status'],
+        by: ['estado'],
         where: {
-          ...(institutionId && { student: { institutionId } }),
+          ...(institucionId && { 
+            estudiante: { 
+              institucionId 
+            } 
+          }),
           deletedAt: null
         },
         _count: {
           id: true
         },
         _sum: {
-          amount: true
+          monto: true
         }
       })
     ]);
 
     // Procesar estudiantes por estado
     const studentsByStatus = studentsCount.reduce((acc, item) => {
-      acc[item.status] = item._count.id;
+      acc[item.estado] = item._count.id;
       return acc;
     }, {});
 
     // Procesar pagos por estado
     const paymentsByStatus = paymentSummary.reduce((acc, item) => {
-      acc[item.status] = {
+      acc[item.estado] = {
         count: item._count.id,
-        total: item._sum.amount || 0
+        total: item._sum.monto || 0
       };
       return acc;
     }, {});
