@@ -19,11 +19,11 @@ export const getDashboardStats = async (req, res) => {
         }
       }),
       
-      // Contar estudiantes activos
-      prisma.student.count({
+      // Contar estudiantes activos (a través de enrollments activos)
+      prisma.enrollment.count({
         where: {
           ...(institucionId && { institucionId }),
-          estado: 'ACTIVO'
+          activo: true
         }
       }),
       
@@ -38,12 +38,14 @@ export const getDashboardStats = async (req, res) => {
         }
       }),
       
-      // Contar pagos (a través del estudiante y su institución)
+      // Contar pagos (a través del estudiante y su user e institución)
       prisma.payment.count({
         where: {
           ...(institucionId && { 
             estudiante: { 
-              institucionId 
+              user: {
+                institucionId
+              }
             } 
           })
         }
@@ -81,10 +83,10 @@ export const getDashboardDetailedStats = async (req, res) => {
     // Ejecutar consultas en paralelo
     const [
       usersCount,
-      studentsCount,
+      enrollmentsCount,
       coursesCount,
       paymentsCount,
-      recentStudents,
+      recentEnrollments,
       paymentSummary
     ] = await Promise.all([
       // Usuarios
@@ -94,14 +96,11 @@ export const getDashboardDetailedStats = async (req, res) => {
         }
       }),
       
-      // Estudiantes por estado
-      prisma.student.groupBy({
-        by: ['estado'],
+      // Enrollments activos (representa estudiantes inscritos)
+      prisma.enrollment.count({
         where: {
-          ...(institucionId && { institucionId })
-        },
-        _count: {
-          id: true
+          ...(institucionId && { institucionId }),
+          activo: true
         }
       }),
       
@@ -116,27 +115,39 @@ export const getDashboardDetailedStats = async (req, res) => {
         }
       }),
       
-      // Pagos totales (a través del estudiante)
+      // Pagos totales (a través del estudiante y user)
       prisma.payment.count({
         where: {
           ...(institucionId && { 
             estudiante: { 
-              institucionId 
+              user: {
+                institucionId
+              }
             } 
           })
         }
       }),
       
-      // Últimos 5 estudiantes registrados
-      prisma.student.findMany({
+      // Últimos 5 enrollments (estudiantes inscritos)
+      prisma.enrollment.findMany({
         where: {
           ...(institucionId && { institucionId })
         },
         select: {
           id: true,
-          nombre: true,
-          apellido: true,
-          createdAt: true
+          matricula: true,
+          createdAt: true,
+          student: {
+            select: {
+              id: true,
+              user: {
+                select: {
+                  nombre: true,
+                  apellido: true
+                }
+              }
+            }
+          }
         },
         orderBy: {
           createdAt: 'desc'
@@ -150,7 +161,9 @@ export const getDashboardDetailedStats = async (req, res) => {
         where: {
           ...(institucionId && { 
             estudiante: { 
-              institucionId 
+              user: {
+                institucionId
+              }
             } 
           })
         },
@@ -163,12 +176,6 @@ export const getDashboardDetailedStats = async (req, res) => {
       })
     ]);
 
-    // Procesar estudiantes por estado
-    const studentsByStatus = studentsCount.reduce((acc, item) => {
-      acc[item.estado] = item._count.id;
-      return acc;
-    }, {});
-
     // Procesar pagos por estado
     const paymentsByStatus = paymentSummary.reduce((acc, item) => {
       acc[item.estado] = {
@@ -178,16 +185,24 @@ export const getDashboardDetailedStats = async (req, res) => {
       return acc;
     }, {});
 
+    // Formatear estudiantes recientes
+    const recentStudents = recentEnrollments.map(enrollment => ({
+      id: enrollment.student.id,
+      nombre: enrollment.student.user.nombre,
+      apellido: enrollment.student.user.apellido,
+      matricula: enrollment.matricula,
+      createdAt: enrollment.createdAt
+    }));
+
     res.json({
       success: true,
       data: {
         totals: {
           users: usersCount,
-          students: studentsByStatus.ACTIVO || 0,
+          students: enrollmentsCount,
           courses: coursesCount,
           payments: paymentsCount
         },
-        studentsByStatus,
         recentStudents,
         paymentsByStatus
       }
