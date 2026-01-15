@@ -12,3 +12,10 @@ coverage/
 *.swo
 *~
 
+# Backups de base de datos (contienen datos sensibles)
+bak/
+*.sql
+*.sql.gz
+*.dump
+*.backup
+
