@@ -1,6 +1,43 @@
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
 
+const MAINTENANCE_MODE_KEY = 'MAINTENANCE_MODE';
+
+// Cache para modo mantenimiento
+let maintenanceCache = {
+  value: null,
+  lastCheck: null,
+  ttl: 5000,
+};
+
+/**
+ * Verificar si el modo mantenimiento está activo (con cache)
+ */
+const isMaintenanceModeActive = async () => {
+  const now = Date.now();
+  
+  if (
+    maintenanceCache.value !== null &&
+    maintenanceCache.lastCheck &&
+    now - maintenanceCache.lastCheck < maintenanceCache.ttl
+  ) {
+    return maintenanceCache.value;
+  }
+
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { clave: MAINTENANCE_MODE_KEY },
+    });
+
+    const isActive = setting?.valor === 'true';
+    maintenanceCache = { value: isActive, lastCheck: now, ttl: 5000 };
+    return isActive;
+  } catch (error) {
+    console.error('Error verificando modo mantenimiento:', error);
+    return false;
+  }
+};
+
 /**
  * Middleware para verificar el token JWT
  */
@@ -154,6 +191,16 @@ export const authenticate = async (req, res, next) => {
       }
       
       req.activeInstitution = activeInstitution;
+
+      // Verificar modo de mantenimiento
+      const isMaintenanceActive = await isMaintenanceModeActive();
+      if (isMaintenanceActive && req.user.rol !== 'ADMIN') {
+        return res.status(503).json({
+          error: 'Sistema en mantenimiento',
+          message: 'El sistema se encuentra en modo de mantenimiento. Solo los administradores pueden acceder en este momento.',
+          maintenanceMode: true,
+        });
+      }
 
       next();
     } catch (error) {

@@ -73,8 +73,16 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       const message = error.response?.data?.error || 'Error al iniciar sesión';
-      toast.error(message);
-      return { success: false, error: message };
+      const isMaintenanceMode = error.response?.data?.maintenanceMode === true;
+      
+      // Si es modo mantenimiento, mostrar mensaje específico
+      if (isMaintenanceMode) {
+        toast.error('Sistema en mantenimiento. Solo administradores pueden acceder.');
+      } else {
+        toast.error(message);
+      }
+      
+      return { success: false, error: message, maintenanceMode: isMaintenanceMode };
     }
   };
 

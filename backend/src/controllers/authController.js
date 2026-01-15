@@ -4,6 +4,23 @@ import { generateToken } from '../utils/jwt.js';
 import { loginSchema, updateProfileSchema } from '../utils/validators.js';
 import { logAction, logLoginFailed } from '../middleware/logging.js';
 
+const MAINTENANCE_MODE_KEY = 'MAINTENANCE_MODE';
+
+/**
+ * Verificar si el modo mantenimiento está activo
+ */
+const isMaintenanceModeActive = async () => {
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { clave: MAINTENANCE_MODE_KEY },
+    });
+    return setting?.valor === 'true';
+  } catch (error) {
+    console.error('Error verificando modo mantenimiento:', error);
+    return false;
+  }
+};
+
 /**
  * Login de usuario
  */
@@ -46,6 +63,17 @@ export const login = async (req, res, next) => {
       await logLoginFailed(user.email, `Usuario con estado: ${user.estado}`, req);
       return res.status(403).json({
         error: 'Usuario inactivo. Contacte al administrador.',
+      });
+    }
+
+    // Verificar modo de mantenimiento
+    const isMaintenanceActive = await isMaintenanceModeActive();
+    if (isMaintenanceActive && user.rol !== 'ADMIN') {
+      await logLoginFailed(user.email, 'Sistema en mantenimiento - usuario no ADMIN', req);
+      return res.status(503).json({
+        error: 'Sistema en mantenimiento',
+        message: 'El sistema se encuentra en modo de mantenimiento. Solo los administradores pueden acceder en este momento.',
+        maintenanceMode: true,
       });
     }
 

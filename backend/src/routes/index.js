@@ -28,6 +28,7 @@ import notificationRoutes from './notificationRoutes.js';
 import tareaEntregaRoutes from './tareaEntregaRoutes.js';
 import permissionRoutes from './permissionRoutes.js';
 import logRoutes from './logRoutes.js';
+import settingsRoutes from './settingsRoutes.js';
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/tareas', tareaEntregaRoutes);
 router.use('/', permissionRoutes);
 router.use('/logs', logRoutes);
+router.use('/settings', settingsRoutes);
 
 export default router;
 

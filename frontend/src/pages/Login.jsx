@@ -1,14 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const [numeroIdentificacion, setNumeroIdentificacion] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [checkingMaintenance, setCheckingMaintenance] = useState(true);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Verificar estado del modo mantenimiento al cargar
+  useEffect(() => {
+    const checkMaintenanceStatus = async () => {
+      try {
+        const response = await api.get('/settings/maintenance');
+        setMaintenanceMode(response.data.maintenanceMode);
+      } catch (error) {
+        console.error('Error al verificar modo mantenimiento:', error);
+        setMaintenanceMode(false);
+      } finally {
+        setCheckingMaintenance(false);
+      }
+    };
+
+    checkMaintenanceStatus();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,6 +43,9 @@ const Login = () => {
     
     if (result.success) {
       navigate('/dashboard');
+    } else if (result.maintenanceMode) {
+      // Si el error es por modo mantenimiento, mostrar mensaje específico
+      toast.error('Sistema en mantenimiento. Solo administradores pueden acceder.');
     }
     
     setLoading(false);
@@ -53,6 +76,27 @@ const Login = () => {
             Sistema de Administración Educativa
           </p>
         </div>
+
+        {/* Banner de Modo Mantenimiento */}
+        {!checkingMaintenance && maintenanceMode && (
+          <div className="bg-amber-500 border-l-4 border-amber-700 rounded-lg p-4 animate-fade-in">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-amber-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-bold text-amber-900">
+                  Sistema en Mantenimiento
+                </h3>
+                <p className="text-sm text-amber-800 mt-1">
+                  El sistema se encuentra en modo de mantenimiento. Solo los administradores pueden acceder en este momento.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Card de login */}
         <div className="bg-white rounded-2xl shadow-strong p-8 animate-slide-up">
@@ -146,4 +190,3 @@ const Login = () => {
 };
 
 export default Login;
-
