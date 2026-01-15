@@ -10,64 +10,50 @@
 -- ===================================================================
 -- Índice para la tabla User
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "User" WHERE institution_id = ? AND deleted_at IS NULL
-CREATE INDEX IF NOT EXISTS idx_user_institution_deleted 
-  ON "User"(institution_id, deleted_at)
-  WHERE deleted_at IS NULL;
+-- Optimiza: SELECT COUNT(*) FROM "User" WHERE institucion_id = ?
+CREATE INDEX IF NOT EXISTS idx_user_institucion 
+  ON "User"(institucion_id);
 
 -- Índice adicional para consultas por rol
-CREATE INDEX IF NOT EXISTS idx_user_role_institution 
-  ON "User"(role, institution_id, deleted_at)
-  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_role_institucion 
+  ON "User"(rol, institucion_id);
 
 -- ===================================================================
 -- Índice para la tabla Student
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Student" WHERE institution_id = ? AND status = 'ACTIVO' AND deleted_at IS NULL
-CREATE INDEX IF NOT EXISTS idx_student_institution_status_deleted 
-  ON "Student"(institution_id, status, deleted_at)
-  WHERE deleted_at IS NULL;
+-- Optimiza: SELECT COUNT(*) FROM "Student" WHERE institucion_id = ? AND estado = 'ACTIVO'
+CREATE INDEX IF NOT EXISTS idx_student_institucion_estado 
+  ON "Student"(institucion_id, estado);
 
 -- Índice adicional para consultas por curso
-CREATE INDEX IF NOT EXISTS idx_student_course_status 
-  ON "Student"(course_id, status, deleted_at)
-  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_student_curso_estado 
+  ON "Student"(curso_id, estado);
 
 -- Índice para búsquedas por nombre (usado frecuentemente)
 CREATE INDEX IF NOT EXISTS idx_student_name_search 
-  ON "Student"(first_name, last_name, institution_id)
-  WHERE deleted_at IS NULL;
+  ON "Student"(nombre, apellido, institucion_id);
 
 -- ===================================================================
 -- Índice para la tabla Course
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Course" WHERE institution_id = ? AND deleted_at IS NULL
-CREATE INDEX IF NOT EXISTS idx_course_institution_deleted 
-  ON "Course"(institution_id, deleted_at)
-  WHERE deleted_at IS NULL;
-
--- Índice para consultas por año escolar
-CREATE INDEX IF NOT EXISTS idx_course_school_year 
-  ON "Course"(school_year_id, institution_id, deleted_at)
-  WHERE deleted_at IS NULL;
+-- Optimiza: SELECT COUNT(*) FROM "Course" via anio_lectivo_id
+CREATE INDEX IF NOT EXISTS idx_course_anio_lectivo 
+  ON "Course"(anio_lectivo_id);
 
 -- ===================================================================
 -- Índice para la tabla Payment
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Payment" WHERE deleted_at IS NULL
-CREATE INDEX IF NOT EXISTS idx_payment_deleted 
-  ON "Payment"(deleted_at)
-  WHERE deleted_at IS NULL;
+-- Optimiza: SELECT COUNT(*) FROM "Payment"
+CREATE INDEX IF NOT EXISTS idx_payment_estudiante 
+  ON "Payment"(estudiante_id);
 
--- Índice para consultas por estudiante
-CREATE INDEX IF NOT EXISTS idx_payment_student_status 
-  ON "Payment"(student_id, status, deleted_at)
-  WHERE deleted_at IS NULL;
+-- Índice para consultas por estudiante y estado
+CREATE INDEX IF NOT EXISTS idx_payment_estudiante_estado 
+  ON "Payment"(estudiante_id, estado);
 
 -- Índice para consultas por fecha y estado
-CREATE INDEX IF NOT EXISTS idx_payment_date_status 
-  ON "Payment"(payment_date, status, deleted_at)
-  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_payment_fecha_estado 
+  ON "Payment"(fecha_pago, estado);
 
 -- ===================================================================
 -- Índice para la tabla Grade
@@ -90,40 +76,35 @@ CREATE INDEX IF NOT EXISTS idx_attendance_course_date
   ON "Attendance"(course_id, date);
 
 -- ===================================================================
--- Índice para la tabla SubjectAssignment
+-- Índice para la tabla CourseSubjectAssignment
 -- ===================================================================
 -- Optimiza consultas de asignación de materias
-CREATE INDEX IF NOT EXISTS idx_subject_assignment_teacher 
-  ON "SubjectAssignment"(teacher_id, deleted_at)
-  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_course_subject_assignment_docente 
+  ON "course_subject_assignments"(docente_id);
 
-CREATE INDEX IF NOT EXISTS idx_subject_assignment_course 
-  ON "SubjectAssignment"(course_id, deleted_at)
-  WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_course_subject_assignment_curso 
+  ON "course_subject_assignments"(curso_id);
 
 -- ===================================================================
 -- Índice para la tabla Institution
 -- ===================================================================
 -- Optimiza consultas de instituciones activas
 CREATE INDEX IF NOT EXISTS idx_institution_active 
-  ON "Institution"(is_active, deleted_at)
-  WHERE deleted_at IS NULL;
+  ON "Institution"(activa);
 
 -- ===================================================================
 -- Índice para la tabla SchoolYear
 -- ===================================================================
 -- Optimiza consultas de años escolares activos
 CREATE INDEX IF NOT EXISTS idx_school_year_active 
-  ON "SchoolYear"(is_active, institution_id, deleted_at)
-  WHERE deleted_at IS NULL;
+  ON "school_years"(activo, institucion_id);
 
 -- ===================================================================
 -- Índice para la tabla Period
 -- ===================================================================
 -- Optimiza consultas de períodos activos
 CREATE INDEX IF NOT EXISTS idx_period_active 
-  ON "Period"(is_active, school_year_id, deleted_at)
-  WHERE deleted_at IS NULL;
+  ON "periods"(activo, anio_lectivo_id);
 
 -- ===================================================================
 -- VERIFICACIÓN DE ÍNDICES
@@ -152,19 +133,19 @@ CREATE INDEX IF NOT EXISTS idx_period_active
 -- ===================================================================
 -- NOTAS IMPORTANTES
 -- ===================================================================
--- 1. Los índices WHERE deleted_at IS NULL son "partial indexes"
---    que solo indexan registros no eliminados (más eficiente)
+-- 1. Los índices están optimizados para las consultas más frecuentes
+--    del dashboard y del sistema en general
 --
--- 2. Los índices compuestos están optimizados para las consultas
---    más frecuentes del dashboard
---
--- 3. PostgreSQL automáticamente usa estos índices cuando
+-- 2. PostgreSQL automáticamente usa estos índices cuando
 --    detecta que pueden mejorar el rendimiento de una consulta
 --
--- 4. Si tienes muchos datos (>100k registros), los índices pueden
+-- 3. Si tienes muchos datos (>100k registros), los índices pueden
 --    tardar varios segundos en crearse. Es normal.
 --
--- 5. Los índices ocupan espacio adicional en disco pero mejoran
+-- 4. Los índices ocupan espacio adicional en disco pero mejoran
 --    significativamente el rendimiento de lectura
+--
+-- 5. Los nombres de los índices y tablas coinciden con el schema
+--    de Prisma que usa nombres en español
 --
 -- ===================================================================

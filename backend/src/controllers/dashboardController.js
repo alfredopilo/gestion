@@ -15,8 +15,7 @@ export const getDashboardStats = async (req, res) => {
       // Contar usuarios de la institución
       prisma.user.count({
         where: {
-          ...(institucionId && { institucionId }),
-          deletedAt: null
+          ...(institucionId && { institucionId })
         }
       }),
       
@@ -24,8 +23,7 @@ export const getDashboardStats = async (req, res) => {
       prisma.student.count({
         where: {
           ...(institucionId && { institucionId }),
-          estado: 'ACTIVO',
-          deletedAt: null
+          estado: 'ACTIVO'
         }
       }),
       
@@ -36,8 +34,7 @@ export const getDashboardStats = async (req, res) => {
             anioLectivo: { 
               institucionId 
             } 
-          }),
-          deletedAt: null
+          })
         }
       }),
       
@@ -48,8 +45,7 @@ export const getDashboardStats = async (req, res) => {
             estudiante: { 
               institucionId 
             } 
-          }),
-          deletedAt: null
+          })
         }
       })
     ]);
@@ -94,8 +90,7 @@ export const getDashboardDetailedStats = async (req, res) => {
       // Usuarios
       prisma.user.count({
         where: {
-          ...(institucionId && { institucionId }),
-          deletedAt: null
+          ...(institucionId && { institucionId })
         }
       }),
       
@@ -103,8 +98,7 @@ export const getDashboardDetailedStats = async (req, res) => {
       prisma.student.groupBy({
         by: ['estado'],
         where: {
-          ...(institucionId && { institucionId }),
-          deletedAt: null
+          ...(institucionId && { institucionId })
         },
         _count: {
           id: true
@@ -118,8 +112,7 @@ export const getDashboardDetailedStats = async (req, res) => {
             anioLectivo: { 
               institucionId 
             } 
-          }),
-          deletedAt: null
+          })
         }
       }),
       
@@ -130,16 +123,14 @@ export const getDashboardDetailedStats = async (req, res) => {
             estudiante: { 
               institucionId 
             } 
-          }),
-          deletedAt: null
+          })
         }
       }),
       
       // Últimos 5 estudiantes registrados
       prisma.student.findMany({
         where: {
-          ...(institucionId && { institucionId }),
-          deletedAt: null
+          ...(institucionId && { institucionId })
         },
         select: {
           id: true,
@@ -161,8 +152,7 @@ export const getDashboardDetailedStats = async (req, res) => {
             estudiante: { 
               institucionId 
             } 
-          }),
-          deletedAt: null
+          })
         },
         _count: {
           id: true
