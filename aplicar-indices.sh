@@ -50,18 +50,6 @@ fi
 print_success "PostgreSQL está corriendo"
 echo ""
 
-# Copiar el archivo SQL al contenedor
-print_info "Copiando archivo SQL al contenedor..."
-
-if $DC cp "$SQL_FILE" postgres:/tmp/add_performance_indexes.sql; then
-    print_success "Archivo copiado al contenedor"
-else
-    print_error "Error al copiar archivo"
-    exit 1
-fi
-
-echo ""
-
 # Aplicar los índices
 print_info "Aplicando índices de optimización..."
 print_warning "Esto puede tardar varios segundos si tienes muchos datos"
@@ -69,7 +57,8 @@ echo ""
 
 START_TIME=$(date +%s)
 
-if $DC exec -T postgres psql -U gestionscolar -d gestion_escolar -f /tmp/add_performance_indexes.sql; then
+# Ejecutar SQL directamente desde el archivo sin copiarlo
+if cat "$SQL_FILE" | $DC exec -T postgres psql -U gestionscolar -d gestion_escolar; then
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
     
@@ -92,22 +81,12 @@ $DC exec -T postgres psql -U gestionscolar -d gestion_escolar -c "
 SELECT 
   schemaname, 
   tablename, 
-  indexname,
-  CASE 
-    WHEN indexdef LIKE '%WHERE deleted_at IS NULL%' THEN '(Partial Index)'
-    ELSE ''
-  END as type
+  indexname
 FROM pg_indexes 
 WHERE indexname LIKE 'idx_%'
   AND schemaname = 'public'
 ORDER BY tablename, indexname;
 " 2>&1 | grep -E "idx_|rows|^-" || print_warning "No se pudieron listar índices"
-
-echo ""
-
-# Limpiar archivo temporal
-print_info "Limpiando archivo temporal..."
-$DC exec -T postgres rm /tmp/add_performance_indexes.sql 2>/dev/null || true
 
 echo ""
 echo "=============================================="
@@ -116,24 +95,26 @@ echo "=============================================="
 echo ""
 
 print_info "Los siguientes índices han sido creados:"
-echo "  • idx_user_institucion"
-echo "  • idx_user_role_institucion"
-echo "  • idx_student_institucion_estado"
-echo "  • idx_student_curso_estado"
-echo "  • idx_student_name_search"
-echo "  • idx_course_anio_lectivo"
-echo "  • idx_payment_estudiante"
-echo "  • idx_payment_estudiante_estado"
-echo "  • idx_payment_fecha_estado"
-echo "  • idx_grade_student_subject"
-echo "  • idx_grade_period"
-echo "  • idx_attendance_student_date"
-echo "  • idx_attendance_course_date"
-echo "  • idx_course_subject_assignment_docente"
-echo "  • idx_course_subject_assignment_curso"
-echo "  • idx_institution_active"
-echo "  • idx_school_year_active"
-echo "  • idx_period_active"
+echo "  • idx_user_institucion (tabla: users)"
+echo "  • idx_user_role_institucion (tabla: users)"
+echo "  • idx_student_user (tabla: students)"
+echo "  • idx_student_grupo (tabla: students)"
+echo "  • idx_enrollment_institucion_activo (tabla: enrollments)"
+echo "  • idx_enrollment_student (tabla: enrollments)"
+echo "  • idx_enrollment_curso_anio (tabla: enrollments)"
+echo "  • idx_course_anio_lectivo (tabla: courses)"
+echo "  • idx_payment_estudiante (tabla: payments)"
+echo "  • idx_payment_estudiante_estado (tabla: payments)"
+echo "  • idx_payment_fecha_estado (tabla: payments)"
+echo "  • idx_grade_estudiante_materia (tabla: grades)"
+echo "  • idx_grade_subperiodo (tabla: grades)"
+echo "  • idx_attendance_estudiante_fecha (tabla: attendance)"
+echo "  • idx_attendance_curso_fecha (tabla: attendance)"
+echo "  • idx_course_subject_assignment_docente (tabla: course_subject_assignments)"
+echo "  • idx_course_subject_assignment_curso (tabla: course_subject_assignments)"
+echo "  • idx_institution_active (tabla: institutions)"
+echo "  • idx_school_year_active (tabla: school_years)"
+echo "  • idx_period_active (tabla: periods)"
 echo ""
 
 print_info "Beneficios esperados:"
@@ -145,7 +126,7 @@ echo ""
 
 print_info "Para verificar el uso de índices:"
 echo "  docker compose exec postgres psql -U gestionscolar -d gestion_escolar"
-echo "  \\d+ \"User\""
+echo "  \\d+ users"
 echo "  SELECT * FROM pg_stat_user_indexes WHERE indexname LIKE 'idx_%';"
 echo ""
 

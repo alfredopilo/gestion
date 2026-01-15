@@ -8,89 +8,100 @@
 -- Esto NO es una migración de Prisma, es SQL directo
 
 -- ===================================================================
--- Índice para la tabla User
+-- Índice para la tabla users
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "User" WHERE institucion_id = ?
+-- Optimiza: SELECT COUNT(*) FROM users WHERE institucion_id = ?
 CREATE INDEX IF NOT EXISTS idx_user_institucion 
-  ON "User"(institucion_id);
+  ON users(institucion_id);
 
 -- Índice adicional para consultas por rol
 CREATE INDEX IF NOT EXISTS idx_user_role_institucion 
-  ON "User"(rol, institucion_id);
+  ON users(rol, institucion_id);
 
 -- ===================================================================
--- Índice para la tabla Student
+-- Índice para la tabla students
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Student" WHERE institucion_id = ? AND estado = 'ACTIVO'
-CREATE INDEX IF NOT EXISTS idx_student_institucion_estado 
-  ON "Student"(institucion_id, estado);
+-- Optimiza: SELECT COUNT(*) FROM students WHERE user_id IN (SELECT id FROM users WHERE institucion_id = ?)
+CREATE INDEX IF NOT EXISTS idx_student_user 
+  ON students(user_id);
 
--- Índice adicional para consultas por curso
-CREATE INDEX IF NOT EXISTS idx_student_curso_estado 
-  ON "Student"(curso_id, estado);
-
--- Índice para búsquedas por nombre (usado frecuentemente)
-CREATE INDEX IF NOT EXISTS idx_student_name_search 
-  ON "Student"(nombre, apellido, institucion_id);
+-- Índice adicional para consultas por grupo
+CREATE INDEX IF NOT EXISTS idx_student_grupo 
+  ON students(grupo_id);
 
 -- ===================================================================
--- Índice para la tabla Course
+-- Índice para la tabla enrollments (reemplaza student por institucion)
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Course" via anio_lectivo_id
+-- Optimiza: SELECT COUNT(*) FROM enrollments WHERE institucion_id = ? AND activo = true
+CREATE INDEX IF NOT EXISTS idx_enrollment_institucion_activo 
+  ON enrollments(institucion_id, activo);
+
+-- Índice para consultas por estudiante
+CREATE INDEX IF NOT EXISTS idx_enrollment_student 
+  ON enrollments(student_id, activo);
+
+-- Índice para consultas por curso y año lectivo
+CREATE INDEX IF NOT EXISTS idx_enrollment_curso_anio 
+  ON enrollments(curso_id, anio_lectivo_id);
+
+-- ===================================================================
+-- Índice para la tabla courses
+-- ===================================================================
+-- Optimiza: SELECT COUNT(*) FROM courses via anio_lectivo_id
 CREATE INDEX IF NOT EXISTS idx_course_anio_lectivo 
-  ON "Course"(anio_lectivo_id);
+  ON courses(anio_lectivo_id);
 
 -- ===================================================================
--- Índice para la tabla Payment
+-- Índice para la tabla payments
 -- ===================================================================
--- Optimiza: SELECT COUNT(*) FROM "Payment"
+-- Optimiza: SELECT COUNT(*) FROM payments
 CREATE INDEX IF NOT EXISTS idx_payment_estudiante 
-  ON "Payment"(estudiante_id);
+  ON payments(estudiante_id);
 
 -- Índice para consultas por estudiante y estado
 CREATE INDEX IF NOT EXISTS idx_payment_estudiante_estado 
-  ON "Payment"(estudiante_id, estado);
+  ON payments(estudiante_id, estado);
 
 -- Índice para consultas por fecha y estado
 CREATE INDEX IF NOT EXISTS idx_payment_fecha_estado 
-  ON "Payment"(fecha_pago, estado);
+  ON payments(fecha_pago, estado);
 
 -- ===================================================================
--- Índice para la tabla Grade
+-- Índice para la tabla grades
 -- ===================================================================
 -- Optimiza consultas de calificaciones
-CREATE INDEX IF NOT EXISTS idx_grade_student_subject 
-  ON "Grade"(student_id, subject_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_grade_estudiante_materia 
+  ON grades(estudiante_id, materia_id);
 
-CREATE INDEX IF NOT EXISTS idx_grade_period 
-  ON "Grade"(period_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_grade_subperiodo 
+  ON grades(sub_periodo_id, estudiante_id);
 
 -- ===================================================================
--- Índice para la tabla Attendance
+-- Índice para la tabla attendance
 -- ===================================================================
 -- Optimiza consultas de asistencia
-CREATE INDEX IF NOT EXISTS idx_attendance_student_date 
-  ON "Attendance"(student_id, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_estudiante_fecha 
+  ON attendance(estudiante_id, fecha);
 
-CREATE INDEX IF NOT EXISTS idx_attendance_course_date 
-  ON "Attendance"(course_id, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_curso_fecha 
+  ON attendance(curso_id, fecha);
 
 -- ===================================================================
--- Índice para la tabla CourseSubjectAssignment
+-- Índice para la tabla course_subject_assignments
 -- ===================================================================
 -- Optimiza consultas de asignación de materias
 CREATE INDEX IF NOT EXISTS idx_course_subject_assignment_docente 
-  ON "course_subject_assignments"(docente_id);
+  ON course_subject_assignments(docente_id);
 
 CREATE INDEX IF NOT EXISTS idx_course_subject_assignment_curso 
-  ON "course_subject_assignments"(curso_id);
+  ON course_subject_assignments(curso_id);
 
 -- ===================================================================
--- Índice para la tabla Institution
+-- Índice para la tabla institutions
 -- ===================================================================
 -- Optimiza consultas de instituciones activas
 CREATE INDEX IF NOT EXISTS idx_institution_active 
-  ON "Institution"(activa);
+  ON institutions(activa);
 
 -- ===================================================================
 -- Índice para la tabla SchoolYear
