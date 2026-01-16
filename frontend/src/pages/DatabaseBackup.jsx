@@ -97,10 +97,10 @@ const DatabaseBackup = () => {
       const formData = new FormData();
       formData.append('backup', selectedFile);
 
+      // No establecer Content-Type manualmente, axios lo manejará automáticamente
+      // Aumentar timeout para archivos grandes (hasta 10 minutos)
       await api.post('/backup/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        timeout: 600000, // 10 minutos para archivos grandes
       });
 
       toast.success('Backup restaurado exitosamente');

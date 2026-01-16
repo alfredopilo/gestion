@@ -212,6 +212,46 @@ export async function restoreDatabaseBackup(backupFilePath) {
   let originalSqlFilePath = null; // Para limpieza posterior
 
   try {
+    // Configurar variables de entorno para psql
+    const env = {
+      ...process.env,
+      PGPASSWORD: dbConfig.password, // psql usa esta variable para la contraseña
+    };
+
+    // Limpiar la base de datos antes de restaurar para evitar conflictos
+    console.log('Limpiando base de datos antes de restaurar...');
+    await new Promise((resolve, reject) => {
+      const resetArgs = [
+        `--host=${dbConfig.host}`,
+        `--port=${dbConfig.port}`,
+        `--username=${dbConfig.username}`,
+        `--dbname=${dbConfig.database}`,
+        '--no-password',
+        '--quiet',
+        '-c',
+        "DROP SCHEMA public CASCADE; CREATE SCHEMA public;",
+      ];
+
+      const resetProcess = spawn('psql', resetArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderrData = '';
+
+      resetProcess.stderr.on('data', (data) => {
+        stderrData += data.toString();
+      });
+
+      resetProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Error al limpiar base de datos: ${stderrData || `psql exit code ${code}`}`));
+        } else {
+          resolve();
+        }
+      });
+
+      resetProcess.on('error', (error) => {
+        reject(new Error(`Error al ejecutar psql para limpiar BD: ${error.message}`));
+      });
+    });
+
     // Si el archivo está comprimido, descomprimirlo
     if (backupFilePath.endsWith('.sql.gz') || backupFilePath.toLowerCase().endsWith('.sql.gz')) {
       sqlFilePath = join(tempDir, `restore_${Date.now()}.sql`);
@@ -301,12 +341,6 @@ export async function restoreDatabaseBackup(backupFilePath) {
     
     console.log(`SQL filtrado. Líneas originales: ${lines.length}, Líneas filtradas: ${filteredLines.length}`);
 
-    // Configurar variables de entorno para psql
-    const env = {
-      ...process.env,
-      PGPASSWORD: dbConfig.password, // psql usa esta variable para la contraseña
-    };
-
     console.log(`Restaurando backup en la base de datos: ${dbConfig.database}`);
 
     // Ejecutar psql para restaurar el backup usando stdin
@@ -329,6 +363,15 @@ export async function restoreDatabaseBackup(backupFilePath) {
       // Leer el archivo SQL y pasarlo por stdin
       const fileStream = createReadStream(sqlFilePath);
       fileStream.pipe(psqlProcess.stdin);
+
+      // Manejar errores de escritura en stdin (por ejemplo EPIPE si psql termina antes)
+      psqlProcess.stdin.on('error', (error) => {
+        if (error.code === 'EPIPE') {
+          // psql cerró stdin antes de tiempo; el error real se reporta en stderr
+          return;
+        }
+        reject(new Error(`Error al escribir en psql: ${error.message}`));
+      });
 
       let stdoutData = '';
       let stderrData = '';
