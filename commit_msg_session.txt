@@ -1,0 +1,40 @@
+Implementar control de sesion con timeout e expiracion de token con renovacion automatica
+
+Control de sesion con timeout:
+- Timeout de inactividad de 10 minutos que cierra sesion automaticamente
+- Hook useInactivity.js para detectar actividad del usuario (mousemove, keydown, scroll, click, touchstart)
+- Validacion de actividad usando sessionStorage (se limpia al cerrar navegador)
+- Advertencia 1 minuto antes de cerrar sesion por inactividad
+
+Renovacion automatica de tokens (Refresh Token):
+- Backend: Nuevo endpoint POST /auth/refresh para renovar tokens
+- Generacion de access token (2h) y refresh token (7d) en login
+- Funciones generateRefreshToken y verifyRefreshToken en jwt.js
+- Frontend: Renovacion automatica cuando access token expira durante actividad
+- Interceptor de API que reintenta requests despues de renovar token
+- Si no hay actividad >10 min, no se renueva (cierre de sesion)
+
+Utilidades de token:
+- tokenUtils.js con funciones para decodificar JWT, verificar expiracion, gestionar sessionStorage
+- Validacion de token antes de cada request en interceptor de API
+
+Cambios en backend:
+- jwt.js: Expiracion de access token reducida de 7d a 2h
+- jwt.js: Nuevas funciones generateRefreshToken y verifyRefreshToken
+- authController.js: Login retorna token + refreshToken
+- authController.js: Nuevo controlador refreshToken para renovar tokens
+- authRoutes.js: Nueva ruta POST /refresh
+- docker-compose.yml: Variables JWT_EXPIRES_IN (2h), JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN (7d)
+
+Cambios en frontend:
+- useInactivity.js: Hook para monitorear actividad y cerrar sesion tras 10 min
+- tokenUtils.js: Utilidades para manejar JWT y sessionStorage
+- AuthContext.jsx: Integracion de useInactivity, validacion de sesion activa, guardar refreshToken
+- api.js: Interceptor que renueva token automaticamente en requests si esta expirado pero hay actividad
+
+Flujo completo:
+1. Usuario hace login -> recibe access token (2h) + refresh token (7d)
+2. Si hay actividad -> access token se renueva automaticamente antes de expirar
+3. Si no hay actividad >10 min -> sesion se cierra automaticamente
+4. Si cierra navegador -> sessionStorage se limpia -> requiere nuevo login
+5. Refresh token expira en 7 dias (requiere login nuevamente)

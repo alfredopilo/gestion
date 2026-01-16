@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database.js';
-import { generateToken } from '../utils/jwt.js';
+import { generateToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { loginSchema, updateProfileSchema } from '../utils/validators.js';
 import { logAction, logLoginFailed } from '../middleware/logging.js';
 
@@ -77,8 +77,9 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // Generar token
+    // Generar tokens
     const token = generateToken(user.id, user.rol);
+    const refreshToken = generateRefreshToken(user.id, user.rol);
 
     // Obtener información adicional según el rol
     let additionalInfo = {};
@@ -153,6 +154,7 @@ export const login = async (req, res, next) => {
     res.json({
       message: 'Login exitoso',
       token,
+      refreshToken,
       user: {
         id: user.id,
         nombre: user.nombre,
@@ -169,6 +171,50 @@ export const login = async (req, res, next) => {
       await logLoginFailed(req.body.numeroIdentificacion, error.message, req);
     }
     next(error);
+  }
+};
+
+/**
+ * Renovar token de acceso usando refresh token
+ */
+export const refreshToken = async (req, res) => {
+  try {
+    const { refreshToken: incomingToken } = req.body || {};
+
+    if (!incomingToken) {
+      return res.status(400).json({
+        error: 'Refresh token requerido.',
+      });
+    }
+
+    const decoded = verifyRefreshToken(incomingToken);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        rol: true,
+        estado: true,
+      },
+    });
+
+    if (!user || user.estado !== 'ACTIVO') {
+      return res.status(401).json({
+        error: 'Usuario inactivo o no encontrado.',
+      });
+    }
+
+    const newAccessToken = generateToken(user.id, user.rol);
+    const newRefreshToken = generateRefreshToken(user.id, user.rol);
+
+    return res.json({
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    return res.status(401).json({
+      error: 'Refresh token inválido o expirado.',
+    });
   }
 };
 

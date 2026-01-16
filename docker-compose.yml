@@ -43,7 +43,9 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-gestionscolar}:${POSTGRES_PASSWORD:-gestionscolar2024}@postgres:5432/${POSTGRES_DB:-gestion_escolar}
       JWT_SECRET: ${JWT_SECRET:-mi_secreto_jwt_super_seguro_2024}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-mi_secreto_refresh_jwt_2024}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       PORT: 3000
       HOST: 0.0.0.0  # Escuchar en todas las interfaces para VPS
     ports:

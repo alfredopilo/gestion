@@ -1,6 +1,16 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useInactivity } from '../hooks/useInactivity';
+import {
+  clearSessionActivity,
+  getLastActivityTimestamp,
+  getSessionStartTimestamp,
+  isSessionActive,
+  isTokenExpired,
+  setLastActivityTimestamp,
+  setSessionStartTimestamp,
+} from '../utils/tokenUtils';
 
 const AuthContext = createContext(null);
 
@@ -11,10 +21,35 @@ export const AuthProvider = ({ children }) => {
     return localStorage.getItem('selectedInstitutionId');
   });
 
+  const performLogout = useCallback((message) => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    delete api.defaults.headers.common['Authorization'];
+    clearSessionActivity();
+    setUser(null);
+    if (message) {
+      toast.error(message);
+    }
+  }, []);
+
   useEffect(() => {
     // Verificar si hay token guardado
     const token = localStorage.getItem('token');
     if (token) {
+      if (isTokenExpired(token)) {
+        performLogout('Tu sesión expiró. Por favor inicia sesión nuevamente.');
+        setLoading(false);
+        return;
+      }
+
+      const sessionStart = getSessionStartTimestamp();
+      const lastActivity = getLastActivityTimestamp();
+      if (!sessionStart || !lastActivity || !isSessionActive(10 * 60 * 1000)) {
+        performLogout('Tu sesión se cerró por inactividad.');
+        setLoading(false);
+        return;
+      }
+
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       // Timeout más corto para carga inicial (5 segundos)
@@ -36,8 +71,7 @@ export const AuthProvider = ({ children }) => {
           if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
             console.warn('Timeout al cargar perfil, continuando...');
           }
-          localStorage.removeItem('token');
-          delete api.defaults.headers.common['Authorization'];
+          performLogout();
         })
         .finally(() => {
           setLoading(false);
@@ -45,7 +79,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [performLogout]);
 
   const login = async (numeroIdentificacion, password) => {
     try {
@@ -54,11 +88,16 @@ export const AuthProvider = ({ children }) => {
         password
       };
       const response = await api.post('/auth/login', loginData);
-      const { token, user } = response.data;
+      const { token, refreshToken, user } = response.data;
       
       localStorage.setItem('token', token);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
+      setSessionStartTimestamp(Date.now());
+      setLastActivityTimestamp(Date.now());
       
       // Establecer automáticamente la institución del usuario si existe
       if (user.institucionId) {
@@ -87,9 +126,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    delete api.defaults.headers.common['Authorization'];
-    setUser(null);
+    performLogout();
     toast.success('Sesión cerrada');
   };
 
@@ -114,6 +151,18 @@ export const AuthProvider = ({ children }) => {
       window.location.reload();
     }
   };
+
+  useInactivity({
+    enabled: !!user,
+    timeoutMs: 10 * 60 * 1000,
+    warningMs: 60 * 1000,
+    onWarning: () => {
+      toast.error('Tu sesión se cerrará en 1 minuto por inactividad.');
+    },
+    onTimeout: () => {
+      performLogout('Tu sesión se cerró por inactividad.');
+    },
+  });
 
   const value = {
     user,
