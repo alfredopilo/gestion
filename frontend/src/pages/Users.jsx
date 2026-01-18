@@ -13,6 +13,14 @@ const Users = () => {
   const [filters, setFilters] = useState({
     rol: '',
     estado: '',
+    search: '',
+  });
+  const [searchInput, setSearchInput] = useState('');
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    pages: 0,
   });
   const [formData, setFormData] = useState({
     nombre: '',
@@ -42,14 +50,15 @@ const Users = () => {
 
   useEffect(() => {
     // Solo cargar usuarios si hay al menos un filtro activo
-    const hasActiveFilter = filters.rol || filters.estado;
+    const hasActiveFilter = filters.rol || filters.estado || filters.search;
     if (hasActiveFilter) {
       fetchUsers();
     } else {
       setUsers([]);
+      setPagination(prev => ({ ...prev, total: 0, pages: 0 }));
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, pagination.page]);
 
   const fetchInstitutions = async () => {
     try {
@@ -66,7 +75,9 @@ const Users = () => {
       const params = new URLSearchParams();
       if (filters.rol) params.append('rol', filters.rol);
       if (filters.estado) params.append('estado', filters.estado);
-      params.append('limit', '100');
+      if (filters.search) params.append('search', filters.search);
+      params.append('page', pagination.page);
+      params.append('limit', pagination.limit);
 
       const response = await api.get(`/users?${params.toString()}`);
       const usersData = response.data.data || [];
@@ -82,6 +93,11 @@ const Users = () => {
         return nombreA.localeCompare(nombreB);
       });
       setUsers(sortedUsers);
+      setPagination(prev => ({
+        ...prev,
+        total: response.data.pagination.total,
+        pages: response.data.pagination.pages,
+      }));
     } catch (error) {
       console.error('Error al cargar usuarios:', error);
       toast.error('Error al cargar usuarios');
@@ -436,7 +452,7 @@ const Users = () => {
 
       {/* Filtros */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Filtrar por Rol</label>
             <select
@@ -465,9 +481,40 @@ const Users = () => {
               <option value="SUSPENDIDO">Suspendido</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Buscar usuario</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    setFilters({ ...filters, search: searchInput });
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }
+                }}
+                placeholder="Nombre, apellido, email o cédula..."
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2"
+              />
+              <button
+                onClick={() => {
+                  setFilters({ ...filters, search: searchInput });
+                  setPagination(prev => ({ ...prev, page: 1 }));
+                }}
+                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              >
+                Buscar
+              </button>
+            </div>
+          </div>
           <div className="flex items-end">
             <button
-              onClick={() => setFilters({ rol: '', estado: '' })}
+              onClick={() => {
+                setFilters({ rol: '', estado: '', search: '' });
+                setSearchInput('');
+                setPagination(prev => ({ ...prev, page: 1 }));
+              }}
               className="w-full px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
             >
               Limpiar Filtros
@@ -493,7 +540,7 @@ const Users = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {!filters.rol && !filters.estado ? (
+              {!filters.rol && !filters.estado && !filters.search ? (
                 <tr>
                   <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                     Aplica filtros para ver usuarios
@@ -560,6 +607,37 @@ const Users = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Controles de paginación */}
+        {(filters.rol || filters.estado || filters.search) && pagination.total > 0 && (
+          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Mostrando {users.length === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1} a{' '}
+                {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} usuarios
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={pagination.page === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-700">
+                  Página {pagination.page} de {pagination.pages}
+                </span>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={pagination.page >= pagination.pages}
+                  className="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal para crear/editar usuario */}

@@ -10,7 +10,7 @@ import { getUserInstitutionFilter } from '../utils/institutionFilter.js';
  */
 export const getUsers = async (req, res, next) => {
   try {
-    const { rol, estado, page = 1, limit = 10 } = req.query;
+    const { rol, estado, search, page = 1, limit = 25 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -48,6 +48,17 @@ export const getUsers = async (req, res, next) => {
     // Aplicar filtros adicionales después del filtro de institución
     if (rol) where.rol = rol;
     if (estado) where.estado = estado;
+    
+    // Agregar búsqueda por texto
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      where.OR = [
+        { nombre: { contains: searchTerm, mode: 'insensitive' } },
+        { apellido: { contains: searchTerm, mode: 'insensitive' } },
+        { email: { contains: searchTerm, mode: 'insensitive' } },
+        { numeroIdentificacion: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
