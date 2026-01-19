@@ -1,7 +1,28 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
-import { compressImage, formatFileSize } from '../utils/imageCompression';
+import { compressImageToDataUrl, formatFileSize } from '../utils/imageCompression';
+
+const normalizeLogoValue = (logo) => {
+  if (!logo) return '';
+  const value = String(logo).trim();
+  if (!value) return '';
+  if (value.startsWith('data:')) return value;
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) return value;
+
+  // Si parece base64 sin prefijo, inferir mime por cabecera típica
+  const cleaned = value.replace(/\s/g, '');
+  const isBase64Like = /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned);
+  if (!isBase64Like) return value;
+
+  let mime = 'image/png';
+  if (cleaned.startsWith('/9j/')) mime = 'image/jpeg';
+  else if (cleaned.startsWith('iVBORw0KGgo')) mime = 'image/png';
+  else if (cleaned.startsWith('R0lGOD')) mime = 'image/gif';
+  else if (cleaned.startsWith('UklGR')) mime = 'image/webp';
+
+  return `data:${mime};base64,${cleaned}`;
+};
 
 const InstitutionSettings = () => {
   const [institutions, setInstitutions] = useState([]);
@@ -83,24 +104,21 @@ const InstitutionSettings = () => {
     setCompressing(true);
 
     try {
-      // Comprimir imagen con parámetros más agresivos
-      const compressedBase64 = await compressImage(file, {
+      // Comprimir imagen a dataURL (base64) con parámetros más agresivos
+      const { dataUrl, bytes } = await compressImageToDataUrl(file, {
         maxWidth: 600,
         maxHeight: 600,
         quality: 0.7,
-        maxSizeMB: 0.3, // 300KB máximo para asegurar que pase el límite
+        maxSizeKB: 300, // 300KB máximo para asegurar que pase el límite
       });
 
       // Mostrar preview
-      setLogoPreview(compressedBase64);
-      setFormData({ ...formData, logo: compressedBase64 });
-      
-      // Calcular tamaño comprimido
-      const base64Size = (compressedBase64.length * 3) / 4;
-      setCompressedSize(base64Size);
+      setLogoPreview(dataUrl);
+      setFormData({ ...formData, logo: dataUrl });
+      setCompressedSize(bytes);
 
       toast.success(
-        `Imagen comprimida: ${formatFileSize(file.size)} → ${formatFileSize(base64Size)}`
+        `Imagen comprimida: ${formatFileSize(file.size)} → ${formatFileSize(bytes)}`
       );
     } catch (error) {
       console.error('Error al comprimir imagen:', error);
@@ -172,10 +190,7 @@ const InstitutionSettings = () => {
 
   const handleEdit = (institution) => {
     setEditingInstitution(institution);
-    // Asegurar que logo sea siempre un string
-    const logoString = typeof institution.logo === 'string' 
-      ? institution.logo 
-      : (institution.logo ? String(institution.logo) : '');
+    const logoString = normalizeLogoValue(institution.logo);
     
     setFormData({
       nombre: institution.nombre || '',

@@ -272,16 +272,60 @@ export const getStudentById = async (req, res, next) => {
           },
         },
         grupo: {
-          include: {
-            periodo: true,
+          select: {
+            id: true,
+            nombre: true,
+            nivel: true,
+            paralelo: true,
+            anioLectivo: {
+              select: {
+                institucionId: true,
+              },
+            },
+            periodo: {
+              select: {
+                id: true,
+                nombre: true,
+                fechaInicio: true,
+                fechaFin: true,
+                activo: true,
+              },
+            },
             docente: {
-              include: { user: true },
+              select: {
+                id: true,
+                user: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    apellido: true,
+                    email: true,
+                  },
+                },
+              },
             },
             course_subject_assignments: {
-              include: {
-                materia: true,
+              select: {
+                id: true,
+                materia: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    codigo: true,
+                  },
+                },
                 docente: {
-                  include: { user: true },
+                  select: {
+                    id: true,
+                    user: {
+                      select: {
+                        id: true,
+                        nombre: true,
+                        apellido: true,
+                        email: true,
+                      },
+                    },
+                  },
                 },
               },
             },

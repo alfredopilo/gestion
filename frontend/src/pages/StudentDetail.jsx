@@ -410,16 +410,34 @@ const StudentDetail = () => {
 
       // Obtener logo de la institución e imagen del estudiante
       let institutionLogo = null;
+      let institutionName = '';
       let studentPhoto = null;
 
       try {
-        // Obtener información de la institución activa
-        const institutionRes = await api.get('/institutions/active');
-        if (institutionRes.data?.logo) {
-          institutionLogo = institutionRes.data.logo;
+        // Obtener la institución del grupo del estudiante via anioLectivo
+        const institutionId = student.grupo?.anioLectivo?.institucionId || null;
+
+        if (institutionId) {
+          // Obtener información de la institución específica del estudiante
+          const institutionRes = await api.get(`/institutions/${institutionId}`);
+          if (institutionRes.data?.logo) {
+            institutionLogo = institutionRes.data.logo;
+          }
+          if (institutionRes.data?.nombre) {
+            institutionName = institutionRes.data.nombre;
+          }
+        } else {
+          // Fallback: obtener institución activa solo si no hay otra forma
+          const institutionRes = await api.get('/institutions/active');
+          if (institutionRes.data?.logo) {
+            institutionLogo = institutionRes.data.logo;
+          }
+          if (institutionRes.data?.nombre) {
+            institutionName = institutionRes.data.nombre;
+          }
         }
       } catch (error) {
-        console.log('No se pudo obtener el logo de la institución');
+        console.log('No se pudo obtener el logo de la institución', error);
       }
 
       // Usar la foto de carnet del estudiante si existe
@@ -437,34 +455,48 @@ const StudentDetail = () => {
         });
       }
 
-      // Encabezado con logo y título
-      doc.setFillColor(59, 130, 246); // primary-600
-      doc.rect(0, 0, pageWidth, 25, 'F');
+      // Encabezado profesional con logo y nombre de institución
+      const headerHeight = 18;
+      const logoSize = 15;
+      const logoHeight = 12;
       
-      // Logo de la institución (si existe)
+      // Fondo sutil para el encabezado (opcional, más discreto)
+      doc.setFillColor(248, 250, 252); // gray-50
+      doc.rect(0, 0, pageWidth, headerHeight, 'F');
+      
+      // Logo de la institución (si existe) - esquina superior izquierda
       if (institutionLogo) {
         try {
-          addImageToPDF(institutionLogo, margin, 5, 20, 15);
+          addImageToPDF(institutionLogo, margin, 3, logoSize, logoHeight);
         } catch (error) {
           console.log('Error al cargar logo');
         }
       }
       
-      // Título
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'bold');
-      doc.text('FICHA DEL ESTUDIANTE', pageWidth / 2, 15, { align: 'center' });
+      // Nombre de la institución junto al logo en la misma fila
+      if (institutionName) {
+        doc.setTextColor(31, 41, 55); // gray-800
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text(institutionName, margin + logoSize + 3, 10);
+      }
       
-      yPos = 30;
+      // Título "FICHA DEL ESTUDIANTE" centrado en negro
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      doc.text('FICHA DEL ESTUDIANTE', pageWidth / 2, headerHeight + 8, { align: 'center' });
+      
+      yPos = headerHeight + 15;
       doc.setTextColor(0, 0, 0);
       doc.setFont(undefined, 'normal');
 
       // Sección de información principal con foto
-      const photoWidth = 35;
-      const photoHeight = 45;
-      const photoX = pageWidth - margin - photoWidth;
+      const photoWidth = 28; // Reducido 20% (de 35 a 28)
+      const photoHeight = 36; // Reducido 20% (de 45 a 36)
+      const photoX = margin; // Lado izquierdo
       const photoY = yPos;
+      const infoX = margin + photoWidth + 5; // Info a la derecha de la foto
       const infoWidth = pageWidth - 2 * margin - photoWidth - 5;
 
       // Agregar foto del estudiante (si existe)
@@ -530,19 +562,18 @@ const StudentDetail = () => {
         doc.setTextColor(0, 0, 0);
       }
 
-      // Información del estudiante al lado de la foto
+      // Información del estudiante a la derecha de la foto
       doc.setFontSize(14);
       doc.setFont(undefined, 'bold');
-      doc.text(`${student.user?.nombre || ''} ${student.user?.apellido || ''}`, margin, yPos + 6);
+      doc.text(`${student.user?.nombre || ''} ${student.user?.apellido || ''}`, infoX, yPos + 6);
       
       yPos += 12;
       doc.setFontSize(9);
       doc.setFont(undefined, 'normal');
       doc.setTextColor(55, 65, 81); // gray-700
 
-      // Información básica al lado de la foto
+      // Información básica a la derecha de la foto
       let infoY = yPos;
-      const infoX = margin;
 
       // Email
       if (student.user?.email) {
@@ -597,12 +628,14 @@ const StudentDetail = () => {
       // Continuar después de la foto y la información
       yPos = Math.max(infoY, photoY + photoHeight) + 5;
 
-      // Definir anchos de columna para las siguientes secciones
-      const colWidth = (pageWidth - 2 * margin) / 2;
-      const col1X = margin + 5;
-      const col2X = margin + colWidth + 5;
+      // Definir anchos de columna de 4 columnas para las siguientes secciones
+      const colWidth = (pageWidth - 2 * margin) / 4;
+      const col1X = margin + 2;
+      const col2X = margin + colWidth + 2;
+      const col3X = margin + (colWidth * 2) + 2;
+      const col4X = margin + (colWidth * 3) + 2;
 
-      // Sección: Información del Grupo
+      // Sección: Información del Grupo (todos los campos en una sola fila)
       if (student.grupo) {
         if (yPos > pageHeight - 40) {
           doc.addPage();
@@ -620,63 +653,49 @@ const StudentDetail = () => {
         doc.setFontSize(9);
         doc.setFont(undefined, 'normal');
 
-        let grupoCol1Y = yPos;
-        let grupoCol2Y = yPos;
-        let grupoCurrentCol = 1;
+        let grupoY = yPos;
 
+        // Nombre - Columna 1
         if (student.grupo.nombre) {
           doc.setFont(undefined, 'bold');
-          doc.text('Nombre:', col1X, grupoCol1Y);
+          doc.text('Nombre:', col1X, yPos);
           doc.setFont(undefined, 'normal');
-          doc.text(student.grupo.nombre, col1X, grupoCol1Y + 3.5);
-          grupoCol1Y += 7.5;
-          grupoCurrentCol = 2;
+          const nombreHeight = addWrappedText(student.grupo.nombre, col1X, yPos + 3.5, colWidth - 4, 9);
+          grupoY = Math.max(grupoY, yPos + nombreHeight + 6);
         }
 
+        // Nivel - Columna 2
         if (student.grupo.nivel) {
           doc.setFont(undefined, 'bold');
-          doc.text('Nivel:', col2X, grupoCol2Y);
+          doc.text('Nivel:', col2X, yPos);
           doc.setFont(undefined, 'normal');
-          doc.text(student.grupo.nivel, col2X, grupoCol2Y + 3.5);
-          grupoCol2Y += 7.5;
-          grupoCurrentCol = 1;
+          const nivelHeight = addWrappedText(student.grupo.nivel, col2X, yPos + 3.5, colWidth - 4, 9);
+          grupoY = Math.max(grupoY, yPos + nivelHeight + 6);
         }
 
+        // Paralelo - Columna 3
         if (student.grupo.paralelo) {
-          const xPos = grupoCurrentCol === 1 ? col1X : col2X;
-          const yPosCol = grupoCurrentCol === 1 ? grupoCol1Y : grupoCol2Y;
           doc.setFont(undefined, 'bold');
-          doc.text('Paralelo:', xPos, yPosCol);
+          doc.text('Paralelo:', col3X, yPos);
           doc.setFont(undefined, 'normal');
-          doc.text(student.grupo.paralelo, xPos, yPosCol + 3.5);
-          if (grupoCurrentCol === 1) {
-            grupoCol1Y += 7.5;
-            grupoCurrentCol = 2;
-          } else {
-            grupoCol2Y += 7.5;
-            grupoCurrentCol = 1;
-          }
+          const paraleloHeight = addWrappedText(student.grupo.paralelo, col3X, yPos + 3.5, colWidth - 4, 9);
+          grupoY = Math.max(grupoY, yPos + paraleloHeight + 6);
         }
 
+        // Docente - Columna 4
         if (student.grupo.docente?.user) {
-          const xPos = grupoCurrentCol === 1 ? col1X : col2X;
-          const yPosCol = grupoCurrentCol === 1 ? grupoCol1Y : grupoCol2Y;
           doc.setFont(undefined, 'bold');
-          doc.text('Docente:', xPos, yPosCol);
+          doc.text('Docente:', col4X, yPos);
           doc.setFont(undefined, 'normal');
           const docenteText = `${student.grupo.docente.user.nombre} ${student.grupo.docente.user.apellido}`;
-          const docenteHeight = addWrappedText(docenteText, xPos, yPosCol + 3.5, colWidth - 10, 9);
-          if (grupoCurrentCol === 1) {
-            grupoCol1Y += docenteHeight + 6;
-          } else {
-            grupoCol2Y += docenteHeight + 6;
-          }
+          const docenteHeight = addWrappedText(docenteText, col4X, yPos + 3.5, colWidth - 4, 9);
+          grupoY = Math.max(grupoY, yPos + docenteHeight + 6);
         }
 
-        yPos = Math.max(grupoCol1Y, grupoCol2Y) + 5;
+        yPos = grupoY + 5;
       }
 
-      // Información del Representante
+      // Información del Representante (4 columnas por fila)
       if (student.representante) {
         if (yPos > pageHeight - 40) {
           doc.addPage();
@@ -694,60 +713,47 @@ const StudentDetail = () => {
         doc.setFontSize(9);
         doc.setFont(undefined, 'normal');
 
-        let repCol1Y = yPos;
-        let repCol2Y = yPos;
-        let repCurrentCol = 1;
+        let repMaxY = yPos;
+        const repStartY = yPos;
 
+        // Nombre - Columna 1
         if (student.representante.user) {
           doc.setFont(undefined, 'bold');
-          doc.text('Nombre:', col1X, repCol1Y);
+          doc.text('Nombre:', col1X, repStartY);
           doc.setFont(undefined, 'normal');
           const nombreText = `${student.representante.user.nombre} ${student.representante.user.apellido}`;
-          const nombreHeight = addWrappedText(nombreText, col1X, repCol1Y + 3.5, colWidth - 10, 9);
-          repCol1Y += nombreHeight + 6;
-          repCurrentCol = 2;
+          const nombreHeight = addWrappedText(nombreText, col1X, repStartY + 3.5, colWidth - 4, 9);
+          repMaxY = Math.max(repMaxY, repStartY + nombreHeight + 6);
 
+          // Email - Columna 2
           if (student.representante.user.email) {
             doc.setFont(undefined, 'bold');
-            doc.text('Email:', col2X, repCol2Y);
+            doc.text('Email:', col2X, repStartY);
             doc.setFont(undefined, 'normal');
-            const emailHeight = addWrappedText(student.representante.user.email, col2X, repCol2Y + 3.5, colWidth - 10, 9);
-            repCol2Y += emailHeight + 6;
-            repCurrentCol = 1;
+            const emailHeight = addWrappedText(student.representante.user.email, col2X, repStartY + 3.5, colWidth - 4, 9);
+            repMaxY = Math.max(repMaxY, repStartY + emailHeight + 6);
           }
 
+          // Teléfono - Columna 3
           if (student.representante.user.telefono) {
-            const xPos = repCurrentCol === 1 ? col1X : col2X;
-            const yPosCol = repCurrentCol === 1 ? repCol1Y : repCol2Y;
             doc.setFont(undefined, 'bold');
-            doc.text('Teléfono:', xPos, yPosCol);
+            doc.text('Teléfono:', col3X, repStartY);
             doc.setFont(undefined, 'normal');
-            doc.text(student.representante.user.telefono, xPos, yPosCol + 3.5);
-            if (repCurrentCol === 1) {
-              repCol1Y += 7.5;
-              repCurrentCol = 2;
-            } else {
-              repCol2Y += 7.5;
-              repCurrentCol = 1;
-            }
+            const telefonoHeight = addWrappedText(student.representante.user.telefono, col3X, repStartY + 3.5, colWidth - 4, 9);
+            repMaxY = Math.max(repMaxY, repStartY + telefonoHeight + 6);
           }
         }
 
+        // Parentesco - Columna 4
         if (student.representante.parentesco) {
-          const xPos = repCurrentCol === 1 ? col1X : col2X;
-          const yPosCol = repCurrentCol === 1 ? repCol1Y : repCol2Y;
           doc.setFont(undefined, 'bold');
-          doc.text('Parentesco:', xPos, yPosCol);
+          doc.text('Parentesco:', col4X, repStartY);
           doc.setFont(undefined, 'normal');
-          doc.text(student.representante.parentesco, xPos, yPosCol + 3.5);
-          if (repCurrentCol === 1) {
-            repCol1Y += 7.5;
-          } else {
-            repCol2Y += 7.5;
-          }
+          const parentescoHeight = addWrappedText(student.representante.parentesco, col4X, repStartY + 3.5, colWidth - 4, 9);
+          repMaxY = Math.max(repMaxY, repStartY + parentescoHeight + 6);
         }
 
-        yPos = Math.max(repCol1Y, repCol2Y) + 5;
+        yPos = repMaxY + 5;
       }
 
       // Ficha del Estudiante (campos personalizados)
@@ -779,9 +785,11 @@ const StudentDetail = () => {
           doc.setFont(undefined, 'normal');
           doc.setTextColor(55, 65, 81);
 
-          // Organizar campos en dos columnas
+          // Organizar campos en cuatro columnas
           let fieldCol1Y = yPos;
           let fieldCol2Y = yPos;
+          let fieldCol3Y = yPos;
+          let fieldCol4Y = yPos;
           let fieldCurrentCol = 1;
 
           section.campos.forEach((field, index) => {
@@ -826,58 +834,97 @@ const StudentDetail = () => {
             
             if (isLongField) {
               // Ocupar todo el ancho
-              const currentY = Math.max(fieldCol1Y, fieldCol2Y);
+              const currentY = Math.max(fieldCol1Y, fieldCol2Y, fieldCol3Y, fieldCol4Y);
               
               if (currentY > pageHeight - 20) {
                 doc.addPage();
                 fieldCol1Y = margin;
                 fieldCol2Y = margin;
+                fieldCol3Y = margin;
+                fieldCol4Y = margin;
               }
 
               doc.setFont(undefined, 'bold');
-              doc.text(`${field.etiqueta}:`, col1X, currentY);
+              const labelHeight = addWrappedText(`${field.etiqueta}:`, col1X, currentY, pageWidth - 2 * margin - 10, 9);
               doc.setFont(undefined, 'normal');
-              const valueHeight = addWrappedText(displayValue, col1X, currentY + 3.5, pageWidth - 2 * margin - 10, 9);
-              fieldCol1Y = currentY + valueHeight + 8;
+              const valueHeight = addWrappedText(
+                displayValue,
+                col1X,
+                currentY + labelHeight + 1.5,
+                pageWidth - 2 * margin - 10,
+                9
+              );
+              fieldCol1Y = currentY + labelHeight + valueHeight + 8;
               fieldCol2Y = fieldCol1Y;
+              fieldCol3Y = fieldCol1Y;
+              fieldCol4Y = fieldCol1Y;
               fieldCurrentCol = 1;
             } else {
-              // Usar columnas
-              const xPos = fieldCurrentCol === 1 ? col1X : col2X;
-              const yPosCol = fieldCurrentCol === 1 ? fieldCol1Y : fieldCol2Y;
+              // Usar 4 columnas
+              let xPos, yPosCol;
+              switch(fieldCurrentCol) {
+                case 1:
+                  xPos = col1X;
+                  yPosCol = fieldCol1Y;
+                  break;
+                case 2:
+                  xPos = col2X;
+                  yPosCol = fieldCol2Y;
+                  break;
+                case 3:
+                  xPos = col3X;
+                  yPosCol = fieldCol3Y;
+                  break;
+                case 4:
+                  xPos = col4X;
+                  yPosCol = fieldCol4Y;
+                  break;
+              }
 
               if (yPosCol > pageHeight - 20) {
                 doc.addPage();
                 fieldCol1Y = margin;
                 fieldCol2Y = margin;
+                fieldCol3Y = margin;
+                fieldCol4Y = margin;
                 fieldCurrentCol = 1;
-                const newXPos = col1X;
-                const newYPos = fieldCol1Y;
-                
-                doc.setFont(undefined, 'bold');
-                doc.text(`${field.etiqueta}:`, newXPos, newYPos);
-                doc.setFont(undefined, 'normal');
-                const valueHeight = addWrappedText(displayValue, newXPos, newYPos + 3.5, colWidth - 10, 9);
-                fieldCol1Y += valueHeight + 8;
-                fieldCurrentCol = 2;
-              } else {
-                doc.setFont(undefined, 'bold');
-                doc.text(`${field.etiqueta}:`, xPos, yPosCol);
-                doc.setFont(undefined, 'normal');
-                const valueHeight = addWrappedText(displayValue, xPos, yPosCol + 3.5, colWidth - 10, 9);
-                
-                if (fieldCurrentCol === 1) {
-                  fieldCol1Y += valueHeight + 8;
+                xPos = col1X;
+                yPosCol = fieldCol1Y;
+              }
+              
+              doc.setFont(undefined, 'bold');
+              const labelHeight = addWrappedText(`${field.etiqueta}:`, xPos, yPosCol, colWidth - 4, 9);
+              doc.setFont(undefined, 'normal');
+              const valueHeight = addWrappedText(
+                displayValue,
+                xPos,
+                yPosCol + labelHeight + 1.5,
+                colWidth - 4,
+                9
+              );
+              
+              switch(fieldCurrentCol) {
+                case 1:
+                  fieldCol1Y += labelHeight + valueHeight + 8;
                   fieldCurrentCol = 2;
-                } else {
-                  fieldCol2Y += valueHeight + 8;
+                  break;
+                case 2:
+                  fieldCol2Y += labelHeight + valueHeight + 8;
+                  fieldCurrentCol = 3;
+                  break;
+                case 3:
+                  fieldCol3Y += labelHeight + valueHeight + 8;
+                  fieldCurrentCol = 4;
+                  break;
+                case 4:
+                  fieldCol4Y += labelHeight + valueHeight + 8;
                   fieldCurrentCol = 1;
-                }
+                  break;
               }
             }
           });
 
-          yPos = Math.max(fieldCol1Y, fieldCol2Y) + 5;
+          yPos = Math.max(fieldCol1Y, fieldCol2Y, fieldCol3Y, fieldCol4Y) + 5;
         });
       }
 
