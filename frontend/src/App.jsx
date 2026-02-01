@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Páginas cargadas inmediatamente (críticas)
 import Login from './pages/Login';
@@ -81,15 +82,16 @@ function DashboardByRole() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Toaster position="top-right" />
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-          
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <Toaster position="top-right" />
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+            
+            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
             
             {/* Dashboard según rol */}
             <Route path="dashboard" element={<DashboardByRole />} />
@@ -134,11 +136,12 @@ function App() {
             <Route path="mensajes" element={<ProtectedRoute><MisMensajes /></ProtectedRoute>} />
             <Route path="mensajes/enviar" element={<ProtectedRoute requiredRole={['ADMIN', 'PROFESOR', 'SECRETARIA']}><EnviarMensaje /></ProtectedRoute>} />
             <Route path="mensajes/historial" element={<ProtectedRoute requiredRole={['ADMIN', 'PROFESOR', 'SECRETARIA']}><HistorialEnvios /></ProtectedRoute>} />
-          </Route>
-        </Routes>
-        </Suspense>
-      </Router>
-    </AuthProvider>
+            </Route>
+          </Routes>
+          </Suspense>
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

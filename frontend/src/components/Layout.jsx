@@ -773,7 +773,7 @@ const Layout = () => {
 
         {/* Contenido */}
         <main className="p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          <Outlet key={location.pathname} />
         </main>
       </div>
       
