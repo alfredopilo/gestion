@@ -82,6 +82,7 @@ model Course {
   docente                    Teacher?                  @relation(fields: [docenteId], references: [id])
   periodo                    Period?                   @relation(fields: [periodoId], references: [id])
   estudiantes                Student[]
+  mensajes                   Mensaje[]
 
   @@map("courses")
 }
@@ -173,24 +174,54 @@ model Institution {
   studentProfileSections StudentProfileSection[]
   enrollments            Enrollment[]
   withdrawals            StudentWithdrawal[]
+  emailConfig            EmailConfig?
 
   @@map("institutions")
 }
 
 model Mensaje {
-  id         String   @id
-  emisorId   String   @map("emisor_id")
-  receptorId String   @map("receptor_id")
-  asunto     String
-  cuerpo     String
-  leido      Boolean  @default(false)
-  fechaEnvio DateTime @default(now()) @map("fecha_envio")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @map("updated_at")
-  emisor     User     @relation("mensajes_emisor_idTousers", fields: [emisorId], references: [id], onDelete: Cascade)
-  receptor   User     @relation("mensajes_receptor_idTousers", fields: [receptorId], references: [id], onDelete: Cascade)
+  id              String      @id @default(dbgenerated("gen_random_uuid()::text"))
+  emisorId        String      @map("emisor_id")
+  receptorId      String      @map("receptor_id")
+  asunto          String
+  cuerpo          String      @db.Text
+  leido           Boolean     @default(false)
+  tipoMensaje     TipoMensaje @default(INDIVIDUAL) @map("tipo_mensaje")
+  enviadoPorEmail Boolean     @default(false) @map("enviado_por_email")
+  emailEnviado    Boolean     @default(false) @map("email_enviado")
+  fechaEnvio      DateTime    @default(now()) @map("fecha_envio")
+  cursoId         String?     @map("curso_id")
+  materiaId       String?     @map("materia_id")
+  archivoAdjunto  String?     @map("archivo_adjunto")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at")
+  emisor          User        @relation("mensajes_emisor_idTousers", fields: [emisorId], references: [id], onDelete: Cascade)
+  receptor        User        @relation("mensajes_receptor_idTousers", fields: [receptorId], references: [id], onDelete: Cascade)
+  curso           Course?     @relation(fields: [cursoId], references: [id], onDelete: SetNull)
+  materia         Subject?    @relation(fields: [materiaId], references: [id], onDelete: SetNull)
 
+  @@index([receptorId, leido])
+  @@index([emisorId, fechaEnvio])
+  @@index([emisorId, leido])
   @@map("mensajes")
+}
+
+model EmailConfig {
+  id            String      @id @default(dbgenerated("gen_random_uuid()::text"))
+  institutionId String      @unique @map("institution_id")
+  smtpHost      String      @map("smtp_host")
+  smtpPort      Int         @map("smtp_port")
+  smtpSecure    Boolean     @default(true) @map("smtp_secure")
+  smtpUser      String      @map("smtp_user")
+  smtpPassword  String      @map("smtp_password")
+  senderEmail   String      @map("sender_email")
+  senderName    String      @map("sender_name")
+  activo        Boolean     @default(false)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@map("email_config")
 }
 
 model Payment {
@@ -462,6 +493,7 @@ model Subject {
   attendance               Attendance[]
   anioLectivo              SchoolYear                @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
   institucion              Institution               @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  mensajes                 Mensaje[]
 
   @@unique([codigo, institucionId, anioLectivoId])
   @@map("subjects")
@@ -572,6 +604,12 @@ enum StudentProfileFieldType {
 enum TipoNotificacion {
   TAREA
   GENERAL
+}
+
+enum TipoMensaje {
+  INDIVIDUAL
+  MASIVO_CURSO
+  MASIVO_MATERIA
 }
 
 enum EstadoEntrega {

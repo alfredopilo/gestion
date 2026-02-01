@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 const GradeEntry = () => {
   const { user } = useAuth();
@@ -871,7 +872,7 @@ const GradeEntry = () => {
       return;
     }
 
-    // Crear encabezados CSV (Identificación primero)
+    // Crear encabezados (Identificación primero)
     const headers = ['Identificación', 'Estudiante', ...insumos.map(i => i.nombre)];
     const rows = [headers];
 
@@ -883,51 +884,53 @@ const GradeEntry = () => {
       rows.push(row);
     });
 
-    // Convertir a CSV
-    const csvContent = rows.map(row => 
-      row.map(cell => `"${cell}"`).join(',')
-    ).join('\n');
+    // Crear archivo Excel
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Calificaciones');
 
-    // Crear blob y descargar
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `plantilla_calificaciones_${selectedSubject?.nombre || 'materia'}_${selectedSubPeriod?.nombre || 'subperiodo'}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Generar y descargar archivo
+    XLSX.writeFile(workbook, `plantilla_calificaciones_${selectedSubject?.nombre || 'materia'}_${selectedSubPeriod?.nombre || 'subperiodo'}.xlsx`);
     
     toast.success('Plantilla descargada exitosamente');
   };
 
-  const handleFileSelect = (event) => {
+  const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validar que sea un archivo de texto o CSV
-    const validTypes = ['text/plain', 'text/csv', 'application/vnd.ms-excel'];
-    const validExtensions = ['.txt', '.csv'];
+    // Validar que sea un archivo Excel
+    const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+    const validExtensions = ['.xlsx', '.xls'];
     const fileName = file.name.toLowerCase();
     const isValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
     const isValidType = validTypes.includes(file.type) || isValidExtension;
 
     if (!isValidType && !isValidExtension) {
-      toast.error('Por favor seleccione un archivo de texto (.txt) o CSV (.csv)');
+      toast.error('Por favor seleccione un archivo Excel (.xlsx o .xls)');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target.result;
-      setImportData(content);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      // Obtener la primera hoja
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convertir a array de arrays
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+      
+      // Convertir a formato de texto separado por tabs (para mantener compatibilidad con handleImportGrades)
+      const textContent = jsonData.map(row => row.join('\t')).join('\n');
+      
+      setImportData(textContent);
       toast.success('Archivo cargado exitosamente');
-    };
-    reader.onerror = () => {
-      toast.error('Error al leer el archivo');
-    };
-    reader.readAsText(file, 'UTF-8');
+    } catch (error) {
+      console.error('Error al leer el archivo Excel:', error);
+      toast.error('Error al leer el archivo Excel');
+    }
 
     // Limpiar el input para permitir seleccionar el mismo archivo nuevamente
     if (fileInputRef.current) {
@@ -1324,7 +1327,7 @@ const GradeEntry = () => {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".txt,.csv,text/plain,text/csv"
+                      accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       onChange={handleFileSelect}
                       className="hidden"
                       id="file-input-grades"
@@ -1342,21 +1345,24 @@ const GradeEntry = () => {
                   onChange={(e) => setImportData(e.target.value)}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm"
                   rows={15}
-                  placeholder="Pegue aquí las calificaciones o seleccione un archivo..."
+                  placeholder="Seleccione un archivo Excel (.xlsx) usando el botón de arriba, o pegue datos manualmente aquí..."
                 />
                 <div className="mt-2 text-xs text-gray-600">
-                  <p><strong>Formato 1:</strong> Solo calificaciones (una línea por estudiante, separadas por tab o coma)</p>
-                  <p className="mt-1">Ejemplo: <code>8.5	9.0	7.5</code> (primera línea = primer estudiante, segunda línea = segundo estudiante, etc.)</p>
-                  <p className="mt-2"><strong>Formato 2:</strong> Con identificación y nombre de estudiantes</p>
-                  <p className="mt-1">Ejemplo: <code>1234567890	María González	8.5	9.0	7.5</code></p>
-                  <p className="mt-2"><strong>Orden de columnas:</strong></p>
+                  <p><strong>Instrucciones:</strong></p>
+                  <ul className="list-disc list-inside ml-2 mt-1">
+                    <li>Use el botón "Descargar Plantilla" para obtener un archivo Excel (.xlsx) con el formato correcto</li>
+                    <li>Complete las calificaciones en el archivo Excel</li>
+                    <li>Cargue el archivo usando el botón "Seleccionar Archivo"</li>
+                  </ul>
+                  <p className="mt-2"><strong>Formato del archivo Excel:</strong></p>
                   <ul className="list-disc list-inside ml-2">
-                    <li>1. Identificación</li>
-                    <li>2. Estudiante</li>
+                    <li>Columna 1: Identificación del estudiante</li>
+                    <li>Columna 2: Nombre del estudiante</li>
                     {insumos.map((insumo, index) => (
-                      <li key={insumo.id}>{index + 3}. {insumo.nombre}</li>
+                      <li key={insumo.id}>Columna {index + 3}: {insumo.nombre}</li>
                     ))}
                   </ul>
+                  <p className="mt-2 text-yellow-700"><strong>Nota:</strong> También puede pegar datos manualmente en el área de texto usando el formato separado por tabs.</p>
                 </div>
               </div>
               <div className="flex justify-end space-x-3 pt-4">

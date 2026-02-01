@@ -46,6 +46,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2h}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-mi_secreto_refresh_jwt_2024}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      EMAIL_ENCRYPTION_KEY: ${EMAIL_ENCRYPTION_KEY:-12345678901234567890123456789012}
       PORT: 3000
       HOST: 0.0.0.0  # Escuchar en todas las interfaces para VPS
     ports:

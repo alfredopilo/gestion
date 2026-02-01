@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import NotificationBadge from './NotificationBadge';
+import MensajeBadge from './MensajeBadge';
+import MensajeNotification from './MensajeNotification';
 
 const Layout = () => {
   const { user, logout, selectedInstitutionId, changeInstitution } = useAuth();
@@ -150,6 +152,31 @@ const Layout = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
       </svg>
     ),
+    Mensajes: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+    ),
+    'Enviar Mensaje': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+      </svg>
+    ),
+    'Recibidos': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+      </svg>
+    ),
+    'Historial de Envíos': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    'Configuración de Email': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+      </svg>
+    ),
   };
 
   const navigation = [
@@ -171,6 +198,15 @@ const Layout = () => {
     { name: 'Horarios', href: '/schedule', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA', 'ESTUDIANTE'] },
     { name: 'Pagos', href: '/payments', roles: ['ADMIN', 'SECRETARIA', 'ESTUDIANTE', 'REPRESENTANTE'] },
     { name: 'Promoción Escolar', href: '/school-promotion', roles: ['ADMIN'] },
+    {
+      name: 'Mensajes',
+      roles: ['ADMIN', 'PROFESOR', 'SECRETARIA', 'ESTUDIANTE', 'REPRESENTANTE'],
+      children: [
+        { name: 'Recibidos', href: '/mensajes', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA', 'ESTUDIANTE', 'REPRESENTANTE'] },
+        { name: 'Enviar Mensaje', href: '/mensajes/enviar', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] },
+        { name: 'Historial de Envíos', href: '/mensajes/historial', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] }
+      ]
+    },
     { 
       name: 'Configuración', 
       roles: ['ADMIN', 'SECRETARIA'],
@@ -181,6 +217,7 @@ const Layout = () => {
         { name: 'Respaldo de BD', href: '/database-backup', roles: ['ADMIN'] },
         { name: 'Configuración General', href: '/general-settings', roles: ['ADMIN', 'SECRETARIA'] },
         { name: 'Configuración Institución', href: '/institution-settings', roles: ['ADMIN'] },
+        { name: 'Configuración de Email', href: '/email-settings', roles: ['ADMIN'] },
         { name: 'Ficha del Estudiante', href: '/student-profile-template', roles: ['ADMIN', 'SECRETARIA'] },
         { name: 'Gestión de Permisos', href: '/permission-management', roles: ['ADMIN'] },
         { name: 'Logs de Acceso', href: '/access-logs', roles: ['ADMIN'] },
@@ -720,14 +757,18 @@ const Layout = () => {
           <h1 className="text-lg font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent drop-shadow-sm">
             Gestión Escolar
           </h1>
-          <div className="w-10">
+          <div className="flex gap-3">
             {user?.rol === 'ESTUDIANTE' && <NotificationBadge />}
+            <MensajeBadge />
           </div>
         </div>
 
         {/* Top bar para desktop */}
         <div className="hidden lg:flex bg-gradient-to-r from-white via-blue-50/20 to-purple-50/20 shadow-sm border-b border-purple-100/50 h-16 items-center justify-end px-6 sticky top-0 z-10 backdrop-blur-sm">
-          {user?.rol === 'ESTUDIANTE' && <NotificationBadge />}
+          <div className="flex gap-4 items-center">
+            {user?.rol === 'ESTUDIANTE' && <NotificationBadge />}
+            <MensajeBadge />
+          </div>
         </div>
 
         {/* Contenido */}
@@ -735,6 +776,9 @@ const Layout = () => {
           <Outlet />
         </main>
       </div>
+      
+      {/* Notificaciones de mensajes nuevos */}
+      <MensajeNotification />
     </div>
   );
 };

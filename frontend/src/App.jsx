@@ -44,6 +44,10 @@ const DatabaseBackup = lazy(() => import('./pages/DatabaseBackup'));
 const MisTareas = lazy(() => import('./pages/MisTareas'));
 const PermissionManagement = lazy(() => import('./pages/PermissionManagement'));
 const AccessLogs = lazy(() => import('./pages/AccessLogs'));
+const EmailSettings = lazy(() => import('./pages/EmailSettings'));
+const EnviarMensaje = lazy(() => import('./pages/EnviarMensaje'));
+const MisMensajes = lazy(() => import('./pages/MisMensajes'));
+const HistorialEnvios = lazy(() => import('./pages/HistorialEnvios'));
 
 // Loading component
 const LoadingFallback = () => (
@@ -122,8 +126,14 @@ function App() {
             <Route path="mis-tareas" element={<ProtectedRoute requiredRole={['ESTUDIANTE']}><MisTareas /></ProtectedRoute>} />
             <Route path="general-settings" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><GeneralSettings /></ProtectedRoute>} />
             <Route path="institution-settings" element={<ProtectedRoute requiredRole={['ADMIN']}><InstitutionSettings /></ProtectedRoute>} />
+            <Route path="email-settings" element={<ProtectedRoute requiredRole={['ADMIN']}><EmailSettings /></ProtectedRoute>} />
             <Route path="permission-management" element={<ProtectedRoute requiredRole={['ADMIN']}><PermissionManagement /></ProtectedRoute>} />
             <Route path="access-logs" element={<ProtectedRoute requiredRole={['ADMIN']}><AccessLogs /></ProtectedRoute>} />
+            
+            {/* Rutas de Mensajería */}
+            <Route path="mensajes" element={<ProtectedRoute><MisMensajes /></ProtectedRoute>} />
+            <Route path="mensajes/enviar" element={<ProtectedRoute requiredRole={['ADMIN', 'PROFESOR', 'SECRETARIA']}><EnviarMensaje /></ProtectedRoute>} />
+            <Route path="mensajes/historial" element={<ProtectedRoute requiredRole={['ADMIN', 'PROFESOR', 'SECRETARIA']}><HistorialEnvios /></ProtectedRoute>} />
           </Route>
         </Routes>
         </Suspense>

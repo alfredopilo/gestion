@@ -30,6 +30,8 @@ import permissionRoutes from './permissionRoutes.js';
 import logRoutes from './logRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
 import dashboardRoutes from './dashboardRoutes.js';
+import emailConfigRoutes from './emailConfigRoutes.js';
+import mensajeRoutes from './mensajeRoutes.js';
 
 const router = express.Router();
 
@@ -64,6 +66,8 @@ router.use('/tareas', tareaEntregaRoutes);
 router.use('/', permissionRoutes);
 router.use('/logs', logRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/email-config', emailConfigRoutes);
+router.use('/mensajes', mensajeRoutes);
 
 export default router;
 
