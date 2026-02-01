@@ -35,7 +35,6 @@ const SubjectAssignments = () => {
     }
 
     try {
-      console.log('Cargando datos para institución:', selectedInstitutionId);
       const [assignmentsRes, subjectsRes, coursesRes, teachersRes, gradeScalesRes] = await Promise.all([
         api.get('/assignments?limit=100'),
         api.get('/subjects?limit=100'),
@@ -49,22 +48,13 @@ const SubjectAssignments = () => {
       
       // Procesar cursos y asegurarse de que tengan IDs válidos
       const coursesData = coursesRes.data.data || coursesRes.data || [];
-      console.log('Cursos cargados:', coursesData);
       const validCourses = coursesData.filter(course => {
-        const isValid = course && course.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(course.id);
-        if (!isValid) {
-          console.warn('Curso con ID inválido encontrado:', course);
-        }
-        return isValid;
+        return course && course.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(course.id);
       });
-      console.log('Cursos válidos:', validCourses.length, validCourses);
       setCourses(validCourses);
 
       // Obtener teachers con su información de usuario
-      // Verificar si la respuesta tiene data.data o data directamente
-      console.log('Respuesta completa de teachers:', teachersRes.data);
       const teachersData = teachersRes.data?.data || teachersRes.data || [];
-      console.log('Datos de teachers procesados:', teachersData);
       
       const teachersList = Array.isArray(teachersData)
         ? teachersData
@@ -72,9 +62,6 @@ const SubjectAssignments = () => {
               // Filtrar solo los que tienen usuario y están activos
               const hasUser = teacher && teacher.user;
               const isActive = teacher.user?.estado === 'ACTIVO';
-              if (!hasUser || !isActive) {
-                console.warn('Docente filtrado:', teacher, { hasUser, isActive, estado: teacher.user?.estado });
-              }
               return hasUser && isActive;
             })
             .map((teacher) => ({
@@ -86,12 +73,7 @@ const SubjectAssignments = () => {
             }))
         : [];
 
-      console.log('Docentes cargados:', teachersList.length, teachersList);
       setTeachers(teachersList);
-      
-      if (teachersList.length === 0) {
-        console.warn('No se encontraron docentes con información de usuario');
-      }
 
       // Cargar escalas de calificación
       const gradeScalesData = gradeScalesRes.data?.data || [];
@@ -118,11 +100,8 @@ const SubjectAssignments = () => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(formData.materiaId) || !uuidRegex.test(formData.cursoId) || !uuidRegex.test(formData.docenteId) || !uuidRegex.test(formData.gradeScaleId)) {
       toast.error('Error: IDs inválidos. Por favor, selecciona nuevamente los campos.');
-      console.error('IDs inválidos:', formData);
       return;
     }
-    
-    console.log('Enviando datos:', formData);
     
     try {
       if (editingAssignment) {
@@ -328,9 +307,6 @@ const SubjectAssignments = () => {
                   disabled={!!editingAssignment}
                   value={formData.cursoId}
                   onChange={(e) => {
-                    console.log('Curso seleccionado:', e.target.value);
-                    const selectedCourse = courses.find(c => c.id === e.target.value);
-                    console.log('Curso completo:', selectedCourse);
                     setFormData({ ...formData, cursoId: e.target.value });
                   }}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -367,7 +343,6 @@ const SubjectAssignments = () => {
                   required
                   value={formData.docenteId}
                   onChange={(e) => {
-                    console.log('Docente seleccionado:', e.target.value);
                     setFormData({ ...formData, docenteId: e.target.value });
                   }}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"

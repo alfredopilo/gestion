@@ -26,7 +26,6 @@ const Profile = () => {
   const fetchProfile = async () => {
     try {
       const response = await api.get('/auth/profile');
-      console.log('Profile data received:', response.data);
       setProfile(response.data);
       
       // Manejar valores null/undefined correctamente
@@ -68,7 +67,6 @@ const Profile = () => {
       }
       
       const response = await api.put('/auth/profile', updateData);
-      console.log('Profile updated response:', response.data);
       
       toast.success('Perfil actualizado exitosamente');
       

@@ -65,7 +65,7 @@ const TaskReview = () => {
              setInsumo(insumoRes.data.data); 
            }
         } catch (err) {
-          console.log("No se pudo cargar detalles del insumo vacío", err);
+          // Silenciar error
         }
       }
 

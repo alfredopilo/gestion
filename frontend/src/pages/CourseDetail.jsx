@@ -67,7 +67,6 @@ const CourseDetail = () => {
     try {
       const response = await api.get(`/courses/${id}`);
       setCourse(response.data);
-      console.log('Curso cargado:', response.data);
     } catch (error) {
       console.error('Error al cargar curso:', error);
       if (error.response?.status === 403) {

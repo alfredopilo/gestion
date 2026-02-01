@@ -202,19 +202,8 @@ const GradeEntry = () => {
     if (!selectedCourse) return;
     
     try {
-      // Debug: Log para verificar condiciones
-      console.log('fetchStudents - Verificando condiciones:', {
-        esSupletorio: selectedPeriod?.esSupletorio,
-        tieneMateriaSeleccionada: !!selectedSubject,
-        anioLectivoId: selectedCourse?.anioLectivo?.id,
-        selectedPeriod,
-        selectedSubject,
-        selectedCourse
-      });
-      
       // Si el período es supletorio y hay materia seleccionada, filtrar estudiantes elegibles
       if (selectedPeriod?.esSupletorio && selectedSubject && selectedCourse?.anioLectivo?.id) {
-        console.log('fetchStudents - ES SUPLETORIO, cargando estudiantes elegibles...');
         try {
           const response = await api.get('/supplementary/eligible-students', {
             params: {
@@ -266,17 +255,9 @@ const GradeEntry = () => {
       }
       
       // Método normal: obtener todos los estudiantes del curso
-      console.log('fetchStudents - Método normal: cargando todos los estudiantes del curso');
       const response = await api.get(`/courses/${selectedCourse.id}`);
       const courseData = response.data;
       const estudiantesList = courseData.estudiantes || [];
-      
-      // Debug: verificar que los datos incluyan numeroIdentificacion
-      console.log('Estudiantes recibidos:', estudiantesList.map(e => ({
-        nombre: e.user?.nombre,
-        apellido: e.user?.apellido,
-        numeroIdentificacion: e.user?.numeroIdentificacion
-      })));
       
       // Ordenar estudiantes alfabéticamente por apellido y nombre
       const estudiantesOrdenados = estudiantesList.sort((a, b) => {

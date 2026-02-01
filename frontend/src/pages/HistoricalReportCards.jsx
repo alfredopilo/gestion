@@ -159,17 +159,10 @@ const HistoricalReportCards = () => {
         params: paramsWithCacheBuster,
       });
       
-      console.log('[HistoricalReportCards Frontend] Respuesta del backend:', {
-        dataLength: response.data.data?.length || 0,
-        data: response.data.data,
-        total: response.data.total,
-      });
-      
       setReportCards(response.data.data || []);
       
       if (response.data.data.length === 0) {
         toast('No se encontraron boletines para los criterios seleccionados');
-        console.warn('[HistoricalReportCards Frontend] No se encontraron boletines. Verifica los logs del backend.');
       } else {
         toast.success(`Se encontraron ${response.data.data.length} boletín(es)`);
       }
@@ -701,15 +694,6 @@ const HistoricalReportCards = () => {
                 const materias = reportCard.materias || [];
                 const periodsGrouped = reportCard.periodsGrouped || [];
                 
-                // Log para depuración
-                console.log(`[HistoricalReportCards Frontend] ReportCard ${index}:`, {
-                  curso: reportCard.curso?.nombre,
-                  anioLectivo: reportCard.anioLectivo?.nombre,
-                  periodsGroupedLength: periodsGrouped.length,
-                  periodsGrouped: periodsGrouped,
-                  materiasLength: materias.length,
-                });
-                
                 const allSubPeriodIds = new Set();
                 materias.forEach(materia => {
                   Object.keys(materia.promediosSubPeriodo || {}).forEach(spId => allSubPeriodIds.add(spId));
@@ -721,7 +705,6 @@ const HistoricalReportCards = () => {
                 
                 // Solo si NO hay períodos del backend Y hay calificaciones, construir desde las calificaciones
                 if (filteredPeriodsGrouped.length === 0 && allSubPeriodIds.size > 0) {
-                  console.log('[HistoricalReportCards Frontend] No hay períodos del backend, construyendo desde calificaciones');
                   // Fallback: construir desde promediosSubPeriodo si no hay periodsGrouped
                   const periodMap = new Map();
                   materias.forEach(materia => {
@@ -749,8 +732,6 @@ const HistoricalReportCards = () => {
                   });
                   filteredPeriodsGrouped = Array.from(periodMap.values());
                 }
-                
-                console.log(`[HistoricalReportCards Frontend] Períodos finales para mostrar: ${filteredPeriodsGrouped.length}`, filteredPeriodsGrouped);
                 
                 const materiasConDatos = materias.filter(materia => {
                   if (materia.promediosSubPeriodo && Object.keys(materia.promediosSubPeriodo).length > 0) {

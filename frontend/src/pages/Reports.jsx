@@ -327,7 +327,6 @@ const Reports = () => {
       }
 
       const response = await api.get(endpoint, { params });
-      console.log('Report data received:', response.data);
       setReportData(response.data);
       toast.success('Reporte generado exitosamente');
     } catch (error) {

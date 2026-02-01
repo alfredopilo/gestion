@@ -167,16 +167,6 @@ const Insumos = () => {
         `/insumos?cursoId=${selectedCourse.id}&materiaId=${selectedSubject.id}&subPeriodoId=${selectedSubPeriod.id}`
       );
       const insumosData = response.data.data || [];
-      console.log('Insumos recibidos:', insumosData);
-      // Verificar que las fechas estén presentes
-      insumosData.forEach(insumo => {
-        console.log(`Insumo ${insumo.nombre}:`, {
-          fechaDeber: insumo.fechaDeber,
-          fechaEntrega: insumo.fechaEntrega,
-          tipoFechaDeber: typeof insumo.fechaDeber,
-          tipoFechaEntrega: typeof insumo.fechaEntrega
-        });
-      });
       setInsumos(insumosData);
     } catch (error) {
       console.error('Error al cargar insumos:', error);

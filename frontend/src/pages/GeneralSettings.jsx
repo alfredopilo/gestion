@@ -106,8 +106,6 @@ const GeneralSettings = () => {
         fechaFin: formData.fechaFin, // Enviar como YYYY-MM-DD, el backend lo manejará
       };
 
-      console.log('Datos a enviar:', data);
-
       if (editingSchoolYear) {
         await api.put(`/school-years/${editingSchoolYear.id}`, data);
         toast.success('Año escolar actualizado exitosamente');

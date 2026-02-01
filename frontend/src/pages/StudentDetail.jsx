@@ -437,7 +437,7 @@ const StudentDetail = () => {
           }
         }
       } catch (error) {
-        console.log('No se pudo obtener el logo de la institución', error);
+        // Silenciar error - continuar sin logo
       }
 
       // Usar la foto de carnet del estudiante si existe
@@ -469,7 +469,7 @@ const StudentDetail = () => {
         try {
           addImageToPDF(institutionLogo, margin, 3, logoSize, logoHeight);
         } catch (error) {
-          console.log('Error al cargar logo');
+          // Silenciar error - continuar sin logo
         }
       }
       
@@ -540,7 +540,6 @@ const StudentDetail = () => {
             setTimeout(reject, 3000); // timeout de 3 segundos
           });
         } catch (error) {
-          console.log('Error al cargar foto del estudiante:', error);
           // Dibujar marco vacío si falla
           doc.setDrawColor(200, 200, 200);
           doc.setLineWidth(0.5);
