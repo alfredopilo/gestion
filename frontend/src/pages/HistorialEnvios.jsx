@@ -19,25 +19,46 @@ const HistorialEnvios = () => {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (filtros.leido) params.append('leido', filtros.leido);
+        if (filtros.tipoMensaje) params.append('tipoMensaje', filtros.tipoMensaje);
+        if (filtros.fechaDesde) params.append('fechaDesde', filtros.fechaDesde);
+        if (filtros.fechaHasta) params.append('fechaHasta', filtros.fechaHasta);
+        const [mensajesRes, estadisticasRes] = await Promise.all([
+          api.get(`/mensajes/enviados?${params.toString()}`),
+          api.get('/mensajes/estadisticas')
+        ]);
+        if (!cancelled) {
+          setMensajes(mensajesRes.data.data ?? []);
+          setEstadisticas(estadisticasRes.data);
+        }
+      } catch (error) {
+        if (!cancelled) toast.error('Error al cargar historial');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, [filtros]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      
       if (filtros.leido) params.append('leido', filtros.leido);
       if (filtros.tipoMensaje) params.append('tipoMensaje', filtros.tipoMensaje);
       if (filtros.fechaDesde) params.append('fechaDesde', filtros.fechaDesde);
       if (filtros.fechaHasta) params.append('fechaHasta', filtros.fechaHasta);
-      
       const [mensajesRes, estadisticasRes] = await Promise.all([
         api.get(`/mensajes/enviados?${params.toString()}`),
         api.get('/mensajes/estadisticas')
       ]);
-      
-      setMensajes(mensajesRes.data.data);
+      setMensajes(mensajesRes.data.data ?? []);
       setEstadisticas(estadisticasRes.data);
     } catch (error) {
       toast.error('Error al cargar historial');

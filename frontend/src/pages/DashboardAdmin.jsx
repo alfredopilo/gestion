@@ -14,25 +14,52 @@ const DashboardAdmin = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStats();
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.get('/dashboard/stats', {
+          timeout: 30000
+        });
+        if (!cancelled) setStats(response.data.data);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error al cargar estadísticas:', error);
+          setError(error.message || 'Error al cargar estadísticas');
+          if (error.code === 'ECONNABORTED') {
+            toast.error('La conexión está tardando demasiado. Verifica tu conexión o intenta más tarde.');
+          } else if (error.response?.status === 500) {
+            toast.error('Error en el servidor. Contacta al administrador.');
+          } else if (!error.response) {
+            toast.error('No se puede conectar al servidor. Verifica tu conexión.');
+          } else {
+            toast.error('Error al cargar estadísticas');
+          }
+          setStats({
+            totalUsers: 0,
+            totalStudents: 0,
+            totalCourses: 0,
+            totalPayments: 0,
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchStats = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      // Usar el nuevo endpoint optimizado con timeout aumentado
-      const response = await api.get('/dashboard/stats', {
-        timeout: 30000 // 30 segundos para VPS lentos
-      });
-
+      const response = await api.get('/dashboard/stats', { timeout: 30000 });
       setStats(response.data.data);
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
       setError(error.message || 'Error al cargar estadísticas');
-      
-      // Mostrar mensaje de error amigable
       if (error.code === 'ECONNABORTED') {
         toast.error('La conexión está tardando demasiado. Verifica tu conexión o intenta más tarde.');
       } else if (error.response?.status === 500) {
@@ -42,8 +69,6 @@ const DashboardAdmin = () => {
       } else {
         toast.error('Error al cargar estadísticas');
       }
-      
-      // Mantener valores en 0 si hay error
       setStats({
         totalUsers: 0,
         totalStudents: 0,

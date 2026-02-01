@@ -1,38 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const DashboardEstudiante = () => {
   const { user } = useAuth();
+  const cancelledRef = useRef(false);
   const [grades, setGrades] = useState([]);
   const [attendance, setAttendance] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      // Intentar obtener el ID del estudiante desde diferentes posibles ubicaciones
-      const studentId = user?.student?.id || user?.id;
-      if (studentId) {
-        fetchData(studentId);
-      } else {
-        // Si no tenemos el studentId, intentar obtener el perfil completo
-        fetchProfile();
-      }
+    if (!user) return;
+    cancelledRef.current = false;
+    const studentId = user?.student?.id || user?.id;
+    if (studentId) {
+      fetchData(studentId);
+    } else {
+      fetchProfile();
     }
+    return () => { cancelledRef.current = true; };
   }, [user]);
 
   const fetchProfile = async () => {
     try {
       const response = await api.get('/auth/profile');
       const profileData = response.data;
-      if (profileData?.student?.id) {
-        fetchData(profileData.student.id);
-      } else {
-        setLoading(false);
+      if (!cancelledRef.current) {
+        if (profileData?.student?.id) {
+          fetchData(profileData.student.id);
+        } else {
+          setLoading(false);
+        }
       }
     } catch (error) {
-      console.error('Error al obtener perfil:', error);
-      setLoading(false);
+      if (!cancelledRef.current) {
+        console.error('Error al obtener perfil:', error);
+        setLoading(false);
+      }
     }
   };
 
@@ -42,14 +46,14 @@ const DashboardEstudiante = () => {
         api.get(`/grades/student/${studentId}`),
         api.get(`/attendance/summary?estudianteId=${studentId}`),
       ]);
-
-      setGrades(gradesRes.data.resumenPorMateria || []);
-      setAttendance(attendanceRes.data.resumen || null);
+      if (!cancelledRef.current) {
+        setGrades(gradesRes.data.resumenPorMateria || []);
+        setAttendance(attendanceRes.data.resumen || null);
+      }
     } catch (error) {
-      console.error('Error al cargar datos:', error);
-      // Si hay error, mostrar mensaje pero no dejar en loading infinito
+      if (!cancelledRef.current) console.error('Error al cargar datos:', error);
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 

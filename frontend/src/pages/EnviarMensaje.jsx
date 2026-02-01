@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 const EnviarMensaje = () => {
   const { user } = useAuth();
+  const cancelledRef = useRef(false);
   const [tipoEnvio, setTipoEnvio] = useState('individual');
   const [cursos, setCursos] = useState([]);
   const [materias, setMaterias] = useState([]);
@@ -23,30 +24,34 @@ const EnviarMensaje = () => {
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchCursos();
+    return () => { cancelledRef.current = true; };
   }, []);
 
   useEffect(() => {
-    if (selectedCurso) {
-      fetchMaterias();
-      if (tipoEnvio === 'curso') {
-        fetchEstudiantesPorCurso();
-      }
+    if (!selectedCurso) return;
+    cancelledRef.current = false;
+    fetchMaterias();
+    if (tipoEnvio === 'curso') {
+      fetchEstudiantesPorCurso();
     }
+    return () => { cancelledRef.current = true; };
   }, [selectedCurso, tipoEnvio]);
 
   useEffect(() => {
-    if (selectedMateria && selectedCurso && tipoEnvio === 'materia') {
-      fetchEstudiantesPorMateria();
-    }
+    if (!selectedMateria || !selectedCurso || tipoEnvio !== 'materia') return;
+    cancelledRef.current = false;
+    fetchEstudiantesPorMateria();
+    return () => { cancelledRef.current = true; };
   }, [selectedMateria, selectedCurso, tipoEnvio]);
 
   const fetchCursos = async () => {
     try {
       const response = await api.get('/courses?limit=100');
-      setCursos(response.data.data || []);
+      if (!cancelledRef.current) setCursos(response.data.data || []);
     } catch (error) {
-      toast.error('Error al cargar cursos');
+      if (!cancelledRef.current) toast.error('Error al cargar cursos');
     }
   };
 
@@ -56,37 +61,35 @@ const EnviarMensaje = () => {
         const response = await api.get('/teachers/my-assignments');
         const assignments = response.data.data || [];
         const courseAssignments = assignments.find(a => a.curso.id === selectedCurso);
-        if (courseAssignments) {
-          setMaterias(courseAssignments.materias || []);
-        } else {
-          setMaterias([]);
+        if (!cancelledRef.current) {
+          setMaterias(courseAssignments ? courseAssignments.materias || [] : []);
         }
       } else {
         const response = await api.get(`/assignments?cursoId=${selectedCurso}`);
         const assignments = response.data.data || [];
         const subjectsList = assignments.map(a => a.materia).filter(Boolean);
-        setMaterias(subjectsList);
+        if (!cancelledRef.current) setMaterias(subjectsList);
       }
     } catch (error) {
-      toast.error('Error al cargar materias');
+      if (!cancelledRef.current) toast.error('Error al cargar materias');
     }
   };
 
   const fetchEstudiantesPorCurso = async () => {
     try {
       const response = await api.get(`/mensajes/estudiantes/curso/${selectedCurso}`);
-      setEstudiantes(response.data.data || []);
+      if (!cancelledRef.current) setEstudiantes(response.data.data || []);
     } catch (error) {
-      toast.error('Error al cargar estudiantes');
+      if (!cancelledRef.current) toast.error('Error al cargar estudiantes');
     }
   };
 
   const fetchEstudiantesPorMateria = async () => {
     try {
       const response = await api.get(`/mensajes/estudiantes/materia?cursoId=${selectedCurso}&materiaId=${selectedMateria}`);
-      setEstudiantes(response.data.data || []);
+      if (!cancelledRef.current) setEstudiantes(response.data.data || []);
     } catch (error) {
-      toast.error('Error al cargar estudiantes');
+      if (!cancelledRef.current) toast.error('Error al cargar estudiantes');
     }
   };
 

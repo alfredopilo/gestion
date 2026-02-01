@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 
 const Users = () => {
   const { user: currentUser } = useAuth();
+  const cancelledRef = useRef(false);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -45,14 +46,18 @@ const Users = () => {
   const [importInstitutions, setImportInstitutions] = useState([]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchInstitutions();
+    return () => { cancelledRef.current = true; };
   }, []);
 
   useEffect(() => {
     // Solo cargar usuarios si hay al menos un filtro activo
     const hasActiveFilter = filters.rol || filters.estado || filters.search;
     if (hasActiveFilter) {
+      cancelledRef.current = false;
       fetchUsers();
+      return () => { cancelledRef.current = true; };
     } else {
       setUsers([]);
       setPagination(prev => ({ ...prev, total: 0, pages: 0 }));
@@ -63,15 +68,15 @@ const Users = () => {
   const fetchInstitutions = async () => {
     try {
       const response = await api.get('/institutions?limit=100');
-      setInstitutions(response.data.data || []);
+      if (!cancelledRef.current) setInstitutions(response.data.data || []);
     } catch (error) {
-      console.error('Error al cargar instituciones:', error);
+      if (!cancelledRef.current) console.error('Error al cargar instituciones:', error);
     }
   };
 
   const fetchUsers = async () => {
     try {
-      setLoading(true);
+      if (!cancelledRef.current) setLoading(true);
       const params = new URLSearchParams();
       if (filters.rol) params.append('rol', filters.rol);
       if (filters.estado) params.append('estado', filters.estado);
@@ -92,17 +97,21 @@ const Users = () => {
         const nombreB = (b.nombre || '').toLowerCase();
         return nombreA.localeCompare(nombreB);
       });
-      setUsers(sortedUsers);
-      setPagination(prev => ({
-        ...prev,
-        total: response.data.pagination.total,
-        pages: response.data.pagination.pages,
-      }));
+      if (!cancelledRef.current) {
+        setUsers(sortedUsers);
+        setPagination(prev => ({
+          ...prev,
+          total: response.data.pagination.total,
+          pages: response.data.pagination.pages,
+        }));
+      }
     } catch (error) {
-      console.error('Error al cargar usuarios:', error);
-      toast.error('Error al cargar usuarios');
+      if (!cancelledRef.current) {
+        console.error('Error al cargar usuarios:', error);
+        toast.error('Error al cargar usuarios');
+      }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 

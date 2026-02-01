@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
@@ -7,6 +7,7 @@ import StudentWithdrawalModal from '../components/StudentWithdrawalModal';
 import StudentReactivationModal from '../components/StudentReactivationModal';
 
 const Students = () => {
+  const cancelledRef = useRef(false);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,14 +38,18 @@ const Students = () => {
   const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchCourses();
+    return () => { cancelledRef.current = true; };
   }, []);
 
   useEffect(() => {
     // Solo cargar estudiantes si hay algún filtro activo
     const hasActiveFilter = filters.grupoId || filters.estado || (filters.search && filters.search.trim());
     if (hasActiveFilter) {
+      cancelledRef.current = false;
       fetchStudents();
+      return () => { cancelledRef.current = true; };
     } else {
       // Si no hay filtros, limpiar la lista y resetear paginación
       setStudents([]);
@@ -56,16 +61,18 @@ const Students = () => {
   const fetchCourses = async () => {
     try {
       const response = await api.get('/courses?limit=100');
-      setCourses(response.data.data || []);
+      if (!cancelledRef.current) setCourses(response.data.data || []);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
+      if (!cancelledRef.current) console.error('Error al cargar cursos:', error);
     }
   };
 
   const fetchStudents = async () => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!cancelledRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       const params = new URLSearchParams();
       if (filters.grupoId) {
         params.append('grupoId', filters.grupoId);
@@ -132,21 +139,23 @@ const Students = () => {
         return nombreA.localeCompare(nombreB);
       });
 
-      setStudents(sortedStudents);
-      
-      // Actualizar paginación basada en resultados filtrados
-      const totalFiltered = filteredStudents.length;
-      setPagination(prev => ({
-        ...prev,
-        total: totalFiltered,
-        pages: Math.ceil(totalFiltered / prev.limit),
-      }));
+      if (!cancelledRef.current) {
+        setStudents(sortedStudents);
+        const totalFiltered = filteredStudents.length;
+        setPagination(prev => ({
+          ...prev,
+          total: totalFiltered,
+          pages: Math.ceil(totalFiltered / prev.limit),
+        }));
+      }
     } catch (error) {
-      console.error('Error al cargar estudiantes:', error);
-      setError('Error al cargar estudiantes');
-      toast.error('Error al cargar estudiantes');
+      if (!cancelledRef.current) {
+        console.error('Error al cargar estudiantes:', error);
+        setError('Error al cargar estudiantes');
+        toast.error('Error al cargar estudiantes');
+      }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 

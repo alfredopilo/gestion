@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../services/api';
@@ -10,6 +10,7 @@ const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { selectedInstitutionId, user } = useAuth();
+  const cancelledRef = useRef(false);
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showStudentModal, setShowStudentModal] = useState(false);
@@ -40,25 +41,24 @@ const CourseDetail = () => {
   const [importError, setImportError] = useState('');
 
   useEffect(() => {
-    if (!selectedInstitutionId) {
-      return;
-    }
-
+    if (!selectedInstitutionId) return;
+    cancelledRef.current = false;
     setLoading(true);
     setCourse(null);
     setAvailableStudents([]);
     setFilteredStudents([]);
     setSubjects([]);
     setTeachers([]);
-
     fetchCourse();
+    return () => { cancelledRef.current = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, selectedInstitutionId]);
 
   useEffect(() => {
-    // Solo cargar estudiantes disponibles si el usuario es ADMIN o SECRETARIA
     if (course?.id && (user?.rol === 'ADMIN' || user?.rol === 'SECRETARIA')) {
+      cancelledRef.current = false;
       fetchAvailableStudents();
+      return () => { cancelledRef.current = true; };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course?.id, user?.rol]);
@@ -66,19 +66,21 @@ const CourseDetail = () => {
   const fetchCourse = async () => {
     try {
       const response = await api.get(`/courses/${id}`);
-      setCourse(response.data);
+      if (!cancelledRef.current) setCourse(response.data);
     } catch (error) {
-      console.error('Error al cargar curso:', error);
-      if (error.response?.status === 403) {
-        toast.error('Este curso no pertenece a la institución seleccionada.');
-      } else if (error.response?.status === 404) {
-        toast.error('Curso no encontrado en la institución actual.');
-      } else {
-        toast.error('Error al cargar información del curso');
+      if (!cancelledRef.current) {
+        console.error('Error al cargar curso:', error);
+        if (error.response?.status === 403) {
+          toast.error('Este curso no pertenece a la institución seleccionada.');
+        } else if (error.response?.status === 404) {
+          toast.error('Curso no encontrado en la institución actual.');
+        } else {
+          toast.error('Error al cargar información del curso');
+        }
+        navigate('/courses');
       }
-      navigate('/courses');
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 
@@ -91,17 +93,18 @@ const CourseDetail = () => {
     }
     
     try {
-      // Incluir el cursoId para excluir estudiantes que ya están en este curso
-      // Ya no necesitamos período, se usa el año escolar activo
       const response = await api.get(`/courses/available-students?cursoId=${id}`);
       const students = response.data.data || [];
-      setAvailableStudents(students);
-      setFilteredStudents(students);
+      if (!cancelledRef.current) {
+        setAvailableStudents(students);
+        setFilteredStudents(students);
+      }
     } catch (error) {
-      console.error('Error al cargar estudiantes disponibles:', error);
-      // Solo mostrar error si no es 403 (permisos)
-      if (error.response?.status !== 403) {
-        toast.error('Error al cargar estudiantes disponibles');
+      if (!cancelledRef.current) {
+        console.error('Error al cargar estudiantes disponibles:', error);
+        if (error.response?.status !== 403) {
+          toast.error('Error al cargar estudiantes disponibles');
+        }
       }
     }
   };

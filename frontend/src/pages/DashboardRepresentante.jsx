@@ -11,7 +11,23 @@ const DashboardRepresentante = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchStudents();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/representantes/my-students');
+        if (!cancelled) setStudents(response.data.data || []);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error al cargar estudiantes:', error);
+          toast.error('Error al cargar los estudiantes');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchStudents = async () => {

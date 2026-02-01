@@ -20,15 +20,39 @@ const Profile = () => {
   });
 
   useEffect(() => {
-    fetchProfile();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await api.get('/auth/profile');
+        if (cancelled) return;
+        setProfile(response.data);
+        const data = response.data || {};
+        setFormData({
+          nombre: data.nombre ?? '',
+          apellido: data.apellido ?? '',
+          email: data.email ?? '',
+          numeroIdentificacion: data.numeroIdentificacion ?? '',
+          telefono: data.telefono ?? '',
+          direccion: data.direccion ?? '',
+          password: '',
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error fetching profile:', error);
+          toast.error('Error al cargar perfil');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchProfile = async () => {
     try {
       const response = await api.get('/auth/profile');
       setProfile(response.data);
-      
-      // Manejar valores null/undefined correctamente
       const data = response.data || {};
       setFormData({
         nombre: data.nombre ?? '',

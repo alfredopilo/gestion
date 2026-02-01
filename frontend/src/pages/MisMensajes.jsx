@@ -9,13 +9,25 @@ const MisMensajes = () => {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetchMensajes();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await api.get('/mensajes/recibidos');
+        if (!cancelled) setMensajes(response.data.data ?? []);
+      } catch (error) {
+        if (!cancelled) toast.error('Error al cargar mensajes');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const fetchMensajes = async () => {
     try {
       const response = await api.get('/mensajes/recibidos');
-      setMensajes(response.data.data);
+      setMensajes(response.data.data ?? []);
     } catch (error) {
       toast.error('Error al cargar mensajes');
     } finally {

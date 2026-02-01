@@ -1,24 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const DashboardProfesor = () => {
   const { user } = useAuth();
+  const cancelledRef = useRef(false);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchCourses();
+    return () => { cancelledRef.current = true; };
   }, []);
 
   const fetchCourses = async () => {
     try {
-      // Obtener las asignaciones del profesor
       const response = await api.get('/teachers/my-assignments');
       const assignments = response.data.data || [];
-      
-      // Convertir asignaciones a formato de cursos con contador de estudiantes
       const coursesList = assignments.map(a => ({
         id: a.curso.id,
         nombre: a.curso.nombre,
@@ -26,12 +26,11 @@ const DashboardProfesor = () => {
         paralelo: a.curso.paralelo,
         _count: a.curso._count || { estudiantes: 0 },
       }));
-      
-      setCourses(coursesList);
+      if (!cancelledRef.current) setCourses(coursesList);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
+      if (!cancelledRef.current) console.error('Error al cargar cursos:', error);
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 
