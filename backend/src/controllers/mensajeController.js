@@ -1,77 +1,144 @@
 import prisma from '../config/database.js';
 import { sendEmail } from '../services/emailService.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Enviar mensaje individual o masivo
 export const enviarMensaje = async (req, res, next) => {
   try {
     const emisorId = req.user.id;
     const institutionId = req.user.institutionId;
+    
+    // Parsear destinatarios (puede venir como string JSON desde FormData)
+    let destinatarios = req.body.destinatarios;
+    if (typeof destinatarios === 'string') {
+      try {
+        destinatarios = JSON.parse(destinatarios);
+      } catch (e) {
+        destinatarios = [];
+      }
+    }
+    if (!Array.isArray(destinatarios)) {
+      destinatarios = [];
+    }
+    
     const {
-      destinatarios, // Array de IDs de usuarios
       asunto,
       cuerpo,
-      enviarEmail, // Boolean
       destinatarioEmail, // 'estudiante', 'representante', 'ambos'
-      tipoMensaje, // 'INDIVIDUAL', 'MASIVO_CURSO', 'MASIVO_MATERIA'
-      cursoId,
-      materiaId
+      tipoMensaje // 'INDIVIDUAL', 'MASIVO_CURSO', 'MASIVO_MATERIA'
     } = req.body;
+    
+    // Parsear cursoId y materiaId (convertir strings vacíos a null)
+    const cursoId = req.body.cursoId && req.body.cursoId !== '' ? req.body.cursoId : null;
+    const materiaId = req.body.materiaId && req.body.materiaId !== '' ? req.body.materiaId : null;
+    
+    // Parsear booleanos (vienen como strings desde FormData)
+    const enviarPorSistema = req.body.enviarPorSistema === 'true' || req.body.enviarPorSistema === true;
+    const enviarEmail = req.body.enviarEmail === 'true' || req.body.enviarEmail === true;
+    
+    // El archivo adjunto viene en req.file (si existe)
+    const archivoAdjunto = req.file ? req.file.filename : null;
+    const archivoNombreOriginal = req.file ? req.file.originalname : null;
     
     // Validación
     if (!destinatarios || destinatarios.length === 0) {
       return res.status(400).json({ error: 'Debe especificar al menos un destinatario' });
     }
     
+    // Al menos uno de los dos canales debe estar activo
+    if (!enviarPorSistema && !enviarEmail) {
+      return res.status(400).json({ error: 'Debe seleccionar al menos un canal de envío (sistema o email)' });
+    }
+    
     const mensajesCreados = [];
     const emailsEnviados = [];
     
+    // Preparar adjunto para email si existe
+    let attachments = [];
+    if (archivoAdjunto && enviarEmail) {
+      const filePath = path.join(__dirname, '../../uploads/mensajes', archivoAdjunto);
+      if (fs.existsSync(filePath)) {
+        attachments = [{
+          filename: archivoNombreOriginal || archivoAdjunto,
+          path: filePath
+        }];
+      }
+    }
+    
     for (const receptorId of destinatarios) {
-      // Crear mensaje interno
-      const mensaje = await prisma.mensaje.create({
-        data: {
-          emisorId,
-          receptorId,
-          asunto,
-          cuerpo,
-          tipoMensaje: tipoMensaje || 'INDIVIDUAL',
-          enviadoPorEmail: enviarEmail || false,
-          cursoId,
-          materiaId
-        },
-        include: {
-          receptor: {
-            include: {
-              student: {
-                include: {
-                  representante: {
-                    include: { user: true }
+      // Crear mensaje interno solo si enviarPorSistema es true
+      if (enviarPorSistema) {
+        const mensaje = await prisma.mensaje.create({
+          data: {
+            emisorId,
+            receptorId,
+            asunto,
+            cuerpo,
+            tipoMensaje: tipoMensaje || 'INDIVIDUAL',
+            enviadoPorEmail: Boolean(enviarEmail),
+            archivoAdjunto,
+            cursoId,
+            materiaId
+          },
+          include: {
+            receptor: {
+              include: {
+                student: {
+                  include: {
+                    representante: {
+                      include: { user: true }
+                    }
                   }
                 }
               }
             }
           }
-        }
-      });
+        });
+        
+        mensajesCreados.push(mensaje);
+      }
       
-      mensajesCreados.push(mensaje);
-      
-      // Enviar email si está activado
+      // Enviar email si está activado (notificación inmediata al destinatario)
       if (enviarEmail) {
+        const receptor = await prisma.user.findUnique({
+          where: { id: receptorId },
+          include: {
+            student: {
+              include: {
+                representante: {
+                  include: { user: true }
+                }
+              }
+            }
+          }
+        });
+        
+        if (!receptor) continue;
+        
         const emailsAEnviar = [];
         
-        // Determinar destinatarios de email
-        if (destinatarioEmail === 'estudiante' || destinatarioEmail === 'ambos') {
-          if (mensaje.receptor.email) {
-            emailsAEnviar.push(mensaje.receptor.email);
+        // Si el receptor ES el representante/padre (mensaje dirigido al padre)
+        if (receptor.rol === 'REPRESENTANTE') {
+          if ((destinatarioEmail === 'representante' || destinatarioEmail === 'ambos') && receptor.email) {
+            emailsAEnviar.push(receptor.email);
+          }
+        } else {
+          // Receptor es el estudiante: enviar al estudiante y/o al representante según opción
+          if (destinatarioEmail === 'estudiante' || destinatarioEmail === 'ambos') {
+            if (receptor.email) emailsAEnviar.push(receptor.email);
+          }
+          if ((destinatarioEmail === 'representante' || destinatarioEmail === 'ambos') &&
+              receptor.student?.representante?.user?.email) {
+            const emailRep = receptor.student.representante.user.email;
+            if (!emailsAEnviar.includes(emailRep)) emailsAEnviar.push(emailRep);
           }
         }
         
-        if ((destinatarioEmail === 'representante' || destinatarioEmail === 'ambos') &&
-            mensaje.receptor.student?.representante?.user?.email) {
-          emailsAEnviar.push(mensaje.receptor.student.representante.user.email);
-        }
-        
-        // Enviar emails
         for (const emailDestino of emailsAEnviar) {
           try {
             await sendEmail(
@@ -82,7 +149,8 @@ export const enviarMensaje = async (req, res, next) => {
                 <p>${cuerpo.replace(/\n/g, '<br>')}</p>
                 <hr>
                 <p><small>Este es un mensaje del sistema de gestión escolar.</small></p>
-              </div>`
+              </div>`,
+              attachments
             );
             emailsEnviados.push(emailDestino);
           } catch (emailError) {
@@ -90,11 +158,13 @@ export const enviarMensaje = async (req, res, next) => {
           }
         }
         
-        // Actualizar estado de email
-        await prisma.mensaje.update({
-          where: { id: mensaje.id },
-          data: { emailEnviado: emailsEnviados.length > 0 }
-        });
+        if (enviarPorSistema && mensajesCreados.length > 0) {
+          const ultimoMensaje = mensajesCreados[mensajesCreados.length - 1];
+          await prisma.mensaje.update({
+            where: { id: ultimoMensaje.id },
+            data: { emailEnviado: emailsEnviados.length > 0 }
+          });
+        }
       }
     }
     
@@ -198,7 +268,7 @@ export const getEstudiantesPorCurso = async (req, res, next) => {
     const { cursoId } = req.params;
     const institutionId = req.user.institutionId;
     
-    const estudiantes = await prisma.student.findMany({
+    const raw = await prisma.student.findMany({
       where: {
         grupoId: cursoId,
         user: { institutionId },
@@ -227,6 +297,12 @@ export const getEstudiantesPorCurso = async (req, res, next) => {
         }
       }
     });
+    
+    // Incluir representanteUserId explícito para que el frontend siempre tenga el ID
+    const estudiantes = raw.map((est) => ({
+      ...est,
+      representanteUserId: est.representante?.userId ?? est.representante?.user?.id ?? null
+    }));
     
     res.json({ data: estudiantes });
   } catch (error) {
@@ -241,7 +317,7 @@ export const getEstudiantesPorMateria = async (req, res, next) => {
     const institutionId = req.user.institutionId;
     
     // Obtener estudiantes del curso que tienen la materia
-    const estudiantes = await prisma.student.findMany({
+    const raw = await prisma.student.findMany({
       where: {
         grupoId: cursoId,
         user: { institutionId },
@@ -270,6 +346,11 @@ export const getEstudiantesPorMateria = async (req, res, next) => {
         }
       }
     });
+    
+    const estudiantes = raw.map((est) => ({
+      ...est,
+      representanteUserId: est.representante?.userId ?? est.representante?.user?.id ?? null
+    }));
     
     res.json({ data: estudiantes });
   } catch (error) {
@@ -462,6 +543,67 @@ export const getDetalleMensajeEnviado = async (req, res, next) => {
     }
     
     res.json({ mensaje });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Descargar archivo adjunto de un mensaje
+export const descargarAdjunto = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    
+    // Verificar que el usuario sea emisor o receptor del mensaje
+    const mensaje = await prisma.mensaje.findFirst({
+      where: {
+        id,
+        OR: [
+          { emisorId: userId },
+          { receptorId: userId }
+        ]
+      }
+    });
+    
+    if (!mensaje) {
+      return res.status(404).json({ error: 'Mensaje no encontrado o no tiene permiso para acceder' });
+    }
+    
+    if (!mensaje.archivoAdjunto) {
+      return res.status(404).json({ error: 'Este mensaje no tiene archivo adjunto' });
+    }
+    
+    const filePath = path.join(__dirname, '../../uploads/mensajes', mensaje.archivoAdjunto);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Archivo no encontrado en el servidor' });
+    }
+    
+    // Determinar el tipo de contenido basado en la extensión
+    const ext = path.extname(mensaje.archivoAdjunto).toLowerCase();
+    const contentTypeMap = {
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.txt': 'text/plain',
+      '.rtf': 'application/rtf',
+      '.odt': 'application/vnd.oasis.opendocument.text',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls': 'application/vnd.ms-excel',
+      '.csv': 'text/csv',
+      '.zip': 'application/zip',
+      '.rar': 'application/x-rar-compressed',
+    };
+    
+    const contentType = contentTypeMap[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${mensaje.archivoAdjunto}"`);
+    res.sendFile(filePath);
   } catch (error) {
     next(error);
   }

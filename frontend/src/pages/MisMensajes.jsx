@@ -23,6 +23,26 @@ const MisMensajes = () => {
     }
   };
 
+  const handleDescargarAdjunto = async (mensajeId) => {
+    try {
+      const response = await api.get(`/mensajes/${mensajeId}/adjunto`, {
+        responseType: 'blob'
+      });
+      
+      // Crear URL del blob y descargar
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `adjunto-${mensajeId}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error('Error al descargar el archivo adjunto');
+    }
+  };
+
   const handleOpenMensaje = async (mensaje) => {
     setSelectedMensaje(mensaje);
     setShowModal(true);
@@ -91,6 +111,14 @@ const MisMensajes = () => {
                     <p className="text-sm text-gray-500 mt-2 line-clamp-2">
                       {mensaje.cuerpo}
                     </p>
+                    {mensaje.archivoAdjunto && (
+                      <div className="mt-2 inline-flex items-center text-xs text-blue-600">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                        Tiene archivo adjunto
+                      </div>
+                    )}
                   </div>
                   <div className="text-sm text-gray-500 ml-4">
                     {formatFecha(mensaje.fechaEnvio)}
@@ -125,6 +153,19 @@ const MisMensajes = () => {
               <p className="text-sm text-gray-600">
                 Fecha: {formatFecha(selectedMensaje.fechaEnvio)}
               </p>
+              {selectedMensaje.archivoAdjunto && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => handleDescargarAdjunto(selectedMensaje.id)}
+                    className="inline-flex items-center px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Descargar archivo adjunto
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="mb-6 p-4 bg-gray-50 rounded">

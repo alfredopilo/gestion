@@ -9,17 +9,20 @@ import {
   getEstudiantesPorMateria,
   getHistorialEnvios,
   getEstadisticasEnvios,
-  getDetalleMensajeEnviado
+  getDetalleMensajeEnviado,
+  descargarAdjunto
 } from '../controllers/mensajeController.js';
+import { uploadMensaje } from '../middleware/uploadMensaje.js';
 
 const router = express.Router();
 
 router.use(authenticate);
 
-// Enviar mensaje (PROFESOR, ADMIN, SECRETARIA)
+// Enviar mensaje (PROFESOR, ADMIN, SECRETARIA) - con soporte de adjunto
 router.post(
   '/enviar',
   authorize(['PROFESOR', 'ADMIN', 'SECRETARIA']),
+  uploadMensaje.single('adjunto'),
   enviarMensaje
 );
 
@@ -59,5 +62,8 @@ router.get(
   authorize(['PROFESOR', 'ADMIN', 'SECRETARIA']),
   getDetalleMensajeEnviado
 );
+
+// Descargar adjunto de un mensaje (todos los roles autenticados)
+router.get('/:id/adjunto', descargarAdjunto);
 
 export default router;

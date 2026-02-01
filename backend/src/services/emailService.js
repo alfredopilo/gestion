@@ -49,7 +49,7 @@ export const getTransporter = async (institutionId) => {
   return { transporter, config };
 };
 
-export const sendEmail = async (institutionId, to, subject, html) => {
+export const sendEmail = async (institutionId, to, subject, html, attachments = []) => {
   const { transporter, config } = await getTransporter(institutionId);
   
   const mailOptions = {
@@ -58,6 +58,11 @@ export const sendEmail = async (institutionId, to, subject, html) => {
     subject,
     html
   };
+  
+  // Añadir attachments si existen
+  if (attachments && attachments.length > 0) {
+    mailOptions.attachments = attachments;
+  }
   
   return await transporter.sendMail(mailOptions);
 };
