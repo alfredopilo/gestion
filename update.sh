@@ -139,18 +139,27 @@ print_info "Verificando estado actual..."
 migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
 echo "$migration_status" | head -15
 
-# Función: marcar migraciones fallidas como aplicadas (cuando el cambio ya está en la BD, p. ej. columna "ano" ya existe)
-# Usamos --applied (no --rolled-back) para que Prisma no reintente la misma migración que falla por "column already exists"
+# Función: marcar migraciones fallidas como aplicadas (cuando el cambio ya está en la BD, p. ej. columna "ano" ya existe).
+# Si Prisma responde P3008 "already recorded as applied", se considera OK y se continúa.
+# Ordenamos por migration_name para procesar en orden cronológico.
 resolve_failed_as_applied() {
-    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
-        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
+    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -A -c \
+        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL ORDER BY migration_name;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
+    resolved_any=0
     if [ -n "$failed_list" ]; then
         while IFS= read -r mig; do
             [ -z "$mig" ] && continue
-            print_info "Marcando como aplicada (cambio ya en BD): $mig"
-            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$mig" 2>&1 || true
+            print_info "Marcando como aplicada: $mig"
+            out=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$mig" 2>&1) || true
+            if echo "$out" | grep -qE "P3008|already recorded as applied"; then
+                print_info "Ya estaba aplicada (omitir): $mig"
+            else
+                resolved_any=1
+            fi
         done <<< "$failed_list"
-        return 0
+        # Retornar 0 si resolvimos al menos una; si solo había "ya aplicada" (P3008) retornamos 1 para que el fallback intente por status
+        [ "$resolved_any" -eq 1 ] && return 0
+        return 1
     fi
     return 1
 }
@@ -173,9 +182,22 @@ while [ $deploy_attempt -le $max_deploy_attempts ]; do
         deploy_ok=true
         break
     fi
-    # Deploy falló: si hay migraciones marcadas como fallidas en BD, marcarlas como aplicadas y reintentar
-    print_warning "Deploy falló (p. ej. columna ya existe). Resolviendo migraciones fallidas..."
-    if resolve_failed_as_applied; then
+    # Deploy falló: resolver migraciones fallidas (por BD) y/o la que indique Prisma en el status
+    print_warning "Deploy falló. Resolviendo migraciones fallidas..."
+    resolve_failed_as_applied
+    did_resolve=$?
+    # Fallback: si Prisma reporta P3009, extraer nombre de la migración fallida del status y marcarla aplicada
+    status_after=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
+    if echo "$status_after" | grep -qE "P3009|failed"; then
+        # Extraer el nombre de la migración que aparece en la línea que contiene "failed"
+        failed_name=$(echo "$status_after" | grep "failed" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+        if [ -n "$failed_name" ]; then
+            print_info "Marcando como aplicada (desde status): $failed_name"
+            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$failed_name" 2>&1 || true
+            did_resolve=0
+        fi
+    fi
+    if [ "$did_resolve" -eq 0 ]; then
         deploy_attempt=$((deploy_attempt + 1))
         continue
     fi
