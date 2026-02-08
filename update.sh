@@ -177,25 +177,38 @@ deploy_ok=false
 
 while [ $deploy_attempt -le $max_deploy_attempts ]; do
     print_info "Ejecutando prisma migrate deploy (intento $deploy_attempt/$max_deploy_attempts)..."
-    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+    deploy_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1) || true
+    deploy_exit=$?
+    if [ "$deploy_exit" -eq 0 ]; then
         print_success "Migraciones aplicadas correctamente"
         deploy_ok=true
         break
     fi
-    # Deploy falló: resolver migraciones fallidas (por BD) y/o la que indique Prisma en el status
+    # Deploy falló (P3009 u otro): resolver la migración que Prisma indica como fallida
     print_warning "Deploy falló. Resolviendo migraciones fallidas..."
-    resolve_failed_as_applied
-    did_resolve=$?
-    # Fallback: si Prisma reporta P3009, extraer nombre de la migración fallida del status y marcarla aplicada
-    status_after=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
-    if echo "$status_after" | grep -qE "P3009|failed"; then
-        # Extraer el nombre de la migración que aparece en la línea que contiene "failed"
+    did_resolve=1
+    # 1) Extraer nombre de la migración fallida del mensaje de deploy (ej: "The `20251113191229_add_ano_to_school_year` migration started at ... failed.")
+    failed_name=$(echo "$deploy_output" | grep -E "migration started at.*failed|failed\.$" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    if [ -z "$failed_name" ]; then
+        # 1b) Línea que contiene "failed" y el patrón de nombre (por si el mensaje viene en varias líneas)
+        failed_name=$(echo "$deploy_output" | grep "failed" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    fi
+    if [ -z "$failed_name" ]; then
+        # 2) Fallback: leer del status
+        status_after=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
+        failed_name=$(echo "$status_after" | grep -E "migration started at.*failed|failed\.$" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    fi
+    if [ -z "$failed_name" ]; then
         failed_name=$(echo "$status_after" | grep "failed" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
-        if [ -n "$failed_name" ]; then
-            print_info "Marcando como aplicada (desde status): $failed_name"
-            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$failed_name" 2>&1 || true
-            did_resolve=0
-        fi
+    fi
+    if [ -n "$failed_name" ]; then
+        print_info "Marcando como aplicada (migración que bloquea): $failed_name"
+        $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$failed_name" 2>&1 || true
+        did_resolve=0
+    else
+        # 3) Resolver por lista en BD (finished_at IS NULL)
+        resolve_failed_as_applied
+        did_resolve=$?
     fi
     if [ "$did_resolve" -eq 0 ]; then
         deploy_attempt=$((deploy_attempt + 1))
