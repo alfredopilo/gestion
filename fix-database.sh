@@ -176,10 +176,17 @@ echo ""
 echo "📋 PASO 5: Sincronizando estado de migraciones..."
 echo ""
 
-print_info "Marcando migraciones como aplicadas..."
+print_info "Marcando migración 20260106_add_access_logs como aplicada (si aplica)..."
 $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied 20260106_add_access_logs 2>&1 || {
-    print_info "No hay migraciones pendientes para marcar"
+    print_info "Resolve no necesario o ya aplicado"
 }
+
+print_info "Aplicando el resto de migraciones pendientes..."
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+    print_success "Migraciones pendientes aplicadas"
+else
+    print_warning "Revisa con: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
+fi
 
 # ============================================
 # PASO 6: Ejecutar seed de permisos

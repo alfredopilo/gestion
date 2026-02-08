@@ -289,6 +289,45 @@ case $UPDATE_TYPE in
 esac
 
 # ============================================
+# PASO 2.5: Aplicar migraciones (opciones 1-4)
+# Asegura que Prisma Client y migraciones pendientes se apliquen tras cualquier actualización
+# ============================================
+if [ "$UPDATE_TYPE" = "1" ] || [ "$UPDATE_TYPE" = "2" ] || [ "$UPDATE_TYPE" = "3" ] || [ "$UPDATE_TYPE" = "4" ]; then
+    echo ""
+    print_step "PASO 2.5: Aplicando migraciones de base de datos..."
+    echo ""
+    
+    print_info "Esperando a que el backend esté listo..."
+    sleep 5
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        if $DOCKER_COMPOSE_CMD exec -T backend sh -c "exit 0" 2>/dev/null; then
+            print_success "Backend listo"
+            break
+        fi
+        [ $i -lt 10 ] && echo "   Intento $i/10..." && sleep 2
+    done
+    
+    print_info "Regenerando Prisma Client..."
+    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma generate 2>&1 | tail -3; then
+        print_success "Prisma Client generado"
+    else
+        print_warning "Error al generar Prisma Client (puede que ya esté actualizado)"
+    fi
+    
+    print_info "Aplicando migraciones pendientes..."
+    migration_out=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1)
+    if echo "$migration_out" | grep -qE "No pending|already applied|Database schema is up to date|Applied the following|migrations have been applied"; then
+        print_success "Migraciones aplicadas o ya al día"
+    elif echo "$migration_out" | grep -q "Error\|P3009\|failed"; then
+        print_warning "Hubo un problema con las migraciones. Revisa: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
+        echo "$migration_out" | tail -5
+    else
+        print_success "Migraciones ejecutadas"
+    fi
+    echo ""
+fi
+
+# ============================================
 # PASO 3: Verificación post-actualización
 # ============================================
 echo ""

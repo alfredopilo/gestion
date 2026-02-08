@@ -135,9 +135,9 @@ echo ""
 print_info "Verificando estado de migraciones..."
 migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1)
 
-if echo "$migration_status" | grep -q "Database schema is up to date"; then
+if echo "$migration_status" | grep -qE "Database schema is up to date|No pending migration"; then
     print_success "Base de datos ya está actualizada"
-elif echo "$migration_status" | grep -q "following migrations have not yet been applied\|pending migrations"; then
+elif echo "$migration_status" | grep -qE "following migrations have not yet been applied|pending migration|have not yet been applied"; then
     print_info "Hay migraciones pendientes, aplicando..."
     if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
         print_success "Migraciones aplicadas correctamente"

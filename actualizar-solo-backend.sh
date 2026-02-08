@@ -83,6 +83,31 @@ fi
 echo ""
 
 # ============================================
+# PASO 2.5: Prisma generate y migraciones
+# ============================================
+print_info "PASO 2.5: Aplicando cambios de base de datos (Prisma)..."
+echo ""
+
+print_info "Esperando a que el backend esté listo..."
+sleep 8
+
+print_info "Regenerando Prisma Client..."
+if $DC exec -T backend npx prisma generate 2>&1 | tail -3; then
+    print_success "Prisma Client generado"
+else
+    print_warning "Error al generar Prisma Client"
+fi
+
+print_info "Aplicando migraciones pendientes..."
+if $DC exec -T backend npx prisma migrate deploy 2>&1; then
+    print_success "Migraciones aplicadas correctamente"
+else
+    print_warning "Revisa el estado: $DC exec backend npx prisma migrate status"
+fi
+
+echo ""
+
+# ============================================
 # PASO 3: Verificación
 # ============================================
 print_info "PASO 3: Verificando backend (esperando 10 segundos)..."

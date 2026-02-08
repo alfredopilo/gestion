@@ -84,6 +84,11 @@ if git pull; then
             DOCKER_CHANGED=true
         fi
         
+        PRISMA_CHANGED=false
+        if echo "$FILES_CHANGED" | grep -qE "^backend/prisma/|schema\.prisma"; then
+            PRISMA_CHANGED=true
+        fi
+        
         # Recomendar tipo de actualización
         print_info "Análisis de cambios:"
         echo ""
@@ -95,6 +100,12 @@ if git pull; then
             echo ""
             print_info "✅ Recomendación: ACTUALIZACIÓN MEDIA (opción 2)"
             RECOMMENDED_OPTION=2
+        elif [ "$PRISMA_CHANGED" = true ]; then
+            print_warning "Se detectaron cambios en Prisma (schema o migraciones)"
+            echo "  • Se requiere rebuild para aplicar migraciones"
+            echo ""
+            print_info "✅ Recomendación: ACTUALIZACIÓN MEDIA o SOLO BACKEND (opción 2 o 4)"
+            RECOMMENDED_OPTION=4
         elif [ "$BACKEND_CHANGED" = true ] && [ "$FRONTEND_CHANGED" = false ]; then
             print_success "Solo cambios en backend/src/"
             print_info "✅ Recomendación: ACTUALIZACIÓN RÁPIDA o SOLO BACKEND (opción 1 o 4)"

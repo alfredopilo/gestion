@@ -325,7 +325,7 @@ fi
 
 # Verificar estado final de migraciones
 print_info "Verificando estado final de migraciones..."
-if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status | grep -q "Database schema is up to date\|All migrations have been applied"; then
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1 | grep -qE "Database schema is up to date|All migrations have been applied|up to date"; then
     print_success "Base de datos sincronizada correctamente"
 else
     print_warning "Verifica el estado de las migraciones manualmente"
