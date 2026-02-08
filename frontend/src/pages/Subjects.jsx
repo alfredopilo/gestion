@@ -13,6 +13,7 @@ const Subjects = () => {
     codigo: '',
     creditos: '',
     horas: '',
+    cualitativa: false,
   });
 
   // Estados para importación
@@ -46,6 +47,7 @@ const Subjects = () => {
         ...formData,
         creditos: formData.creditos ? parseInt(formData.creditos) : undefined,
         horas: formData.horas ? parseInt(formData.horas) : undefined,
+        cualitativa: !!formData.cualitativa,
       };
 
       if (editingSubject) {
@@ -71,6 +73,7 @@ const Subjects = () => {
       codigo: subject.codigo || '',
       creditos: subject.creditos?.toString() || '',
       horas: subject.horas?.toString() || '',
+      cualitativa: subject.cualitativa ?? false,
     });
     setShowModal(true);
   };
@@ -95,6 +98,7 @@ const Subjects = () => {
       codigo: '',
       creditos: '',
       horas: '',
+      cualitativa: false,
     });
     setEditingSubject(null);
   };
@@ -348,6 +352,9 @@ const Subjects = () => {
                 Horas
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Cualitativa
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Acciones
               </th>
             </tr>
@@ -355,7 +362,7 @@ const Subjects = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {subjects.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                   No hay materias registradas
                 </td>
               </tr>
@@ -375,6 +382,9 @@ const Subjects = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">{subject.creditos || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{subject.horas || '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {subject.cualitativa ? 'Sí' : 'No'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => handleEdit(subject)}
@@ -446,6 +456,18 @@ const Subjects = () => {
                   onChange={(e) => setFormData({ ...formData, horas: e.target.value })}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                 />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="cualitativa"
+                  checked={!!formData.cualitativa}
+                  onChange={(e) => setFormData({ ...formData, cualitativa: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label htmlFor="cualitativa" className="ml-2 block text-sm text-gray-700">
+                  Cualitativa
+                </label>
               </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button

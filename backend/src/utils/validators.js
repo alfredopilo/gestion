@@ -97,6 +97,7 @@ export const createSubjectSchema = z.object({
   codigo: z.string().min(2),
   creditos: z.number().int().positive().optional(),
   horas: z.number().int().positive().optional(),
+  cualitativa: z.boolean().optional().default(false),
   anioLectivoId: z.string().uuid('ID de año lectivo inválido').optional(), // Opcional, se usará el activo si no se proporciona
 });
 

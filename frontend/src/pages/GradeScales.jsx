@@ -207,7 +207,6 @@ const GradeScales = () => {
   };
 
   const downloadTemplate = () => {
-    // Crear plantilla CSV
     const headers = ['Título', 'Valor'];
     const exampleData = [
       ['Excelente', '10'],
@@ -216,21 +215,12 @@ const GradeScales = () => {
       ['Regular', '5'],
       ['Insuficiente', '3'],
     ];
-    
-    const csvContent = [
-      headers.join(','),
-      ...exampleData.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'plantilla_importacion_detalles_escala.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const data = [headers, ...exampleData];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet['!cols'] = [{ wch: 20 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Detalles');
+    XLSX.writeFile(workbook, 'plantilla_importacion_detalles_escala.xlsx');
     toast.success('Plantilla descargada');
   };
 
@@ -238,67 +228,37 @@ const GradeScales = () => {
     const file = event.target.files[0];
     if (!file) return;
 
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (fileExtension !== 'xlsx' && fileExtension !== 'xls') {
+      toast.error('Formato no soportado. Use un archivo Excel (.xlsx o .xls).');
+      event.target.value = '';
+      return;
+    }
+
     try {
-      const fileExtension = file.name.split('.').pop().toLowerCase();
       let detalles = [];
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-      if (fileExtension === 'csv') {
-        // Procesar CSV
-        const text = await file.text();
-        const lines = text.split('\n').filter(line => line.trim());
-        
-        // Saltar encabezados si existen
-        const startIndex = lines[0].toLowerCase().includes('título') || lines[0].toLowerCase().includes('titulo') ? 1 : 0;
-        
-        for (let i = startIndex; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+      const startIndex = data[0] && (data[0][0]?.toString().toLowerCase().includes('título') || data[0][0]?.toString().toLowerCase().includes('titulo')) ? 1 : 0;
 
-          // Manejar comas dentro de comillas y separar por comas
-          const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-          
-          if (values.length >= 2) {
-            const titulo = values[0].trim();
-            const valor = parseFloat(values[1].trim());
+      for (let i = startIndex; i < data.length; i++) {
+        const row = data[i];
+        if (!row || row.length < 2) continue;
 
-            if (titulo && !isNaN(valor)) {
-              detalles.push({
-                titulo,
-                valor,
-                orden: detalles.length,
-              });
-            }
-          }
+        const titulo = row[0]?.toString().trim();
+        const valor = parseFloat(row[1]);
+
+        if (titulo && !isNaN(valor)) {
+          detalles.push({
+            titulo,
+            valor,
+            orden: detalles.length,
+          });
         }
-      } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        // Procesar Excel
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        // Saltar encabezados si existen
-        const startIndex = data[0] && (data[0][0]?.toString().toLowerCase().includes('título') || data[0][0]?.toString().toLowerCase().includes('titulo')) ? 1 : 0;
-
-        for (let i = startIndex; i < data.length; i++) {
-          const row = data[i];
-          if (!row || row.length < 2) continue;
-
-          const titulo = row[0]?.toString().trim();
-          const valor = parseFloat(row[1]);
-
-          if (titulo && !isNaN(valor)) {
-            detalles.push({
-              titulo,
-              valor,
-              orden: detalles.length,
-            });
-          }
-        }
-      } else {
-        toast.error('Formato de archivo no soportado. Use CSV o Excel (.xlsx, .xls)');
-        return;
       }
 
       if (detalles.length === 0) {
@@ -573,7 +533,7 @@ const GradeScales = () => {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                         onChange={handleFileImport}
                         className="hidden"
                       />

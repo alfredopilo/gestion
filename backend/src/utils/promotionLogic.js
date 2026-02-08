@@ -182,6 +182,7 @@ export async function copySubjectToNewYear(subject, nuevoAnioLectivoId, prismaCl
       codigo: subject.codigo,
       creditos: subject.creditos || 1,
       horas: subject.horas,
+      cualitativa: subject.cualitativa ?? false,
       institucionId: subject.institucionId,
       anioLectivoId: nuevoAnioLectivoId,
       promedioMinimoSupletorio: subject.promedioMinimoSupletorio,

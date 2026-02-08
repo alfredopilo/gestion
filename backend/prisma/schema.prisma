@@ -482,6 +482,7 @@ model Subject {
   codigo                   String
   creditos                 Int?                      @default(1)
   horas                    Int?
+  cualitativa              Boolean                   @default(false) @map("cualitativa")
   institucionId            String                    @map("institucion_id")
   anioLectivoId            String                    @map("anio_lectivo_id")
   promedioMinimoSupletorio Float?                    @map("promedio_minimo_supletorio")

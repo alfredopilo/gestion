@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getGrades,
   getStudentGrades,
+  getGradesSummary,
   upsertGrade,
   updateGrade,
   deleteGrade,
@@ -14,6 +15,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
+router.get('/summary', authorize('ADMIN', 'PROFESOR', 'SECRETARIA'), getGradesSummary);
 router.get('/', getGrades);
 router.get('/student/:estudianteId', getStudentGrades);
 router.post('/', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), upsertGrade);

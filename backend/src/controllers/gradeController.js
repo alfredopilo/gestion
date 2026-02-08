@@ -1,7 +1,7 @@
 import prisma from '../config/database.js';
 import { createGradeSchema } from '../utils/validators.js';
 import { calculateWeightedAverage, truncate } from '../utils/gradeCalculations.js';
-import { getGradeInstitutionFilter } from '../utils/institutionFilter.js';
+import { getGradeInstitutionFilter, getActiveSchoolYear, getCourseSubjectAssignmentInstitutionFilter } from '../utils/institutionFilter.js';
 import { randomUUID } from 'crypto';
 
 /**
@@ -330,6 +330,183 @@ export const getStudentGrades = async (req, res, next) => {
       estudianteId,
       calificaciones: grades,
       resumenPorMateria: Array.from(materiasMap.values()),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Resumen de calificaciones por Materia-Curso para panel de administrador.
+ * Devuelve por cada asignación: total estudiantes, cuántos tienen nota, pendiente, promedio grupo, última actualización.
+ */
+export const getGradesSummary = async (req, res, next) => {
+  try {
+    const { periodId: queryPeriodId } = req.query;
+
+    // Determinar período: query o período activo del año lectivo de la institución
+    let periodId = queryPeriodId || null;
+    let period = null;
+
+    if (periodId) {
+      period = await prisma.period.findUnique({
+        where: { id: periodId },
+        include: { subPeriodos: { select: { id: true } } },
+      });
+      if (!period) {
+        return res.status(404).json({ error: 'Período no encontrado.' });
+      }
+    } else {
+      const activeSchoolYear = await getActiveSchoolYear(req, prisma);
+      if (!activeSchoolYear) {
+        return res.json({ data: [], periodos: [], periodoActivo: null });
+      }
+      const periods = await prisma.period.findMany({
+        where: { anioLectivoId: activeSchoolYear.id },
+        include: { subPeriodos: { select: { id: true } } },
+        orderBy: { orden: 'asc' },
+      });
+      period = periods.find(p => p.activo) || periods[0] || null;
+      if (period) periodId = period.id;
+    }
+
+    const subPeriodIds = period?.subPeriodos?.map(sp => sp.id) || [];
+    if (!period || subPeriodIds.length === 0) {
+      const activeSchoolYear = await getActiveSchoolYear(req, prisma);
+      const periodosForFilter = activeSchoolYear
+        ? await prisma.period.findMany({
+            where: { anioLectivoId: activeSchoolYear.id },
+            select: { id: true, nombre: true, activo: true },
+            orderBy: { orden: 'asc' },
+          })
+        : [];
+      return res.json({
+        data: [],
+        periodos: periodosForFilter,
+        periodoActivo: null,
+      });
+    }
+
+    const assignmentFilter = await getCourseSubjectAssignmentInstitutionFilter(req, prisma);
+    const whereAssignments = { ...assignmentFilter };
+    if (periodId) {
+      const coursesInPeriod = await prisma.course.findMany({
+        where: { periodoId: periodId },
+        select: { id: true },
+      });
+      const courseIdsInPeriod = coursesInPeriod.map(c => c.id);
+      if (courseIdsInPeriod.length > 0) {
+        whereAssignments.cursoId = whereAssignments.cursoId?.in
+          ? { in: courseIdsInPeriod.filter(id => whereAssignments.cursoId.in.includes(id)) }
+          : { in: courseIdsInPeriod };
+      }
+      // Si no hay cursos con este período, no devolver vacío: se mantiene el filtro por institución
+      // y se mostrarán todas las asignaciones del año (el admin verá la lista igualmente)
+    }
+
+    const assignments = await prisma.courseSubjectAssignment.findMany({
+      where: whereAssignments,
+      include: {
+        materia: { select: { id: true, nombre: true } },
+        curso: {
+          select: {
+            id: true,
+            nombre: true,
+            nivel: true,
+            paralelo: true,
+            estudiantes: { select: { id: true } },
+          },
+        },
+      },
+      orderBy: [{ materia: { nombre: 'asc' } }, { curso: { nombre: 'asc' } }],
+    });
+
+    const activeSchoolYear = await getActiveSchoolYear(req, prisma);
+    const periodosForFilter = activeSchoolYear
+      ? await prisma.period.findMany({
+          where: { anioLectivoId: activeSchoolYear.id },
+          select: { id: true, nombre: true, activo: true },
+          orderBy: { orden: 'asc' },
+        })
+      : [];
+
+    const data = [];
+
+    for (const a of assignments) {
+      if (!a.curso?.estudiantes) continue;
+      const totalEstudiantes = a.curso.estudiantes.length;
+      const studentIds = a.curso.estudiantes.map(e => e.id);
+      if (studentIds.length === 0) {
+        data.push({
+          cursoId: a.curso.id,
+          cursoNombre: [a.curso.nombre, a.curso.nivel, a.curso.paralelo].filter(Boolean).join(' '),
+          materiaId: a.materia.id,
+          materiaNombre: a.materia.nombre,
+          totalEstudiantes: 0,
+          conCalificacion: 0,
+          pendiente: 0,
+          promedioGrupo: null,
+          ultimaActualizacion: null,
+          periodoNombre: period?.nombre ?? null,
+        });
+        continue;
+      }
+
+      const gradeWhere = {
+        materiaId: a.materiaId,
+        estudianteId: { in: studentIds },
+      };
+      if (subPeriodIds.length > 0) {
+        gradeWhere.subPeriodoId = { in: subPeriodIds };
+      }
+
+      const gradesInPeriod = await prisma.grade.findMany({
+        where: gradeWhere,
+        select: { estudianteId: true, calificacion: true, updatedAt: true },
+      });
+
+      const distinctStudents = new Set(gradesInPeriod.map(g => g.estudianteId));
+      const conCalificacion = distinctStudents.size;
+      const pendiente = totalEstudiantes - conCalificacion;
+
+      let promedioGrupo = null;
+      if (gradesInPeriod.length > 0) {
+        const byStudent = {};
+        gradesInPeriod.forEach(g => {
+          if (!byStudent[g.estudianteId]) byStudent[g.estudianteId] = [];
+          byStudent[g.estudianteId].push(g.calificacion);
+        });
+        const promedios = Object.values(byStudent).map(arr => {
+          const sum = arr.reduce((s, v) => s + v, 0);
+          return truncate(sum / arr.length);
+        });
+        promedioGrupo = promedios.length > 0
+          ? truncate(promedios.reduce((s, v) => s + v, 0) / promedios.length)
+          : null;
+      }
+
+      const ultimaActualizacion = gradesInPeriod.length > 0
+        ? new Date(Math.max(...gradesInPeriod.map(g => new Date(g.updatedAt).getTime()))).toISOString()
+        : null;
+
+      data.push({
+        cursoId: a.curso.id,
+        cursoNombre: [a.curso.nombre, a.curso.nivel, a.curso.paralelo].filter(Boolean).join(' '),
+        materiaId: a.materia.id,
+        materiaNombre: a.materia.nombre,
+        totalEstudiantes,
+        conCalificacion,
+        pendiente,
+        promedioGrupo,
+        ultimaActualizacion,
+        periodoNombre: period?.nombre ?? null,
+      });
+    }
+
+    res.json({
+      data,
+      periodos: periodosForFilter.map(p => ({ id: p.id, nombre: p.nombre, activo: p.activo })),
+      periodoActivo: period ? { id: period.id, nombre: period.nombre } : null,
     });
   } catch (error) {
     next(error);

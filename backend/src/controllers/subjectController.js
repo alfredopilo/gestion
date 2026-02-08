@@ -260,6 +260,7 @@ export const createSubject = async (req, res, next) => {
       codigo: validatedData.codigo,
       creditos: validatedData.creditos ?? null,
       horas: validatedData.horas ?? null,
+      cualitativa: validatedData.cualitativa ?? false,
       institucionId: institutionId, // Usar directamente el valor obtenido
       anioLectivoId: anioLectivoId, // Usar directamente el valor obtenido
     };
@@ -295,6 +296,7 @@ export const createSubject = async (req, res, next) => {
       codigo: String(createData.codigo),
       creditos: createData.creditos ?? null,
       horas: createData.horas ?? null,
+      cualitativa: createData.cualitativa ?? false,
       institucionId: String(institutionId),
       anioLectivoId: String(anioLectivoId),
     };
@@ -383,6 +385,7 @@ export const updateSubject = async (req, res, next) => {
     const updateData = { ...req.body };
     delete updateData.institucionId;
     delete updateData.anioLectivoId;
+    if (typeof req.body.cualitativa === 'boolean') updateData.cualitativa = req.body.cualitativa;
 
     // Si se intenta cambiar el año lectivo, validar que pertenezca a la institución
     if (req.body.anioLectivoId && req.body.anioLectivoId !== subject.anioLectivoId) {
@@ -496,10 +499,10 @@ export const getImportSubjectsTemplate = (req, res) => {
 
     // Definir los datos para la hoja de Excel
     const data = [
-      ['nombre', 'codigo', 'creditos', 'horas'],
-      ['Matemáticas Avanzadas', 'MAT-301', '4', '40'],
-      ['Lengua y Literatura', 'LYL-201', '3', '30'],
-      ['Ciencias Naturales', 'CCN-101', '3', '35'],
+      ['nombre', 'codigo', 'creditos', 'horas', 'cualitativa'],
+      ['Matemáticas Avanzadas', 'MAT-301', '4', '40', '0'],
+      ['Lengua y Literatura', 'LYL-201', '3', '30', '0'],
+      ['Ciencias Naturales', 'CCN-101', '3', '35', '1'],
     ];
 
     // Crear la hoja de trabajo desde el array
@@ -511,6 +514,7 @@ export const getImportSubjectsTemplate = (req, res) => {
       { wch: 15 }, // codigo
       { wch: 10 }, // creditos
       { wch: 10 }, // horas
+      { wch: 12 }, // cualitativa
     ];
 
     // Agregar la hoja al workbook
@@ -600,6 +604,7 @@ export const importSubjects = async (req, res, next) => {
       codigo: 'codigo',
       creditos: 'creditos',
       horas: 'horas',
+      cualitativa: 'cualitativa',
     };
 
     // Procesar headers
@@ -659,6 +664,8 @@ export const importSubjects = async (req, res, next) => {
         const codigo = record.codigo.trim();
         let creditos = null;
         let horas = null;
+        const cualitativaRaw = String(record.cualitativa || '').trim().toLowerCase();
+        const cualitativa = ['1', 'true', 'si', 'sí', 'yes', 's'].includes(cualitativaRaw);
 
         if (record.creditos) {
           const creditosValue = parseInt(record.creditos);
@@ -701,6 +708,7 @@ export const importSubjects = async (req, res, next) => {
               nombre: nombre,
               creditos: creditos,
               horas: horas,
+              cualitativa: cualitativa,
             },
           });
           results.actualizados += 1;
@@ -712,6 +720,7 @@ export const importSubjects = async (req, res, next) => {
               codigo: codigo,
               creditos: creditos,
               horas: horas,
+              cualitativa: cualitativa,
               institucionId: institutionId,
               anioLectivoId: anioLectivoId,
             },

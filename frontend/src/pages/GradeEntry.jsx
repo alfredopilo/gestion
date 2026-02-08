@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -6,6 +7,7 @@ import * as XLSX from 'xlsx';
 
 const GradeEntry = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [subjects, setSubjects] = useState([]);
@@ -21,6 +23,8 @@ const GradeEntry = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const debounceTimer = useRef({});
+  // Params de URL para preseleccionar materia y subperíodo tras cargar listas
+  const pendingPreselectRef = useRef({ subjectId: null, subPeriodId: null });
 
   useEffect(() => {
     fetchInitialData();
@@ -133,8 +137,26 @@ const GradeEntry = () => {
         api.get('/periods'),
       ]);
 
-      setCourses(coursesRes.data.data || []);
-      setPeriods(periodsRes.data.data || []);
+      const coursesData = coursesRes.data.data || [];
+      const periodsData = periodsRes.data.data || [];
+      setCourses(coursesData);
+      setPeriods(periodsData);
+
+      // Preseleccionar curso, período (y luego materia/subperíodo) desde query params
+      const courseId = searchParams.get('courseId');
+      const periodId = searchParams.get('periodId');
+      const subjectId = searchParams.get('subjectId');
+      const subPeriodId = searchParams.get('subPeriodId');
+      if (courseId) {
+        const course = coursesData.find((c) => c.id === courseId);
+        if (course) setSelectedCourse(course);
+      }
+      if (periodId) {
+        const period = periodsData.find((p) => p.id === periodId);
+        if (period) setSelectedPeriod(period);
+      }
+      if (subjectId) pendingPreselectRef.current.subjectId = subjectId;
+      if (subPeriodId) pendingPreselectRef.current.subPeriodId = subPeriodId;
     } catch (error) {
       console.error('Error al cargar datos iniciales:', error);
       toast.error('Error al cargar datos');
@@ -147,13 +169,15 @@ const GradeEntry = () => {
     if (!selectedCourse) return;
     
     try {
+      let subjectsList = [];
       if (user?.rol === 'PROFESOR') {
         // Para profesores, obtener sus asignaciones
         const response = await api.get('/teachers/my-assignments');
         const assignments = response.data.data || [];
         const courseAssignments = assignments.find(a => a.curso.id === selectedCourse.id);
         if (courseAssignments) {
-          setSubjects(courseAssignments.materias || []);
+          subjectsList = courseAssignments.materias || [];
+          setSubjects(subjectsList);
         } else {
           setSubjects([]);
         }
@@ -161,8 +185,15 @@ const GradeEntry = () => {
         // Para admin/secretaria, obtener todas las asignaciones del curso
         const response = await api.get(`/assignments?cursoId=${selectedCourse.id}`);
         const assignments = response.data.data || [];
-        const subjectsList = assignments.map(a => a.materia).filter(Boolean);
+        subjectsList = assignments.map(a => a.materia).filter(Boolean);
         setSubjects(subjectsList);
+      }
+      // Preselección desde URL: si hay subjectId en query, seleccionar esa materia
+      const subjectIdFromUrl = pendingPreselectRef.current?.subjectId;
+      if (subjectIdFromUrl && subjectsList.length > 0) {
+        const subject = subjectsList.find((s) => s.id === subjectIdFromUrl);
+        if (subject) setSelectedSubject(subject);
+        delete pendingPreselectRef.current.subjectId;
       }
     } catch (error) {
       console.error('Error al cargar materias:', error);
@@ -176,7 +207,15 @@ const GradeEntry = () => {
     try {
       const response = await api.get(`/sub-periods?periodoId=${selectedPeriod.id}`);
       const subPeriodsList = response.data.data || [];
-      setSubPeriods(subPeriodsList.sort((a, b) => (a.orden || 0) - (b.orden || 0)));
+      const sorted = subPeriodsList.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      setSubPeriods(sorted);
+      // Preselección desde URL: si hay subPeriodId en query, seleccionar ese subperíodo
+      const subPeriodIdFromUrl = pendingPreselectRef.current?.subPeriodId;
+      if (subPeriodIdFromUrl && sorted.length > 0) {
+        const sp = sorted.find((s) => s.id === subPeriodIdFromUrl);
+        if (sp) setSelectedSubPeriod(sp);
+        delete pendingPreselectRef.current.subPeriodId;
+      }
     } catch (error) {
       console.error('Error al cargar subperíodos:', error);
       toast.error('Error al cargar subperíodos');
