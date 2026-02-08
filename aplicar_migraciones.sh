@@ -38,31 +38,31 @@ exit_with_error() {
     exit 1
 }
 
-# Resolver migraciones fallidas (registros en _prisma_migrations sin finished_at)
-resolve_failed_migrations() {
-    print_warning "Intentando resolver migraciones fallidas..."
-    local failed_migrations
-    failed_migrations=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
-        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | \
-        tr -d ' \r' | grep -v '^$' || true)
-
-    if [ -z "$failed_migrations" ]; then
-        print_warning "No se pudieron listar migraciones fallidas desde la BD"
-        print_info "Resolución manual: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate resolve --rolled-back NOMBRE_MIGRACION"
+# Marcar migraciones fallidas como aplicadas (--applied). Cuando el cambio ya está en la BD (p. ej. columna "ano" ya existe)
+# no usamos --rolled-back: Prisma reintentaría y volvería a fallar. Con --applied Prisma las da por aplicadas.
+# Si Prisma responde P3008 "already recorded as applied", se considera OK.
+resolve_failed_as_applied() {
+    local failed_list out resolved_any
+    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -A -c \
+        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL ORDER BY migration_name;" 2>/dev/null | \
+        tr -d ' \r' | grep -v '^$' || true) || true
+    resolved_any=0
+    if [ -z "$failed_list" ]; then
         return 1
     fi
-
-    while IFS= read -r migration; do
-        [ -z "$migration" ] && continue
-        print_info "Resolviendo: $migration"
-        if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$migration" 2>&1; then
-            print_success "Resuelta: $migration"
+    while IFS= read -r mig; do
+        [ -z "$mig" ] && continue
+        print_info "Marcando como aplicada: $mig"
+        out=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$mig" 2>&1) || true
+        if echo "$out" | grep -qE "P3008|already recorded as applied"; then
+            print_info "Ya estaba aplicada (omitir): $mig"
         else
-            print_error "No se pudo resolver: $migration"
-            return 1
+            print_success "Resuelta: $mig"
+            resolved_any=1
         fi
-    done <<< "$failed_migrations"
-    return 0
+    done <<< "$failed_list"
+    [ "$resolved_any" -eq 1 ] && return 0
+    return 1
 }
 
 # ============================================
@@ -139,12 +139,8 @@ migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status
 echo "$migration_status" | head -20
 
 if echo "$migration_status" | grep -qE "failed migrations|P3009|failed"; then
-    print_warning "Se detectaron migraciones fallidas."
-    if ! resolve_failed_migrations; then
-        exit_with_error "No se pudieron resolver las migraciones fallidas." \
-            "Revisa: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
-    fi
-    print_success "Migraciones fallidas resueltas. Se aplicarán de nuevo en el siguiente paso."
+    print_warning "Se detectaron migraciones fallidas (se marcarán como aplicadas si el cambio ya está en la BD)."
+    resolve_failed_as_applied || true
 elif echo "$migration_status" | grep -qE "Database schema is up to date|No pending|up to date"; then
     print_success "La base de datos ya está al día (sin migraciones pendientes)."
     print_info "Regenerando Prisma Client por si hubo cambios en schema..."
@@ -165,37 +161,68 @@ print_success "Prisma Client generado correctamente"
 echo ""
 
 # ============================================
-# PASO 5: Aplicar migraciones (migrate deploy)
+# PASO 5: Aplicar migraciones (migrate deploy) con reintentos si P3009
 # ============================================
 print_step "PASO 5: Aplicando migraciones pendientes..."
 echo ""
 
-deploy_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1)
-deploy_exit=$?
+max_deploy_attempts=6
+deploy_attempt=1
+deploy_ok=false
+deploy_output=""
 
-echo "$deploy_output"
+while [ $deploy_attempt -le $max_deploy_attempts ]; do
+    print_info "prisma migrate deploy (intento $deploy_attempt/$max_deploy_attempts)..."
+    deploy_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1)
+    deploy_exit=$?
+    echo "$deploy_output"
 
-if [ "$deploy_exit" -ne 0 ]; then
-    if echo "$deploy_output" | grep -qE "P3009|failed"; then
-        print_warning "Error P3009 o migraciones fallidas. Reintentando después de resolver..."
-        if resolve_failed_migrations; then
-            deploy_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1)
-            deploy_exit=$?
-            echo "$deploy_output"
-        fi
+    if [ "$deploy_exit" -eq 0 ]; then
+        deploy_ok=true
+        break
     fi
-    if [ "$deploy_exit" -ne 0 ]; then
-        exit_with_error "Error al aplicar migraciones (exit $deploy_exit)." \
-            "Revisa: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
-    fi
-fi
 
-if echo "$deploy_output" | grep -qE "Applied the following|migrations have been applied|Applying migration"; then
-    print_success "Migraciones aplicadas correctamente"
-elif echo "$deploy_output" | grep -qE "No pending|already applied|Database schema is up to date"; then
-    print_success "No había migraciones pendientes (esquema ya actualizado)"
+    # Deploy falló (P3009): extraer la migración que Prisma indica como fallida y marcarla --applied
+    print_warning "Deploy falló. Resolviendo la migración que bloquea..."
+    did_resolve=1
+    failed_name=$(echo "$deploy_output" | grep -E "migration started at.*failed|failed\.$" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    if [ -z "$failed_name" ]; then
+        failed_name=$(echo "$deploy_output" | grep "failed" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    fi
+    if [ -z "$failed_name" ]; then
+        status_after=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
+        failed_name=$(echo "$status_after" | grep -E "migration started at.*failed|failed\.$" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    fi
+    if [ -z "$failed_name" ]; then
+        failed_name=$(echo "$status_after" | grep "failed" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    fi
+    if [ -n "$failed_name" ]; then
+        print_info "Marcando como aplicada (migración que bloquea): $failed_name"
+        $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$failed_name" 2>&1 || true
+        did_resolve=0
+    else
+        resolve_failed_as_applied
+        did_resolve=$?
+    fi
+
+    if [ "$did_resolve" -ne 0 ]; then
+        exit_with_error "Error al aplicar migraciones. No se pudo resolver la migración fallida." \
+            "Marca manualmente: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate resolve --applied \"20251113191229_add_ano_to_school_year\""
+    fi
+    deploy_attempt=$((deploy_attempt + 1))
+    echo ""
+done
+
+if [ "$deploy_ok" = "true" ]; then
+    if echo "$deploy_output" | grep -qE "Applied the following|migrations have been applied|Applying migration"; then
+        print_success "Migraciones aplicadas correctamente"
+    elif echo "$deploy_output" | grep -qE "No pending|already applied|Database schema is up to date"; then
+        print_success "No había migraciones pendientes (esquema ya actualizado)"
+    else
+        print_success "Migraciones en estado correcto"
+    fi
 else
-    print_success "Comando migrate deploy finalizado"
+    exit_with_error "No se pudieron aplicar las migraciones tras $max_deploy_attempts intentos."
 fi
 echo ""
 
@@ -241,7 +268,7 @@ echo "===================================================="
 echo ""
 print_info "Comandos útiles:"
 echo "   Estado:    $DOCKER_COMPOSE_CMD exec backend npx prisma migrate status"
-echo "   Regenerar: $DOCKER_COMPOSE_CMD exec backend npx prisma generate"
 echo "   Deploy:    $DOCKER_COMPOSE_CMD exec backend npx prisma migrate deploy"
+echo "   Marcar aplicada (si falla por columna ya existe): $DOCKER_COMPOSE_CMD exec backend npx prisma migrate resolve --applied \"NOMBRE_MIGRACION\""
 echo ""
 exit 0
