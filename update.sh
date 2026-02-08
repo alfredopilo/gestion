@@ -94,6 +94,26 @@ else
 fi
 
 # ============================================
+# PASO 3.5: Sincronizar Prisma del host al contenedor (VPS)
+# En el VPS el contenedor puede tener una imagen antigua: copiamos schema y migraciones
+# del host (actualizados con git pull) para que migrate deploy aplique todas las migraciones.
+# ============================================
+echo ""
+echo "📋 PASO 3.5: Sincronizando schema y migraciones al contenedor..."
+echo ""
+
+if [ -d "backend/prisma" ] && [ -f "backend/prisma/schema.prisma" ]; then
+    print_info "Copiando backend/prisma al contenedor backend (schema + migraciones)..."
+    if $DOCKER_COMPOSE_CMD cp backend/prisma/. backend:/app/prisma/ 2>/dev/null; then
+        print_success "Carpeta prisma actualizada en el contenedor"
+    else
+        print_warning "No se pudo copiar prisma (el contenedor puede usar volumen o imagen ya actualizada)"
+    fi
+else
+    print_warning "No se encuentra backend/prisma en el host, usando la del contenedor"
+fi
+
+# ============================================
 # PASO 4: Generar Prisma Client
 # ============================================
 echo ""
@@ -109,31 +129,53 @@ else
 fi
 
 # ============================================
-# PASO 5: Ejecutar migraciones pendientes
+# PASO 5: Ejecutar migraciones pendientes (siempre deploy para VPS)
 # ============================================
 echo ""
 echo "📋 PASO 5: Aplicando migraciones de base de datos..."
 echo ""
 
-print_info "Verificando migraciones pendientes..."
-migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1)
+print_info "Verificando estado actual..."
+migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
+echo "$migration_status" | head -15
 
-if echo "$migration_status" | grep -qE "Database schema is up to date|No pending migration"; then
-    print_success "No hay migraciones pendientes"
-elif echo "$migration_status" | grep -qE "following migrations have not yet been applied|pending migration|have not yet been applied"; then
-    print_info "Hay migraciones pendientes, aplicando..."
-    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy; then
-        print_success "Migraciones aplicadas correctamente"
+# Resolver migraciones fallidas si las hay (p. ej. P3009)
+if echo "$migration_status" | grep -qE "failed migrations|P3009|failed"; then
+    print_warning "Se detectaron migraciones fallidas, intentando resolver..."
+    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
+        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
+    if [ -n "$failed_list" ]; then
+        while IFS= read -r mig; do
+            [ -z "$mig" ] && continue
+            print_info "Resolviendo: $mig"
+            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$mig" 2>&1 || true
+        done <<< "$failed_list"
+    fi
+fi
+
+# Siempre ejecutar migrate deploy: aplica todas las pendientes (evita que falte cualitativa en VPS)
+print_info "Ejecutando prisma migrate deploy..."
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+    print_success "Migraciones aplicadas correctamente"
+else
+    deploy_exit=$?
+    print_warning "Primer intento de migrate deploy falló (exit $deploy_exit), reintentando tras resolver..."
+    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
+        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
+    if [ -n "$failed_list" ]; then
+        while IFS= read -r mig; do
+            [ -z "$mig" ] && continue
+            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$mig" 2>&1 || true
+        done <<< "$failed_list"
+    fi
+    if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
+        print_success "Migraciones aplicadas en el segundo intento"
     else
         print_error "Error al aplicar migraciones"
-        print_info "Verifica los logs con: $DOCKER_COMPOSE_CMD logs backend"
+        print_info "En el VPS ejecuta manualmente: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate deploy"
+        print_info "O usa: ./aplicar_migraciones.sh"
         exit 1
     fi
-else
-    print_warning "Estado de migraciones indeterminado, intentando aplicar..."
-    $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy || {
-        print_warning "Puede haber un problema con las migraciones"
-    }
 fi
 
 # ============================================
