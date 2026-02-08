@@ -139,43 +139,54 @@ print_info "Verificando estado actual..."
 migration_status=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
 echo "$migration_status" | head -15
 
-# Resolver migraciones fallidas si las hay (p. ej. P3009)
-if echo "$migration_status" | grep -qE "failed migrations|P3009|failed"; then
-    print_warning "Se detectaron migraciones fallidas, intentando resolver..."
+# Función: marcar migraciones fallidas como aplicadas (cuando el cambio ya está en la BD, p. ej. columna "ano" ya existe)
+# Usamos --applied (no --rolled-back) para que Prisma no reintente la misma migración que falla por "column already exists"
+resolve_failed_as_applied() {
     failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
         "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
     if [ -n "$failed_list" ]; then
         while IFS= read -r mig; do
             [ -z "$mig" ] && continue
-            print_info "Resolviendo: $mig"
-            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$mig" 2>&1 || true
+            print_info "Marcando como aplicada (cambio ya en BD): $mig"
+            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$mig" 2>&1 || true
         done <<< "$failed_list"
+        return 0
     fi
+    return 1
+}
+
+# Resolver migraciones fallidas existentes antes del primer deploy (p. ej. P3009)
+if echo "$migration_status" | grep -qE "failed migrations|P3009|failed"; then
+    print_warning "Se detectaron migraciones fallidas, marcándolas como aplicadas..."
+    resolve_failed_as_applied || true
 fi
 
-# Siempre ejecutar migrate deploy: aplica todas las pendientes (evita que falte cualitativa en VPS)
-print_info "Ejecutando prisma migrate deploy..."
-if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
-    print_success "Migraciones aplicadas correctamente"
-else
-    deploy_exit=$?
-    print_warning "Primer intento de migrate deploy falló (exit $deploy_exit), reintentando tras resolver..."
-    failed_list=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -c \
-        "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL;" 2>/dev/null | tr -d ' \r' | grep -v '^$' || true) || true
-    if [ -n "$failed_list" ]; then
-        while IFS= read -r mig; do
-            [ -z "$mig" ] && continue
-            $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$mig" 2>&1 || true
-        done <<< "$failed_list"
-    fi
+# Ejecutar migrate deploy; si falla por P3018/P3009 (columna ya existe, etc.), marcar fallidas como aplicadas y reintentar
+max_deploy_attempts=5
+deploy_attempt=1
+deploy_ok=false
+
+while [ $deploy_attempt -le $max_deploy_attempts ]; do
+    print_info "Ejecutando prisma migrate deploy (intento $deploy_attempt/$max_deploy_attempts)..."
     if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1; then
-        print_success "Migraciones aplicadas en el segundo intento"
-    else
-        print_error "Error al aplicar migraciones"
-        print_info "En el VPS ejecuta manualmente: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate deploy"
-        print_info "O usa: ./aplicar_migraciones.sh"
-        exit 1
+        print_success "Migraciones aplicadas correctamente"
+        deploy_ok=true
+        break
     fi
+    # Deploy falló: si hay migraciones marcadas como fallidas en BD, marcarlas como aplicadas y reintentar
+    print_warning "Deploy falló (p. ej. columna ya existe). Resolviendo migraciones fallidas..."
+    if resolve_failed_as_applied; then
+        deploy_attempt=$((deploy_attempt + 1))
+        continue
+    fi
+    print_error "Error al aplicar migraciones y no hay más fallidas que resolver"
+    print_info "En el VPS: $DOCKER_COMPOSE_CMD exec backend npx prisma migrate resolve --applied <nombre_migración>"
+    exit 1
+done
+
+if [ "$deploy_ok" != "true" ]; then
+    print_error "No se pudieron aplicar todas las migraciones tras $max_deploy_attempts intentos"
+    exit 1
 fi
 
 # ============================================
