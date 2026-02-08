@@ -19,6 +19,9 @@ const ReportCards = () => {
   const [selectedEstudiantes, setSelectedEstudiantes] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [institution, setInstitution] = useState(null);
+  const [agruparPorTipoMateria, setAgruparPorTipoMateria] = useState(false);
+  const [incluirAsistencia, setIncluirAsistencia] = useState(false);
+  const [busquedaEstudiantes, setBusquedaEstudiantes] = useState('');
 
   useEffect(() => {
     fetchCourses();
@@ -54,6 +57,7 @@ const ReportCards = () => {
       setEstudiantes([]);
       setReportCards([]);
     }
+    setBusquedaEstudiantes('');
   }, [selectedCurso]);
 
   useEffect(() => {
@@ -128,6 +132,7 @@ const ReportCards = () => {
       const params = {
         cursoId: selectedCurso,
         estudianteIds: selectedEstudiantes,
+        includeAttendance: incluirAsistencia ? 1 : 0,
       };
 
       const response = await api.get('/report-cards', { params });
@@ -407,70 +412,90 @@ const ReportCards = () => {
         }
       };
 
-      // Generar UNA sola tabla con todos los períodos
-      ensureSpace(30);
-      
-      const headRows = buildHeadRows(showGeneralColumn);
-      const bodyRows = materiasConDatos.map((materia) => buildBodyRow(materia, showGeneralColumn));
-      
-      // Agregar fila de promedio general
-      const promedioGeneralRow = ['PROMEDIO GENERAL'];
-      filteredPeriodsGrouped.forEach((periodGroup) => {
-        periodGroup.subPeriods.forEach(() => {
-          promedioGeneralRow.push('-', '-');
-        });
-        promedioGeneralRow.push('-', '-');
-      });
-      if (showGeneralColumn) {
-        promedioGeneralRow.push(
-          reportCard.promedioGeneral !== null && reportCard.promedioGeneral !== undefined
-            ? reportCard.promedioGeneral.toFixed(2)
-            : '-'
-        );
-      }
-      bodyRows.push(promedioGeneralRow);
+      const materiasNoCualitativas = materiasConDatos.filter(m => !m.materia.cualitativa);
+      const materiasCualitativas = materiasConDatos.filter(m => m.materia.cualitativa);
+      const pdfBlocks = agruparPorTipoMateria
+        ? [
+            { materias: materiasNoCualitativas, showPromedioGeneral: materiasCualitativas.length === 0 },
+            { materias: materiasCualitativas, showPromedioGeneral: true },
+          ].filter(b => b.materias.length > 0)
+        : [{ materias: materiasConDatos, showPromedioGeneral: true }];
 
-      autoTable(doc, {
-        head: headRows,
-        body: bodyRows,
-        startY: cursorY,
-        margin: { left: marginLeft, right: marginRight },
-        styles: { fontSize: 7, cellPadding: 1 },
-        headStyles: {
-          fillColor: [156, 163, 175],
-          textColor: 0,
-          fontStyle: 'bold',
-          halign: 'center',
-        },
-        bodyStyles: {
-          halign: 'center',
-        },
-        alternateRowStyles: {
-          fillColor: [249, 250, 251],
-        },
-        didParseCell: (data) => {
-          // Colorear última fila (promedio general)
-          if (data.row.index === bodyRows.length - 1) {
-            data.cell.styles.fillColor = [253, 224, 71];
-            data.cell.styles.fontStyle = 'bold';
+      const headRows = buildHeadRows(showGeneralColumn);
+
+      pdfBlocks.forEach((block) => {
+        ensureSpace(30);
+        let bodyRows = block.materias.map((materia) => buildBodyRow(materia, showGeneralColumn));
+        if (block.showPromedioGeneral) {
+          const promedioGeneralRow = ['PROMEDIO GENERAL'];
+          filteredPeriodsGrouped.forEach((periodGroup) => {
+            periodGroup.subPeriods.forEach(() => {
+              promedioGeneralRow.push('-', '-');
+            });
+            promedioGeneralRow.push('-', '-');
+          });
+          if (showGeneralColumn) {
+            promedioGeneralRow.push(
+              reportCard.promedioGeneral !== null && reportCard.promedioGeneral !== undefined
+                ? reportCard.promedioGeneral.toFixed(2)
+                : '-'
+            );
           }
-          // Colorear valores según promedio
-          if (data.column.index > 0 && data.row.index < bodyRows.length - 1) {
-            const value = parseFloat(data.cell.text[0]);
-            if (!isNaN(value)) {
-              if (value >= 7) {
-                data.cell.styles.textColor = [34, 197, 94]; // Verde
-              } else if (value >= 5) {
-                data.cell.styles.textColor = [234, 179, 8]; // Amarillo
-              } else {
-                data.cell.styles.textColor = [239, 68, 68]; // Rojo
+          bodyRows.push(promedioGeneralRow);
+        }
+
+        autoTable(doc, {
+          head: headRows,
+          body: bodyRows,
+          startY: cursorY,
+          margin: { left: marginLeft, right: marginRight },
+          styles: { fontSize: 7, cellPadding: 1 },
+          headStyles: {
+            fillColor: [156, 163, 175],
+            textColor: 0,
+            fontStyle: 'bold',
+            halign: 'center',
+          },
+          bodyStyles: {
+            halign: 'center',
+          },
+          alternateRowStyles: {
+            fillColor: [249, 250, 251],
+          },
+          didParseCell: (data) => {
+            if (block.showPromedioGeneral && data.row.index === bodyRows.length - 1) {
+              data.cell.styles.fillColor = [253, 224, 71];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.column.index > 0 && data.row.index < bodyRows.length - 1) {
+              const value = parseFloat(data.cell.text[0]);
+              if (!isNaN(value)) {
+                if (value >= 7) {
+                  data.cell.styles.textColor = [34, 197, 94];
+                } else if (value >= 5) {
+                  data.cell.styles.textColor = [234, 179, 8];
+                } else {
+                  data.cell.styles.textColor = [239, 68, 68];
+                }
               }
             }
-          }
-        },
+          },
+        });
+        cursorY = doc.lastAutoTable.finalY + 5;
       });
 
-      cursorY = doc.lastAutoTable.finalY + 5;
+      if (incluirAsistencia && reportCard.asistencia?.resumen) {
+        const r = reportCard.asistencia.resumen;
+        ensureSpace(25);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('Resumen de asistencia', marginLeft, cursorY);
+        cursorY += 6;
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(10);
+        doc.text(`Total días: ${r.total}  |  Asistencias: ${r.asistencias}  |  Faltas: ${r.faltas}  |  Justificadas: ${r.justificadas}  |  Tardes: ${r.tardes}  |  Porcentaje: ${r.porcentajeAsistencia}%`, marginLeft, cursorY);
+        cursorY += 8;
+      }
 
       // Fecha de emisión
       ensureSpace(10);
@@ -563,7 +588,50 @@ const ReportCards = () => {
 
       {/* Filtros */}
       <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Filtros</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">Filtros</h2>
+          <div className="flex flex-wrap items-center gap-3 justify-end">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 min-h-[44px]">
+              <label className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">Agrupar por Tipo de materia</label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={agruparPorTipoMateria}
+                onClick={() => setAgruparPorTipoMateria((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 flex-shrink-0 ${agruparPorTipoMateria ? 'bg-primary-600' : 'bg-gray-200'}`}
+              >
+                <span className="sr-only">Agrupar por tipo de materia</span>
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${agruparPorTipoMateria ? 'translate-x-5' : 'translate-x-0.5'}`}
+                  style={{ marginTop: 2 }}
+                />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 min-h-[44px]">
+              <label className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">Incluir asistencia</label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={incluirAsistencia}
+                onClick={() => setIncluirAsistencia((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 flex-shrink-0 ${incluirAsistencia ? 'bg-primary-600' : 'bg-gray-200'}`}
+              >
+                <span className="sr-only">Incluir asistencia</span>
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${incluirAsistencia ? 'translate-x-5' : 'translate-x-0.5'}`}
+                  style={{ marginTop: 2 }}
+                />
+              </button>
+            </div>
+            <button
+              onClick={generateReportCards}
+              disabled={loading || !selectedCurso || selectedEstudiantes.length === 0}
+              className="min-h-[44px] px-5 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center whitespace-nowrap"
+            >
+              {loading ? 'Generando...' : 'Generar Boletines'}
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -593,49 +661,77 @@ const ReportCards = () => {
                 <label className="block text-sm font-medium text-gray-700">
                   Estudiantes
                 </label>
-                <label className="flex items-center">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={selectAll}
                     onChange={(e) => setSelectAll(e.target.checked)}
-                    className="mr-2"
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-gray-600">Seleccionar todos</span>
                 </label>
               </div>
-              <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2">
-                {estudiantes.map((estudiante) => (
-                  <label key={estudiante.id} className="flex items-center p-2 hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedEstudiantes.includes(estudiante.id)}
-                      onChange={() => toggleStudent(estudiante.id)}
-                      className="mr-3"
-                    />
-                    <span className="text-sm">
-                      {estudiante.user?.apellido} {estudiante.user?.nombre}
-                      {estudiante.user?.numeroIdentificacion && (
-                        <span className="text-gray-500 ml-2">({estudiante.user.numeroIdentificacion})</span>
-                      )}
-                    </span>
-                  </label>
-                ))}
+              <div className="relative mb-3">
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, apellido o identificación..."
+                  value={busquedaEstudiantes}
+                  onChange={(e) => setBusquedaEstudiantes(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" aria-hidden="true">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </span>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/50 shadow-inner">
+                <ul className="divide-y divide-gray-200">
+                  {estudiantes
+                    .filter((est) => {
+                      if (!busquedaEstudiantes.trim()) return true;
+                      const q = busquedaEstudiantes.trim().toLowerCase();
+                      const nombre = (est.user?.nombre || '').toLowerCase();
+                      const apellido = (est.user?.apellido || '').toLowerCase();
+                      const id = String(est.user?.numeroIdentificacion || '');
+                      return nombre.includes(q) || apellido.includes(q) || id.includes(q);
+                    })
+                    .map((estudiante) => {
+                      const nombreCompleto = `${estudiante.user?.apellido || ''} ${estudiante.user?.nombre || ''}`.trim();
+                      const selected = selectedEstudiantes.includes(estudiante.id);
+                      return (
+                        <li key={estudiante.id}>
+                          <label className="flex items-center gap-3 px-4 py-3 hover:bg-white cursor-pointer transition-colors border-l-4 border-transparent hover:border-primary-200 focus-within:bg-white focus-within:border-primary-400">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleStudent(estudiante.id)}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4 shrink-0"
+                            />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-sm font-medium text-gray-900 truncate">{nombreCompleto || 'Sin nombre'}</span>
+                              {estudiante.user?.numeroIdentificacion && (
+                                <span className="block text-xs text-gray-500 mt-0.5">{estudiante.user.numeroIdentificacion}</span>
+                              )}
+                            </span>
+                            {selected && (
+                              <span className="shrink-0 text-primary-600" aria-hidden="true">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              </span>
+                            )}
+                          </label>
+                        </li>
+                      );
+                    })}
+                </ul>
               </div>
               <p className="text-xs text-gray-500 mt-2">
                 {selectedEstudiantes.length} de {estudiantes.length} estudiantes seleccionados
               </p>
             </div>
           )}
-
-          <div className="flex items-end">
-            <button
-              onClick={generateReportCards}
-              disabled={loading || !selectedCurso || selectedEstudiantes.length === 0}
-              className="w-full px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Generando...' : 'Generar Boletines'}
-            </button>
-          </div>
         </div>
       </div>
 
@@ -722,6 +818,15 @@ const ReportCards = () => {
               }
               return false;
             });
+
+            const materiasNoCualitativas = materiasConDatos.filter(m => !m.materia.cualitativa);
+            const materiasCualitativas = materiasConDatos.filter(m => m.materia.cualitativa);
+            const tableBlocks = agruparPorTipoMateria
+              ? [
+                  { materias: materiasNoCualitativas, showPromedioGeneral: materiasCualitativas.length === 0 },
+                  { materias: materiasCualitativas, showPromedioGeneral: true },
+                ].filter(b => b.materias.length > 0)
+              : [{ materias: materiasConDatos, showPromedioGeneral: true }];
             
             const showGeneralColumn = filteredPeriodsGrouped.length > 1;
 
@@ -751,155 +856,173 @@ const ReportCards = () => {
                     <p className="text-lg">No se encontraron promedios para este estudiante.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-gray-300 rounded-lg">
-                    <table className="min-w-full border-collapse">
-                      <thead className="bg-gray-100 sticky top-0 z-20">
-                        <tr>
-                          <th rowSpan="3" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 sticky left-0 bg-gray-100 z-30 min-w-[150px] shadow-sm">Materia</th>
-                          {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => {
-                            const totalColumns = periodGroup.subPeriods.reduce((sum, subPeriod) => sum + 2, 0) + 2;
-                            return (
-                              <th key={periodIdx} rowSpan="1" colSpan={totalColumns} className="px-3 py-2 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-200">
-                                {periodGroup.periodoNombre}
-                              </th>
-                            );
-                          })}
-                          {showGeneralColumn && (
-                            <th rowSpan="3" className="px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-300">Promedio General</th>
-                          )}
-                        </tr>
-                        <tr>
-                          {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
-                            <React.Fragment key={`period-${periodIdx}`}>
-                              {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
+                  <>
+                    {tableBlocks.map((block, blockIdx) => (
+                      <div key={blockIdx} className="overflow-x-auto max-h-[600px] overflow-y-auto border border-gray-300 rounded-lg mb-4">
+                        <table className="min-w-full border-collapse">
+                          <thead className="bg-gray-100 sticky top-0 z-20">
+                            <tr>
+                              <th rowSpan="3" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-300 sticky left-0 bg-gray-100 z-30 min-w-[150px] shadow-sm">Materia</th>
+                              {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => {
+                                const totalColumns = periodGroup.subPeriods.reduce((sum, subPeriod) => sum + 2, 0) + 2;
                                 return (
-                                  <React.Fragment key={`${periodIdx}-${subPeriodIdx}`}>
-                                    <th colSpan="2" className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase border-r border-gray-300 bg-gray-100">
-                                      {subPeriodGroup.subPeriodoNombre}
-                                    </th>
-                                  </React.Fragment>
+                                  <th key={periodIdx} rowSpan="1" colSpan={totalColumns} className="px-3 py-2 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-200">
+                                    {periodGroup.periodoNombre}
+                                  </th>
                                 );
                               })}
-                              <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-50" title="Promedio del período">Prom. Período</th>
-                              <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-100" title={`Promedio ponderado del período (${periodGroup.periodoPonderacion}%)`}>Prom. Pond. Período</th>
-                            </React.Fragment>
-                          ))}
-                        </tr>
-                        <tr>
-                          {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
-                            <React.Fragment key={`period-header-${periodIdx}`}>
-                              {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => (
-                                <React.Fragment key={`subperiod-header-${periodIdx}-${subPeriodIdx}`}>
-                                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-50">Prom. Sub</th>
-                                  <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-100">Prom. Pond. Sub</th>
+                              {showGeneralColumn && (
+                                <th rowSpan="3" className="px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase border-r border-gray-300 bg-gray-300">Promedio General</th>
+                              )}
+                            </tr>
+                            <tr>
+                              {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
+                                <React.Fragment key={`period-${periodIdx}`}>
+                                  {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
+                                    return (
+                                      <React.Fragment key={`${periodIdx}-${subPeriodIdx}`}>
+                                        <th colSpan="2" className="px-3 py-2 text-center text-xs font-semibold text-gray-700 uppercase border-r border-gray-300 bg-gray-100">
+                                          {subPeriodGroup.subPeriodoNombre}
+                                        </th>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                  <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-50" title="Promedio del período">Prom. Período</th>
+                                  <th rowSpan="2" colSpan="1" className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-purple-100" title={`Promedio ponderado del período (${periodGroup.periodoPonderacion}%)`}>Prom. Pond. Período</th>
                                 </React.Fragment>
                               ))}
-                            </React.Fragment>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white">
-                        {materiasConDatos.map((materia, materiaIndex) => (
-                          <tr key={materia.materia.id} className={`hover:bg-blue-50 transition-colors ${materiaIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                            <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-0 bg-white z-10 font-medium text-sm shadow-sm">{materia.materia.nombre}</td>
-                            {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
-                              <React.Fragment key={`period-data-${periodIdx}`}>
-                                {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
-                                  const promedioSubPeriodo = materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+                            </tr>
+                            <tr>
+                              {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
+                                <React.Fragment key={`period-header-${periodIdx}`}>
+                                  {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => (
+                                    <React.Fragment key={`subperiod-header-${periodIdx}-${subPeriodIdx}`}>
+                                      <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-50">Prom. Sub</th>
+                                      <th className="px-2 py-2 text-center text-[10px] font-semibold text-gray-700 uppercase border-r border-gray-300 bg-blue-100">Prom. Pond. Sub</th>
+                                    </React.Fragment>
+                                  ))}
+                                </React.Fragment>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white">
+                            {block.materias.map((materia, materiaIndex) => (
+                              <tr key={materia.materia.id} className={`hover:bg-blue-50 transition-colors ${materiaIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-0 bg-white z-10 font-medium text-sm shadow-sm">{materia.materia.nombre}</td>
+                                {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => (
+                                  <React.Fragment key={`period-data-${periodIdx}`}>
+                                    {periodGroup.subPeriods.map((subPeriodGroup, subPeriodIdx) => {
+                                      const promedioSubPeriodo = materia.promediosSubPeriodo?.[subPeriodGroup.subPeriodoId];
+                                      return (
+                                        <React.Fragment key={`subperiod-data-${periodIdx}-${subPeriodIdx}`}>
+                                          <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-50">
+                                            {renderAverageDisplay(
+                                              promedioSubPeriodo?.promedio ?? null,
+                                              promedioSubPeriodo?.equivalente
+                                            )}
+                                          </td>
+                                          <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-100">
+                                            {promedioSubPeriodo ? (
+                                              <span className={`font-bold text-sm ${promedioSubPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioSubPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {promedioSubPeriodo.promedioPonderado.toFixed(2)}
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300 text-xs">-</span>
+                                            )}
+                                          </td>
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                    {(() => {
+                                      const periodoId = periodGroup.periodoId;
+                                      let promedioPeriodo = null;
+                                      if (periodoId && materia.promediosPeriodo) {
+                                        promedioPeriodo = materia.promediosPeriodo[periodoId];
+                                      }
+                                      if (!promedioPeriodo && materia.promediosPeriodo) {
+                                        const periodoEncontrado = Object.values(materia.promediosPeriodo).find(
+                                          p => p.periodoNombre === periodGroup.periodoNombre
+                                        );
+                                        if (periodoEncontrado) {
+                                          promedioPeriodo = periodoEncontrado;
+                                        }
+                                      }
+                                      return (
+                                        <>
+                                          <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-50">
+                                            {renderAverageDisplay(
+                                              promedioPeriodo?.promedio ?? null,
+                                              promedioPeriodo?.equivalente
+                                            )}
+                                          </td>
+                                          <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-100">
+                                            {promedioPeriodo ? (
+                                              <span className={`font-bold text-sm ${promedioPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {promedioPeriodo.promedioPonderado.toFixed(2)}
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300 text-xs">-</span>
+                                            )}
+                                          </td>
+                                        </>
+                                      );
+                                    })()}
+                                  </React.Fragment>
+                                ))}
+                                {showGeneralColumn && (
+                                  <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-50">
+                                    {renderAverageDisplay(
+                                      materia.promedioGeneral,
+                                      materia.equivalenteGeneral
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                            {block.showPromedioGeneral && (
+                              <tr className="bg-yellow-50 font-bold">
+                                <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-0 bg-yellow-50 z-10 text-sm shadow-sm">PROMEDIO GENERAL</td>
+                                {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => {
+                                  const totalColumns = periodGroup.subPeriods.reduce((sum, subPeriod) => sum + 2, 0) + 2;
                                   return (
-                                    <React.Fragment key={`subperiod-data-${periodIdx}-${subPeriodIdx}`}>
-                                      <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-50">
-                                        {renderAverageDisplay(
-                                          promedioSubPeriodo?.promedio ?? null,
-                                          promedioSubPeriodo?.equivalente
-                                        )}
-                                      </td>
-                                      <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-blue-100">
-                                        {promedioSubPeriodo ? (
-                                          <span className={`font-bold text-sm ${promedioSubPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioSubPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {promedioSubPeriodo.promedioPonderado.toFixed(2)}
-                                          </span>
-                                        ) : (
-                                          <span className="text-gray-300 text-xs">-</span>
-                                        )}
-                                      </td>
+                                    <React.Fragment key={`period-empty-${periodIdx}`}>
+                                      {Array.from({ length: totalColumns }).map((_, idx) => (
+                                        <td key={idx} className="px-2 py-3 text-center border-r border-gray-300 bg-yellow-50">-</td>
+                                      ))}
                                     </React.Fragment>
                                   );
                                 })}
-                                {(() => {
-                                  const periodoId = periodGroup.periodoId;
-                                  let promedioPeriodo = null;
-                                  if (periodoId && materia.promediosPeriodo) {
-                                    promedioPeriodo = materia.promediosPeriodo[periodoId];
-                                  }
-                                  if (!promedioPeriodo && materia.promediosPeriodo) {
-                                    const periodoEncontrado = Object.values(materia.promediosPeriodo).find(
-                                      p => p.periodoNombre === periodGroup.periodoNombre
-                                    );
-                                    if (periodoEncontrado) {
-                                      promedioPeriodo = periodoEncontrado;
-                                    }
-                                  }
-                                  return (
-                                    <>
-                                      <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-50">
-                                        {renderAverageDisplay(
-                                          promedioPeriodo?.promedio ?? null,
-                                          promedioPeriodo?.equivalente
-                                        )}
-                                      </td>
-                                      <td className="px-2 py-3 text-center border-r border-gray-300 align-middle bg-purple-100">
-                                        {promedioPeriodo ? (
-                                          <span className={`font-bold text-sm ${promedioPeriodo.promedioPonderado >= 7 ? 'text-green-600' : promedioPeriodo.promedioPonderado >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {promedioPeriodo.promedioPonderado.toFixed(2)}
-                                          </span>
-                                        ) : (
-                                          <span className="text-gray-300 text-xs">-</span>
-                                        )}
-                                      </td>
-                                    </>
-                                  );
-                                })()}
-                              </React.Fragment>
-                            ))}
-                            {showGeneralColumn && (
-                              <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-50">
-                                {renderAverageDisplay(
-                                  materia.promedioGeneral,
-                                  materia.equivalenteGeneral
+                                {showGeneralColumn && (
+                                  <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-100">
+                                    {reportCard.promedioGeneral !== null && reportCard.promedioGeneral !== undefined ? (
+                                      <span className={`font-bold text-base ${reportCard.promedioGeneral >= 7 ? 'text-green-600' : reportCard.promedioGeneral >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                        {reportCard.promedioGeneral.toFixed(2)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-300 text-sm">-</span>
+                                    )}
+                                  </td>
                                 )}
-                              </td>
+                              </tr>
                             )}
-                          </tr>
-                        ))}
-                        {/* Fila de promedio general del estudiante */}
-                        <tr className="bg-yellow-50 font-bold">
-                          <td className="px-4 py-3 whitespace-nowrap border-r border-gray-300 sticky left-0 bg-yellow-50 z-10 text-sm shadow-sm">PROMEDIO GENERAL</td>
-                          {filteredPeriodsGrouped && filteredPeriodsGrouped.map((periodGroup, periodIdx) => {
-                            const totalColumns = periodGroup.subPeriods.reduce((sum, subPeriod) => sum + 2, 0) + 2;
-                            return (
-                              <React.Fragment key={`period-empty-${periodIdx}`}>
-                                {Array.from({ length: totalColumns }).map((_, idx) => (
-                                  <td key={idx} className="px-2 py-3 text-center border-r border-gray-300 bg-yellow-50">-</td>
-                                ))}
-                              </React.Fragment>
-                            );
-                          })}
-                          {showGeneralColumn && (
-                            <td className="px-3 py-3 text-center border-r border-gray-300 align-middle bg-yellow-100">
-                              {reportCard.promedioGeneral !== null && reportCard.promedioGeneral !== undefined ? (
-                                <span className={`font-bold text-base ${reportCard.promedioGeneral >= 7 ? 'text-green-600' : reportCard.promedioGeneral >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                  {reportCard.promedioGeneral.toFixed(2)}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300 text-sm">-</span>
-                              )}
-                            </td>
-                          )}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                    {incluirAsistencia && reportCard.asistencia?.resumen && (
+                      <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-gray-50">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-3">Resumen de asistencia</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                          <div><span className="text-gray-600">Total días:</span> <span className="font-semibold">{reportCard.asistencia.resumen.total}</span></div>
+                          <div><span className="text-gray-600">Asistencias:</span> <span className="font-semibold text-green-600">{reportCard.asistencia.resumen.asistencias}</span></div>
+                          <div><span className="text-gray-600">Faltas:</span> <span className="font-semibold text-red-600">{reportCard.asistencia.resumen.faltas}</span></div>
+                          <div><span className="text-gray-600">Justificadas:</span> <span className="font-semibold">{reportCard.asistencia.resumen.justificadas}</span></div>
+                          <div><span className="text-gray-600">Tardes:</span> <span className="font-semibold">{reportCard.asistencia.resumen.tardes}</span></div>
+                          <div><span className="text-gray-600">Porcentaje:</span> <span className="font-semibold">{reportCard.asistencia.resumen.porcentajeAsistencia}%</span></div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );

@@ -7,7 +7,8 @@ import { calculateAveragesByMateria, truncate, getGradeScaleEquivalent } from '.
  */
 export const getReportCards = async (req, res, next) => {
   try {
-    const { cursoId, estudianteIds } = req.query;
+    const { cursoId, estudianteIds, includeAttendance } = req.query;
+    const wantAttendance = includeAttendance === '1' || includeAttendance === 'true';
 
     if (!cursoId) {
       return res.status(400).json({
@@ -79,7 +80,7 @@ export const getReportCards = async (req, res, next) => {
       }
     }
 
-    // Obtener información del curso
+    // Obtener información del curso (anioLectivo solo si se pide asistencia)
     const curso = await prisma.course.findUnique({
       where: { id: cursoId },
       include: {
@@ -90,6 +91,7 @@ export const getReportCards = async (req, res, next) => {
             },
           },
         },
+        ...(wantAttendance ? { anioLectivo: { select: { fechaInicio: true, fechaFin: true } } } : {}),
         estudiantes: {
           where: {
             grupoId: cursoId,
@@ -117,6 +119,7 @@ export const getReportCards = async (req, res, next) => {
                 id: true,
                 nombre: true,
                 codigo: true,
+                cualitativa: true,
               },
             },
             gradeScale: {
@@ -181,6 +184,7 @@ export const getReportCards = async (req, res, next) => {
                 id: materia.id,
                 nombre: materia.nombre,
                 codigo: materia.codigo,
+                cualitativa: materia.cualitativa ?? false,
               },
               gradeScale: gradeScale,
               promediosSubPeriodo: {},
@@ -190,6 +194,7 @@ export const getReportCards = async (req, res, next) => {
               calificaciones: [],
             })),
             promedioGeneral: null,
+            ...(wantAttendance ? { asistencia: { resumen: { total: 0, asistencias: 0, faltas: 0, justificadas: 0, tardes: 0, porcentajeAsistencia: 0 } } } : {}),
           })),
           periodsGrouped: [],
           total: curso.estudiantes.length,
@@ -291,6 +296,7 @@ export const getReportCards = async (req, res, next) => {
               id: materia.id,
               nombre: materia.nombre,
               codigo: materia.codigo,
+              cualitativa: materia.cualitativa ?? false,
             },
             gradeScale: gradeScale,
             promediosSubPeriodo: {},
@@ -322,6 +328,7 @@ export const getReportCards = async (req, res, next) => {
             id: materia.id,
             nombre: materia.nombre,
             codigo: materia.codigo,
+            cualitativa: materia.cualitativa ?? false,
           },
           gradeScale: gradeScale,
           promediosSubPeriodo,
@@ -443,8 +450,42 @@ export const getReportCards = async (req, res, next) => {
     // Convertir a array y ordenar por orden de período
     periodsGrouped.push(...Object.values(periodsByPeriod).sort((a, b) => a.periodoOrden - b.periodoOrden));
 
+    // Si se pidió asistencia, obtener resumen por estudiante filtrado por fechas del año lectivo
+    let dataToSend = reportCards;
+    if (wantAttendance && curso.anioLectivo) {
+      const fechaInicio = curso.anioLectivo.fechaInicio;
+      const fechaFin = curso.anioLectivo.fechaFin;
+      const attendanceWhere = {
+        fecha: { gte: fechaInicio, lte: fechaFin },
+        estudianteId: { in: estudianteIdsArray },
+      };
+      const attendanceRecords = await prisma.attendance.findMany({
+        where: attendanceWhere,
+        select: { estudianteId: true, estado: true },
+      });
+      const summaryByStudent = new Map();
+      for (const estId of estudianteIdsArray) {
+        const records = attendanceRecords.filter(a => a.estudianteId === estId);
+        const total = records.length;
+        const asistencias = records.filter(a => a.estado === 'ASISTENCIA').length;
+        const faltas = records.filter(a => a.estado === 'FALTA').length;
+        const justificadas = records.filter(a => a.estado === 'JUSTIFICADA').length;
+        const tardes = records.filter(a => a.estado === 'TARDE').length;
+        const porcentajeAsistencia = total > 0
+          ? Math.round(((asistencias + tardes + justificadas) / total) * 10000) / 100
+          : 0;
+        summaryByStudent.set(estId, {
+          resumen: { total, asistencias, faltas, justificadas, tardes, porcentajeAsistencia },
+        });
+      }
+      dataToSend = reportCards.map(rc => ({
+        ...rc,
+        asistencia: summaryByStudent.get(rc.estudiante.id) || { resumen: { total: 0, asistencias: 0, faltas: 0, justificadas: 0, tardes: 0, porcentajeAsistencia: 0 } },
+      }));
+    }
+
     res.json({
-      data: reportCards,
+      data: dataToSend,
       periodsGrouped,
       total: reportCards.length,
     });
