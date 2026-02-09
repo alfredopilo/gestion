@@ -10,9 +10,10 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Instalar dependencias (se cachará si no cambian package*.json)
-# Usar npm ci para instalación determinista y más rápida
-RUN npm ci --prefer-offline --no-audit --only=production
+# Instalar dependencias (caché de capas + caché de npm en el host para VPS más rápido)
+# --mount=type=cache reutiliza el directorio npm entre builds
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit --only=production
 
 # Generar el cliente de Prisma (se cachará si no cambia schema.prisma)
 RUN npx prisma generate

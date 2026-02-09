@@ -292,53 +292,48 @@ else
 fi
 
 # ============================================
-# PASO 9: Reconstruir y reiniciar contenedores (OPTIMIZADO)
+# PASO 9: Reconstruir y reiniciar contenedores (OPTIMIZADO - menos tiempo en VPS)
 # ============================================
 echo ""
-echo "📋 PASO 9: Reconstruyendo contenedores..."
+echo "📋 PASO 9: Reconstruir contenedores (opcional)..."
 echo ""
-
-# Preguntar si se desea reconstruir
-print_info "¿Deseas reconstruir las imágenes? Esto puede tardar varios minutos. (s/n)"
+print_info "Tip: Si solo actualizaste migraciones o quieres ir rápido, elige 'n' y ejecuta ./aplicar_migraciones.sh si hace falta."
+echo ""
+print_info "¿Reconstruir imágenes? 1=solo backend, 2=solo frontend, 3=ambos, n=no (recomendado si no cambiaste código)"
 read -r rebuild_response
 
-if [[ "$rebuild_response" =~ ^[Ss]$ ]]; then
-    print_info "Reconstruyendo imágenes (usando caché para acelerar)..."
-    print_info "Usando DOCKER_BUILDKIT para builds más rápidos..."
-    
-    # Usar DOCKER_BUILDKIT para builds más rápidos
-    export DOCKER_BUILDKIT=1
-    export BUILDKIT_PROGRESS=plain
-    
-    # Preguntar si se desea forzar reconstrucción completa (sin caché)
-    print_info "¿Deseas forzar reconstrucción completa sin caché? (más lento pero garantiza limpieza) (s/n)"
+export DOCKER_BUILDKIT=1
+export BUILDKIT_PROGRESS=plain
+BUILD_FLAGS=""
+
+if [[ "$rebuild_response" == "3" ]]; then
+    print_info "¿Forzar reconstrucción sin caché? (solo si hay problemas) (s/n) [n]"
     read -r no_cache_response
-    
     if [[ "$no_cache_response" =~ ^[Ss]$ ]]; then
         BUILD_FLAGS="--no-cache"
-        print_info "Reconstrucción completa sin caché (puede tardar 5-10 minutos)..."
-    else
-        BUILD_FLAGS=""
-        print_info "Reconstrucción con caché (más rápido, ~1-3 minutos)..."
     fi
-    
-    # Build con caché por defecto (mucho más rápido)
-    print_info "Construyendo backend..."
+fi
+
+if [[ "$rebuild_response" == "1" ]] || [[ "$rebuild_response" == "3" ]]; then
+    print_info "Construyendo backend (con caché, ~1-3 min)..."
     if timeout 600 $DOCKER_COMPOSE_CMD build --progress=plain $BUILD_FLAGS backend 2>&1 | tee /tmp/build-backend.log; then
         print_success "Backend reconstruido"
     else
-        print_warning "Build de backend tardó mucho o falló"
-        print_info "Continuando con imágenes existentes..."
+        print_warning "Build de backend falló o tardó mucho, continuando con imagen existente"
     fi
-    
-    print_info "Construyendo frontend..."
+fi
+
+if [[ "$rebuild_response" == "2" ]] || [[ "$rebuild_response" == "3" ]]; then
+    print_info "Construyendo frontend (con caché, ~1-3 min)..."
     if timeout 300 $DOCKER_COMPOSE_CMD build --progress=plain $BUILD_FLAGS frontend 2>&1 | tee /tmp/build-frontend.log; then
         print_success "Frontend reconstruido"
     else
-        print_warning "Build de frontend tardó mucho, usando imagen existente"
+        print_warning "Build de frontend falló o tardó mucho, usando imagen existente"
     fi
-else
-    print_info "Saltando reconstrucción de imágenes, usando las existentes"
+fi
+
+if [[ "$rebuild_response" != "1" ]] && [[ "$rebuild_response" != "2" ]] && [[ "$rebuild_response" != "3" ]]; then
+    print_info "Sin reconstrucción: se usan las imágenes actuales (reinicio solo)."
 fi
 
 print_info "Reiniciando contenedores..."
