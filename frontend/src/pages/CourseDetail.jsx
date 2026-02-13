@@ -618,7 +618,7 @@ const handleDownloadTemplate = async () => {
                   <p className="mt-1 text-gray-900 text-blue-600">
                     {course.cursoSiguiente.nombre}
                   </p>
-                  {course.estudiantes && course.estudiantes.length > 0 && (
+                  {course.estudiantes && course.estudiantes.length > 0 && !course.ultimoCurso && (
                     <button
                       onClick={() => setShowPromoteModal(true)}
                       className="mt-2 w-full bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 text-sm"
@@ -626,6 +626,17 @@ const handleDownloadTemplate = async () => {
                       🎓 Promocionar Estudiantes
                     </button>
                   )}
+                </div>
+              )}
+              {course.ultimoCurso && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Último curso</label>
+                  <p className="mt-1 text-gray-900 font-semibold text-orange-600">
+                    Sí
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Los estudiantes de este curso no se promocionan; datos históricos.
+                  </p>
                 </div>
               )}
             </div>

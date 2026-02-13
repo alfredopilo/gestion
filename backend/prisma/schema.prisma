@@ -72,6 +72,7 @@ model Course {
   cursoSiguienteId           String?                   @map("curso_siguiente_id")
   anioLectivoId              String                    @map("anio_lectivo_id")
   sortOrder                  Int?                      @default(0) @map("sort_order")
+  ultimoCurso                Boolean                   @default(false) @map("ultimo_curso")
   course_subject_assignments CourseSubjectAssignment[]
   insumos                    Insumo[]
   attendance                 Attendance[]

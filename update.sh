@@ -94,27 +94,38 @@ if [ -f "backend/package.json" ]; then
 fi
 
 # Dependencias incluyen: jest, @jest/globals (dev) para tests unitarios de plantilla ficha estudiante
-print_info "Instalando dependencias del backend..."
-if $DOCKER_COMPOSE_CMD exec -T backend npm install 2>&1 | grep -v "npm WARN"; then
+print_info "Instalando dependencias del backend (incluyendo dev)..."
+if $DOCKER_COMPOSE_CMD exec -T backend npm install --include=dev 2>&1 | grep -v "npm WARN"; then
     print_success "Dependencias del backend actualizadas"
 else
     print_warning "Puede haber advertencias en las dependencias, continuando..."
 fi
 
+# Copiar tests al contenedor si existen
+if [ -d "backend/__tests__" ]; then
+    print_info "Copiando tests al contenedor..."
+    if $DOCKER_COMPOSE_CMD cp backend/__tests__ backend:/app/__tests__ 2>/dev/null; then
+        print_success "Tests copiados al contenedor"
+    else
+        print_warning "No se pudieron copiar los tests"
+    fi
+fi
+
 print_info "Ejecutando tests unitarios del backend..."
-if $DOCKER_COMPOSE_CMD exec -T backend npm test 2>&1 | tail -5; then
+if $DOCKER_COMPOSE_CMD exec -T backend npm test 2>&1 | tail -10; then
     print_success "Tests pasaron correctamente"
 else
     print_warning "Algunos tests fallaron o no están configurados, continuando..."
 fi
 
 # ============================================
-# PASO 3.5: Sincronizar Prisma del host al contenedor (VPS)
-# En el VPS el contenedor puede tener una imagen antigua: copiamos schema y migraciones
-# del host (actualizados con git pull) para que migrate deploy aplique todas las migraciones.
+# PASO 3.5: Sincronizar Prisma y código del host al contenedor (VPS)
+# En el VPS el contenedor puede tener una imagen antigua: copiamos schema, migraciones,
+# validadores y utils del host (actualizados con git pull) para que migrate deploy
+# aplique todas las migraciones y el código esté sincronizado.
 # ============================================
 echo ""
-echo "📋 PASO 3.5: Sincronizando schema y migraciones al contenedor..."
+echo "📋 PASO 3.5: Sincronizando schema, migraciones y código al contenedor..."
 echo ""
 
 if [ -d "backend/prisma" ] && [ -f "backend/prisma/schema.prisma" ]; then
@@ -126,6 +137,27 @@ if [ -d "backend/prisma" ] && [ -f "backend/prisma/schema.prisma" ]; then
     fi
 else
     print_warning "No se encuentra backend/prisma en el host, usando la del contenedor"
+fi
+
+# Copiar validadores actualizados (incluyen schemas de curso con ultimoCurso)
+if [ -f "backend/src/utils/validators.js" ]; then
+    print_info "Copiando validadores actualizados..."
+    $DOCKER_COMPOSE_CMD cp backend/src/utils/validators.js backend:/app/src/utils/validators.js 2>/dev/null || true
+    print_success "Validadores actualizados"
+fi
+
+# Copiar controladores actualizados
+if [ -d "backend/src/controllers" ]; then
+    print_info "Copiando controladores actualizados..."
+    $DOCKER_COMPOSE_CMD cp backend/src/controllers/. backend:/app/src/controllers/ 2>/dev/null || true
+    print_success "Controladores actualizados"
+fi
+
+# Copiar utils actualizados (promotionLogic.js incluye ultimoCurso)
+if [ -d "backend/src/utils" ]; then
+    print_info "Copiando utils actualizados..."
+    $DOCKER_COMPOSE_CMD cp backend/src/utils/. backend:/app/src/utils/ 2>/dev/null || true
+    print_success "Utils actualizados"
 fi
 
 # ============================================

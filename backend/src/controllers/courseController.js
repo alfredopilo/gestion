@@ -345,6 +345,7 @@ export const createCourse = async (req, res, next) => {
       capacidad: validatedData.capacidad ?? null,
       cursoSiguienteId: validatedData.cursoSiguienteId ?? null,
       sortOrder,
+      ultimoCurso: validatedData.ultimoCurso ?? false,
       anioLectivoId,
       periodoId: validatedData.periodoId ?? null, // Opcional
       updatedAt: new Date(),
@@ -916,6 +917,7 @@ export const importCourses = async (req, res, next) => {
               paralelo: paralelo ?? null,
               capacidad,
               sortOrder,
+              ultimoCurso: false,
             },
           });
           results.actualizados += 1;
@@ -930,6 +932,7 @@ export const importCourses = async (req, res, next) => {
               sortOrder,
               docenteId: null,
               cursoSiguienteId: null,
+              ultimoCurso: false,
               anioLectivoId,
               periodoId: null,
               updatedAt: new Date(),
@@ -1531,6 +1534,13 @@ export const promoteStudents = async (req, res, next) => {
     if (!curso) {
       return res.status(404).json({
         error: 'Curso no encontrado.',
+      });
+    }
+
+    // Verificar si el curso está marcado como último curso
+    if (curso.ultimoCurso === true) {
+      return res.status(400).json({
+        error: 'Este curso está marcado como último grado escolar. Los estudiantes no se promocionan al siguiente periodo; sus datos permanecen como históricos.',
       });
     }
 

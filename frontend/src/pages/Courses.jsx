@@ -24,6 +24,7 @@ const Courses = () => {
     capacidad: 30,
     cursoSiguienteId: '',
     sortOrder: 0,
+    ultimoCurso: false,
   });
 
   useEffect(() => {
@@ -94,6 +95,7 @@ const Courses = () => {
       capacidad: course.capacidad || 30,
       cursoSiguienteId: course.cursoSiguienteId || '',
       sortOrder: typeof course.sortOrder === 'number' ? course.sortOrder : 0,
+      ultimoCurso: course.ultimoCurso ?? false,
     });
     setShowModal(true);
   };
@@ -122,6 +124,7 @@ const Courses = () => {
       capacidad: 30,
       cursoSiguienteId: '',
       sortOrder: 0,
+      ultimoCurso: false,
     });
     setEditingCourse(null);
   };
@@ -551,6 +554,21 @@ const Courses = () => {
                 </select>
                 <p className="mt-1 text-xs text-gray-500">
                   Curso al que promocionarán los estudiantes al finalizar el año escolar
+                </p>
+              </div>
+
+              <div>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.ultimoCurso}
+                    onChange={(e) => setFormData({ ...formData, ultimoCurso: e.target.checked })}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Último curso</span>
+                </label>
+                <p className="mt-1 text-xs text-gray-500">
+                  Si está activo, los estudiantes de este curso no se promocionan al siguiente periodo; es su último grado y los datos quedan como históricos.
                 </p>
               </div>
 

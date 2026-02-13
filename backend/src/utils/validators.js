@@ -71,13 +71,14 @@ export const createStudentSchema = z.object({
 export const createCourseSchema = z.object({
   nombre: z.string().min(2),
   nivel: z.string().min(2),
-  paralelo: z.string().optional(),
+  paralelo: z.string().optional().nullable(),
   docenteId: z.string().uuid().optional().nullable(),
   anioLectivoId: z.string().uuid().optional(), // Opcional, se usará el activo si no se proporciona
   periodoId: z.string().uuid().optional(), // Opcional, para compatibilidad
   capacidad: z.number().int().positive().optional(),
   cursoSiguienteId: z.string().uuid().optional().nullable(),
   sortOrder: z.number().int().optional().nullable(),
+  ultimoCurso: z.boolean().optional(),
 });
 
 export const updateCourseSchema = z.object({
@@ -90,6 +91,7 @@ export const updateCourseSchema = z.object({
   capacidad: z.number().int().positive().optional().nullable(),
   cursoSiguienteId: z.string().uuid().optional().nullable(),
   sortOrder: z.number().int().optional().nullable(),
+  ultimoCurso: z.boolean().optional(),
 });
 
 export const createSubjectSchema = z.object({

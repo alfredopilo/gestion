@@ -143,6 +143,7 @@ export async function copyCourseToNewYear(course, nuevoAnioLectivoId, cursosMape
       anioLectivoId: nuevoAnioLectivoId,
       cursoSiguienteId: nuevoCursoSiguienteId,
       sortOrder: course.sortOrder || 0,
+      ultimoCurso: course.ultimoCurso ?? false,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
