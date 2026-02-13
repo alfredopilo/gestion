@@ -11,6 +11,8 @@ import {
   getStudentProfile,
   updateStudentProfile,
   uploadImage,
+  exportTemplate,
+  importTemplate,
 } from '../controllers/studentProfileController.js';
 import { upload, serveStudentProfileImages } from '../middleware/upload.js';
 
@@ -19,6 +21,8 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/sections', getSections);
+router.get('/template/export', authorize(['ADMIN', 'SECRETARIA']), exportTemplate);
+router.post('/template/import', authorize(['ADMIN', 'SECRETARIA']), importTemplate);
 router.post('/sections', authorize(['ADMIN', 'SECRETARIA']), createSection);
 router.put('/sections/:id', authorize(['ADMIN', 'SECRETARIA']), updateSection);
 router.delete('/sections/:id', authorize(['ADMIN', 'SECRETARIA']), deleteSection);

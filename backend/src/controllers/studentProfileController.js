@@ -5,6 +5,7 @@ import {
   createStudentProfileFieldSchema,
   updateStudentProfileFieldSchema,
   updateStudentProfileValuesSchema,
+  importStudentProfileTemplateSchema,
 } from '../utils/validators.js';
 import { getInstitutionFilter, verifyStudentBelongsToInstitution } from '../utils/institutionFilter.js';
 
@@ -468,6 +469,155 @@ export const uploadImage = async (req, res, next) => {
     res.json({
       filename: req.file.filename,
       url: `/api/v1/student-profile/images/${req.file.filename}`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Exporta la plantilla de ficha del estudiante (secciones y campos) a JSON.
+ * Excluye IDs y metadatos de BD para permitir importación en otra institución.
+ */
+export const exportTemplate = async (req, res, next) => {
+  try {
+    const institutionId = resolveInstitutionId(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución.',
+      });
+    }
+
+    const sections = await prisma.studentProfileSection.findMany({
+      where: { institucionId: institutionId },
+      orderBy: { orden: 'asc' },
+      include: {
+        campos: {
+          orderBy: { orden: 'asc' },
+        },
+      },
+    });
+
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      sections: sections.map((section) => ({
+        nombre: section.nombre,
+        descripcion: section.descripcion ?? null,
+        orden: section.orden ?? 0,
+        activo: section.activo ?? true,
+        campos: (section.campos || []).map((field) => ({
+          etiqueta: field.etiqueta,
+          descripcion: field.descripcion ?? null,
+          tipo: field.tipo,
+          requerido: field.requerido ?? false,
+          orden: field.orden ?? 0,
+          config: field.config || {},
+        })),
+      })),
+    };
+
+    // Opción de descarga directa si viene ?download=1
+    if (req.query.download === '1') {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="plantilla-ficha-estudiante.json"`
+      );
+      return res.send(JSON.stringify(exportData, null, 2));
+    }
+
+    res.json(exportData);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Importa una plantilla de ficha del estudiante desde JSON.
+ * Query param replace=true: elimina secciones actuales y crea las nuevas.
+ * Por defecto (merge): agrega las nuevas secciones a las existentes.
+ * En conflicto de nombre (unique institucionId+nombre) se añade sufijo "(2)".
+ */
+export const importTemplate = async (req, res, next) => {
+  try {
+    const institutionId = resolveInstitutionId(req);
+    if (!institutionId) {
+      return res.status(400).json({
+        error: 'No se pudo determinar la institución.',
+      });
+    }
+
+    const data = importStudentProfileTemplateSchema.parse(req.body);
+    const replace = req.query.replace === 'true' || req.query.replace === '1';
+
+    await prisma.$transaction(async (tx) => {
+      if (replace) {
+        await tx.studentProfileField.deleteMany({
+          where: {
+            section: { institucionId: institutionId },
+          },
+        });
+        await tx.studentProfileSection.deleteMany({
+          where: { institucionId: institutionId },
+        });
+      }
+
+      const existingNames = new Set(
+        (
+          await tx.studentProfileSection.findMany({
+            where: { institucionId: institutionId },
+            select: { nombre: true },
+          })
+        ).map((s) => s.nombre)
+      );
+
+      let baseOrder =
+        replace ?
+          0
+        : await tx.studentProfileSection.count({
+            where: { institucionId: institutionId },
+          });
+
+      for (const sectionData of data.sections) {
+        let nombre = sectionData.nombre;
+        while (existingNames.has(nombre)) {
+          const match = nombre.match(/^(.+)\s*\((\d+)\)$/);
+          const num = match ? parseInt(match[2], 10) + 1 : 2;
+          const base = match ? match[1].trim() : nombre;
+          nombre = `${base} (${num})`;
+        }
+        existingNames.add(nombre);
+
+        const section = await tx.studentProfileSection.create({
+          data: {
+            institucionId: institutionId,
+            nombre,
+            descripcion: sectionData.descripcion ?? null,
+            orden: baseOrder++,
+            activo: sectionData.activo ?? true,
+          },
+        });
+
+        let fieldOrder = 0;
+        for (const fieldData of sectionData.campos || []) {
+          await tx.studentProfileField.create({
+            data: {
+              sectionId: section.id,
+              etiqueta: fieldData.etiqueta,
+              descripcion: fieldData.descripcion ?? null,
+              tipo: fieldData.tipo,
+              requerido: fieldData.requerido ?? false,
+              orden: fieldData.orden ?? fieldOrder++,
+              config: fieldData.config || {},
+            },
+          });
+        }
+      }
+    });
+
+    res.json({
+      message: 'Plantilla importada correctamente.',
     });
   } catch (error) {
     next(error);

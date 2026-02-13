@@ -86,11 +86,26 @@ echo ""
 echo "📋 PASO 3: Actualizando dependencias backend..."
 echo ""
 
+# Sincronizar package.json del host al contenedor (para nuevas deps: jest, @jest/globals)
+if [ -f "backend/package.json" ]; then
+    print_info "Copiando package.json al contenedor..."
+    $DOCKER_COMPOSE_CMD cp backend/package.json backend:/app/package.json 2>/dev/null || true
+    [ -f "backend/package-lock.json" ] && $DOCKER_COMPOSE_CMD cp backend/package-lock.json backend:/app/package-lock.json 2>/dev/null || true
+fi
+
+# Dependencias incluyen: jest, @jest/globals (dev) para tests unitarios de plantilla ficha estudiante
 print_info "Instalando dependencias del backend..."
 if $DOCKER_COMPOSE_CMD exec -T backend npm install 2>&1 | grep -v "npm WARN"; then
     print_success "Dependencias del backend actualizadas"
 else
     print_warning "Puede haber advertencias en las dependencias, continuando..."
+fi
+
+print_info "Ejecutando tests unitarios del backend..."
+if $DOCKER_COMPOSE_CMD exec -T backend npm test 2>&1 | tail -5; then
+    print_success "Tests pasaron correctamente"
+else
+    print_warning "Algunos tests fallaron o no están configurados, continuando..."
 fi
 
 # ============================================

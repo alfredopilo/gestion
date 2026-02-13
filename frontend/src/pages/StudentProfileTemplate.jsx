@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -38,6 +38,10 @@ const StudentProfileTemplate = () => {
   const [editingFieldId, setEditingFieldId] = useState(null);
   const [savingSection, setSavingSection] = useState(false);
   const [savingField, setSavingField] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [replaceOnImport, setReplaceOnImport] = useState(false);
+  const importFileRef = useRef(null);
 
   useEffect(() => {
     fetchSections();
@@ -57,6 +61,53 @@ const StudentProfileTemplate = () => {
       toast.error('Error al cargar secciones');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportTemplate = async () => {
+    try {
+      setExporting(true);
+      const response = await api.get('/student-profile/template/export', {
+        params: { download: '1' },
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plantilla-ficha-estudiante.json';
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Plantilla exportada correctamente');
+    } catch (error) {
+      console.error('Error al exportar:', error);
+      toast.error(error.response?.data?.error || 'Error al exportar plantilla');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImportTemplate = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    try {
+      setImporting(true);
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await api.post('/student-profile/template/import', data, {
+        params: replaceOnImport ? { replace: 'true' } : {},
+      });
+      toast.success('Plantilla importada correctamente');
+      fetchSections();
+      event.target.value = '';
+    } catch (error) {
+      console.error('Error al importar:', error);
+      const msg =
+        error.response?.data?.error ||
+        (error instanceof SyntaxError ? 'El archivo no es un JSON válido' : 'Error al importar plantilla');
+      toast.error(msg);
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = '';
     }
   };
 
@@ -214,9 +265,45 @@ const StudentProfileTemplate = () => {
             Define secciones y campos personalizados que se aplicarán a todos los estudiantes.
           </p>
         </div>
-        <div className="text-sm text-gray-500">
-          Los cambios se reflejarán automáticamente en la ficha de cada estudiante.
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleExportTemplate}
+              disabled={exporting || sections.length === 0}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'Exportando...' : 'Exportar plantilla'}
+            </button>
+            <button
+              type="button"
+              onClick={() => importFileRef.current?.click()}
+              disabled={importing}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {importing ? 'Importando...' : 'Importar plantilla'}
+            </button>
+          </div>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleImportTemplate}
+          />
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={replaceOnImport}
+              onChange={(e) => setReplaceOnImport(e.target.checked)}
+              className="h-4 w-4 text-primary-600 border-gray-300 rounded"
+            />
+            Reemplazar al importar
+          </label>
         </div>
+      </div>
+      <div className="text-sm text-gray-500 -mt-1">
+        Los cambios se reflejarán automáticamente en la ficha de cada estudiante.
       </div>
 
       {loading ? (

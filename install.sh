@@ -215,6 +215,7 @@ echo ""
 echo "📋 PASO 4: Construyendo y levantando servicios Docker..."
 echo ""
 
+# Dependencias en package.json incluyen jest, @jest/globals (dev) para tests
 print_info "Construyendo imágenes (esto puede tardar varios minutos)..."
 if $DOCKER_COMPOSE_CMD build --no-cache; then
     print_success "Imágenes construidas correctamente"

@@ -470,3 +470,30 @@ export const updateStudentProfileValuesSchema = z.object({
     .min(1, 'Debe enviar al menos un valor para actualizar'),
 });
 
+/** Schema para importar plantilla de ficha del estudiante (JSON exportado) */
+const importFieldSchema = z.object({
+  etiqueta: z.string().min(2, 'La etiqueta es requerida'),
+  descripcion: z.string().optional().nullable(),
+  tipo: studentProfileFieldTypeEnum,
+  requerido: z.boolean().optional(),
+  orden: z.number().int().min(0).optional(),
+  config: z
+    .object({
+      options: optionsSchema,
+    })
+    .optional(),
+});
+
+const importSectionSchema = z.object({
+  nombre: z.string().min(2, 'El nombre es requerido'),
+  descripcion: z.string().optional().nullable(),
+  orden: z.number().int().min(0).optional(),
+  activo: z.boolean().optional(),
+  campos: z.array(importFieldSchema).default([]),
+});
+
+export const importStudentProfileTemplateSchema = z.object({
+  version: z.number().optional(),
+  sections: z.array(importSectionSchema).min(1, 'Debe incluir al menos una sección'),
+});
+

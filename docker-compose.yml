@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Sistema de Gestión Escolar - Docker Compose
 # 
 # Para instalar: ./install.sh

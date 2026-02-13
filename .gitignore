@@ -19,6 +19,9 @@ bak/
 *.dump
 *.backup
 
+# Archivos temporales
+backend/query
+
 # Excepción: migraciones de Prisma deben subirse a Git (no son backups)
 !backend/prisma/migrations/
 !backend/prisma/migrations/**/*.sql
