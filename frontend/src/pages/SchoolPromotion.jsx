@@ -14,6 +14,10 @@ const SchoolPromotion = () => {
   const [preview, setPreview] = useState(null);
   const [studentDecisions, setStudentDecisions] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  // Estado para pestañas y escalas expansibles
+  const [activePreviewTab, setActivePreviewTab] = useState('estudiantes-pasan');
+  const [expandedEscalaIds, setExpandedEscalaIds] = useState(new Set());
 
   useEffect(() => {
     if (selectedInstitutionId) {
@@ -66,6 +70,25 @@ const SchoolPromotion = () => {
       
       setPreview(response.data);
       initializeStudentDecisions(response.data);
+      
+      // Inicializar la pestaña activa basada en el contenido disponible
+      if (response.data.estudiantesQuePasan.length > 0) {
+        setActivePreviewTab('estudiantes-pasan');
+      } else if (response.data.estudiantesQueNoPasan.length > 0) {
+        setActivePreviewTab('estudiantes-no-pasan');
+      } else if (response.data.cursosACopiar.length > 0) {
+        setActivePreviewTab('cursos');
+      } else if (response.data.materiasACopiar.length > 0) {
+        setActivePreviewTab('materias');
+      } else if (response.data.escalasACopiar?.length > 0) {
+        setActivePreviewTab('escalas');
+      } else {
+        setActivePreviewTab('periodos');
+      }
+      
+      // Limpiar escalas expandidas
+      setExpandedEscalaIds(new Set());
+      
       toast.success('Vista previa generada exitosamente');
     } catch (error) {
       console.error('Error al generar vista previa:', error);
@@ -304,8 +327,102 @@ const SchoolPromotion = () => {
             </div>
           </div>
 
-          {/* Estudiantes que Pasan */}
-          {preview.estudiantesQuePasan.length > 0 && (
+          {/* Barra de Pestañas */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8 px-6">
+                {preview.estudiantesQuePasan.length > 0 && (
+                  <button
+                    onClick={() => setActivePreviewTab('estudiantes-pasan')}
+                    className={`${
+                      activePreviewTab === 'estudiantes-pasan'
+                        ? 'border-primary-600 text-primary-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                  >
+                    Estudiantes que Pasan
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-800">
+                      {preview.estudiantesQuePasan.length}
+                    </span>
+                  </button>
+                )}
+                {preview.estudiantesQueNoPasan.length > 0 && (
+                  <button
+                    onClick={() => setActivePreviewTab('estudiantes-no-pasan')}
+                    className={`${
+                      activePreviewTab === 'estudiantes-no-pasan'
+                        ? 'border-primary-600 text-primary-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                  >
+                    Estudiantes que NO Pasan
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                      {preview.estudiantesQueNoPasan.length}
+                    </span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setActivePreviewTab('cursos')}
+                  className={`${
+                    activePreviewTab === 'cursos'
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                >
+                  Cursos
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-800">
+                    {preview.cursosACopiar.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActivePreviewTab('materias')}
+                  className={`${
+                    activePreviewTab === 'materias'
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                >
+                  Materias
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-800">
+                    {preview.materiasACopiar.length}
+                  </span>
+                </button>
+                {preview.escalasACopiar && preview.escalasACopiar.length > 0 && (
+                  <button
+                    onClick={() => setActivePreviewTab('escalas')}
+                    className={`${
+                      activePreviewTab === 'escalas'
+                        ? 'border-primary-600 text-primary-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                  >
+                    Escalas
+                    <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-800">
+                      {preview.escalasACopiar.length}
+                    </span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setActivePreviewTab('periodos')}
+                  className={`${
+                    activePreviewTab === 'periodos'
+                      ? 'border-primary-600 text-primary-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                >
+                  Períodos
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-800">
+                    {preview.periodosACopiar.length}
+                  </span>
+                </button>
+              </nav>
+            </div>
+
+            {/* Contenido de las Pestañas */}
+            <div className="p-6">
+              {/* Estudiantes que Pasan */}
+              {activePreviewTab === 'estudiantes-pasan' && preview.estudiantesQuePasan.length > 0 && (
+                <div>
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-green-700">
                 Estudiantes que Pasan ({preview.estudiantesQuePasan.length})
@@ -398,10 +515,12 @@ const SchoolPromotion = () => {
                 </table>
               </div>
             </div>
-          )}
+                </div>
+              )}
 
-          {/* Estudiantes que NO Pasan */}
-          {preview.estudiantesQueNoPasan.length > 0 && (
+              {/* Estudiantes que NO Pasan */}
+              {activePreviewTab === 'estudiantes-no-pasan' && preview.estudiantesQueNoPasan.length > 0 && (
+                <div>
             <div className="bg-white shadow rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4 text-red-700">
                 Estudiantes que NO Pasan ({preview.estudiantesQueNoPasan.length})
@@ -501,9 +620,12 @@ const SchoolPromotion = () => {
                 </table>
               </div>
             </div>
-          )}
+                </div>
+              )}
 
-          {/* Cursos a Copiar */}
+              {/* Cursos a Copiar */}
+              {activePreviewTab === 'cursos' && (
+                <div>
           <div className="bg-white shadow rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Cursos a Copiar ({preview.cursosACopiar.length})</h2>
             <div className="overflow-x-auto">
@@ -541,8 +663,12 @@ const SchoolPromotion = () => {
               </table>
             </div>
           </div>
+                </div>
+              )}
 
-          {/* Materias a Copiar */}
+              {/* Materias a Copiar */}
+              {activePreviewTab === 'materias' && (
+                <div>
           <div className="bg-white shadow rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Materias a Copiar ({preview.materiasACopiar.length})</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -554,31 +680,79 @@ const SchoolPromotion = () => {
               ))}
             </div>
           </div>
+                </div>
+              )}
 
-          {/* Escalas de Calificación a Copiar */}
-          {preview.escalasACopiar && preview.escalasACopiar.length > 0 && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Escalas de Calificación a Copiar ({preview.escalasACopiar.length})</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {preview.escalasACopiar.map((escala) => (
-                  <div key={escala.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="font-medium text-gray-900 mb-2">{escala.nombre}</div>
-                    <div className="text-sm text-gray-600 mb-2">{escala.totalDetalles} niveles de calificación</div>
-                    <div className="space-y-1">
-                      {escala.detalles.map((detalle, idx) => (
-                        <div key={idx} className="flex justify-between text-xs text-gray-600">
-                          <span>{detalle.titulo}</span>
-                          <span className="font-medium">{detalle.valor.toFixed(2)}</span>
+              {/* Escalas de Calificación a Copiar - Con acordeón */}
+              {activePreviewTab === 'escalas' && preview.escalasACopiar && preview.escalasACopiar.length > 0 && (
+                <div>
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4">Escalas de Calificación a Copiar ({preview.escalasACopiar.length})</h2>
+            <div className="space-y-3">
+              {preview.escalasACopiar.map((escala) => {
+                const isExpanded = expandedEscalaIds.has(escala.id);
+                return (
+                  <div key={escala.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* Cabecera clickeable */}
+                    <div
+                      onClick={() => {
+                        const newExpanded = new Set(expandedEscalaIds);
+                        if (newExpanded.has(escala.id)) {
+                          newExpanded.delete(escala.id);
+                        } else {
+                          newExpanded.add(escala.id);
+                        }
+                        setExpandedEscalaIds(newExpanded);
+                      }}
+                      className="p-4 bg-gradient-to-r from-primary-50 to-primary-100 cursor-pointer hover:from-primary-100 hover:to-primary-200 transition-colors"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{escala.nombre}</h3>
+                          <p className="text-sm text-gray-600">{escala.totalDetalles} niveles de calificación</p>
                         </div>
-                      ))}
+                        <svg
+                          className={`w-5 h-5 text-gray-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Períodos a Copiar */}
+                    {/* Contenido expandible */}
+                    {isExpanded && (
+                      <div className="p-4 bg-white border-t border-gray-200">
+                        <div className="space-y-2">
+                          {escala.detalles.map((detalle, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-primary-500 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                  {idx + 1}
+                                </div>
+                                <span className="font-medium text-gray-800">{detalle.titulo}</span>
+                              </div>
+                              <span className="px-3 py-1 bg-primary-100 text-primary-800 font-bold rounded-lg text-sm">
+                                {detalle.valor.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+                </div>
+              )}
+
+              {/* Períodos a Copiar */}
+              {activePreviewTab === 'periodos' && (
+                <div>
           <div className="bg-white shadow rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Períodos a Copiar ({preview.periodosACopiar.length})</h2>
             <div className="overflow-x-auto">
@@ -624,8 +798,12 @@ const SchoolPromotion = () => {
               </table>
             </div>
           </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Botón de Ejecutar */}
+          {/* Botón de Ejecutar - Fuera de las pestañas */}
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex justify-between items-center">
               <div>
