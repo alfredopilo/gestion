@@ -18,6 +18,7 @@ const SchoolPromotion = () => {
   // Estado para pestañas y escalas expansibles
   const [activePreviewTab, setActivePreviewTab] = useState('estudiantes-pasan');
   const [expandedEscalaIds, setExpandedEscalaIds] = useState(new Set());
+  const [accionParaTodos, setAccionParaTodos] = useState('');
 
   useEffect(() => {
     if (selectedInstitutionId) {
@@ -137,6 +138,34 @@ const SchoolPromotion = () => {
         nuevoCursoId,
       },
     }));
+  };
+
+  /**
+   * Aplica la misma acción a todos los estudiantes que NO pasan
+   * Repetir: mismo curso actual | Promover: siguiente curso configurado | Sin asignar: sin curso
+   */
+  const handleAplicarATodosNoPasan = () => {
+    if (!preview || !accionParaTodos) return;
+
+    let sinSiguienteCurso = 0;
+    preview.estudiantesQueNoPasan.forEach((estudiante) => {
+      if (accionParaTodos === 'repetir') {
+        const cursoMismoCurso = preview.cursosACopiar.find(c => c.id === estudiante.cursoId);
+        updateStudentDecision(estudiante.studentId, 'repetir', cursoMismoCurso?.id || null);
+      } else if (accionParaTodos === 'promover') {
+        const cursoSiguiente = preview.cursosACopiar.find(c => c.nombre === estudiante.cursoSiguienteNombre);
+        if (!cursoSiguiente) sinSiguienteCurso++;
+        updateStudentDecision(estudiante.studentId, 'promover', cursoSiguiente?.id || null);
+      } else {
+        updateStudentDecision(estudiante.studentId, 'sin-asignar', null);
+      }
+    });
+
+    if (sinSiguienteCurso > 0) {
+      toast(`${sinSiguienteCurso} estudiante(s) sin curso siguiente configurado - asignar manualmente`, { icon: '⚠️' });
+    } else {
+      toast.success(`Acción "${accionParaTodos === 'repetir' ? 'Repetir' : accionParaTodos === 'promover' ? 'Promover' : 'Sin asignar'}" aplicada a todos`);
+    }
   };
 
   const handleExecutePromotion = async () => {
@@ -525,6 +554,26 @@ const SchoolPromotion = () => {
               <h2 className="text-xl font-semibold mb-4 text-red-700">
                 Estudiantes que NO Pasan ({preview.estudiantesQueNoPasan.length})
               </h2>
+              <div className="mb-4 flex items-center gap-3 flex-wrap">
+                <span className="text-sm text-gray-600">Aplicar a todos:</span>
+                <select
+                  value={accionParaTodos}
+                  onChange={(e) => setAccionParaTodos(e.target.value)}
+                  className="text-sm border border-gray-300 rounded-md px-3 py-1.5"
+                >
+                  <option value="">-- Seleccionar --</option>
+                  <option value="repetir">Repetir Curso</option>
+                  <option value="promover">Promover a Otro Curso</option>
+                  <option value="sin-asignar">Sin Asignar</option>
+                </select>
+                <button
+                  onClick={handleAplicarATodosNoPasan}
+                  disabled={!accionParaTodos}
+                  className="px-4 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Aplicar
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -580,12 +629,14 @@ const SchoolPromotion = () => {
                               value={decision?.accion || 'sin-asignar'}
                               onChange={(e) => {
                                 const accion = e.target.value;
-                                if (accion === 'repetir' || accion === 'promover') {
-                                  // Si repite, usar el mismo curso por defecto
-                                  const cursoActual = preview.cursosACopiar.find(c => c.id === estudiante.cursoId);
-                                  updateStudentDecision(estudiante.studentId, accion, cursoActual?.id || null);
+                                if (accion === 'repetir') {
+                                  const cursoMismoCurso = preview.cursosACopiar.find(c => c.id === estudiante.cursoId);
+                                  updateStudentDecision(estudiante.studentId, accion, cursoMismoCurso?.id || null);
+                                } else if (accion === 'promover') {
+                                  const cursoSiguiente = preview.cursosACopiar.find(c => c.nombre === estudiante.cursoSiguienteNombre);
+                                  updateStudentDecision(estudiante.studentId, accion, cursoSiguiente?.id || null);
                                 } else {
-                                  updateStudentDecision(estudiante.studentId, accion);
+                                  updateStudentDecision(estudiante.studentId, accion, null);
                                 }
                               }}
                               className="text-sm border border-gray-300 rounded-md px-2 py-1"
