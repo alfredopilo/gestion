@@ -220,6 +220,60 @@ export const updatePeriodSchema = z.object({
   anioLectivoId: z.string().uuid().optional(),
 });
 
+/**
+ * Schema para validar la estructura JSON al importar periodos
+ */
+export const importPeriodSchema = z.object({
+  version: z.string().regex(/^\d+\.\d+$/, 'Versión inválida'),
+  exportDate: z.string().datetime().optional(),
+  period: z.object({
+    nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+    fechaInicio: z.union([z.string(), z.date()]),
+    fechaFin: z.union([z.string(), z.date()]),
+    calificacionMinima: z.number().min(0).max(10),
+    ponderacion: z.number().min(0).max(100).optional(),
+    activo: z.boolean(),
+    esSupletorio: z.boolean(),
+    orden: z.number().int().positive().optional(),
+    anioEscolar: z.string().optional(),
+  }),
+  subPeriods: z.array(z.object({
+    nombre: z.string().min(2, 'El nombre del subperíodo debe tener al menos 2 caracteres'),
+    ponderacion: z.number().min(0).max(100),
+    orden: z.number().int().positive(),
+    fechaInicio: z.union([z.string(), z.date(), z.null()]).optional(),
+    fechaFin: z.union([z.string(), z.date(), z.null()]).optional(),
+  })).optional().default([]),
+});
+
+/** Schema para importar múltiples periodos (formato de exportación completa) */
+const singlePeriodExportSchema = z.object({
+  period: z.object({
+    nombre: z.string().min(2),
+    fechaInicio: z.union([z.string(), z.date()]),
+    fechaFin: z.union([z.string(), z.date()]),
+    calificacionMinima: z.number().min(0).max(10),
+    ponderacion: z.number().min(0).max(100).optional(),
+    activo: z.boolean(),
+    esSupletorio: z.boolean(),
+    orden: z.number().int().positive().optional(),
+    anioEscolar: z.string().optional(),
+  }),
+  subPeriods: z.array(z.object({
+    nombre: z.string().min(2),
+    ponderacion: z.number().min(0).max(100),
+    orden: z.number().int().positive(),
+    fechaInicio: z.union([z.string(), z.date(), z.null()]).optional(),
+    fechaFin: z.union([z.string(), z.date(), z.null()]).optional(),
+  })).optional().default([]),
+});
+
+export const importPeriodsConfigSchema = z.object({
+  version: z.string().regex(/^\d+\.\d+$/, 'Versión inválida'),
+  exportDate: z.string().optional(),
+  periods: z.array(singlePeriodExportSchema),
+});
+
 // Esquemas para Institution
 export const createInstitutionSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),

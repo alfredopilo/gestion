@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import React from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
@@ -28,6 +28,7 @@ const Periods = () => {
     fechaInicio: '',
     fechaFin: '',
   });
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchData();
@@ -200,6 +201,83 @@ const Periods = () => {
     }
   };
 
+  const handleExportPeriod = async (periodId, periodName) => {
+    try {
+      const response = await api.get(`/periods/${periodId}/export`);
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = (periodName || 'periodo').replace(/[^a-zA-Z0-9]/g, '-');
+      link.download = `periodo-${safeName}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Período exportado exitosamente');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al exportar período');
+    }
+  };
+
+  const handleExportConfiguration = async () => {
+    try {
+      const response = await api.get('/periods/export-config');
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `configuracion-periodos-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Configuración exportada exitosamente');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al exportar configuración');
+    }
+  };
+
+  const handleImportPeriod = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      toast.error('Por favor selecciona un archivo JSON');
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const jsonData = JSON.parse(text);
+
+      const hasSinglePeriod = jsonData.version && jsonData.period;
+      const hasMultiplePeriods = jsonData.version && Array.isArray(jsonData.periods) && jsonData.periods.length > 0;
+      if (!hasSinglePeriod && !hasMultiplePeriods) {
+        toast.error('El archivo no tiene la estructura esperada de importación');
+        return;
+      }
+
+      const res = await api.post('/periods/import', jsonData);
+      toast.success(res.data?.message || 'Período(s) importado(s) exitosamente');
+      fetchData();
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        toast.error('El archivo no contiene JSON válido');
+        return;
+      }
+      const msg = error.response?.data?.error || 'Error al importar período';
+      const details = error.response?.data?.details;
+      toast.error(details ? `${msg}: ${JSON.stringify(details)}` : msg);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       nombre: '',
@@ -253,15 +331,36 @@ const Periods = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Gestión de Períodos Académicos</h1>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
-        >
-          Nuevo Período
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={handleExportConfiguration}
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+          >
+            Exportar Configuración
+          </button>
+          <button
+            onClick={handleImportPeriod}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Importar Período
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
+          >
+            Nuevo Período
+          </button>
+        </div>
       </div>
 
       <div className="bg-white shadow rounded-lg overflow-hidden">
@@ -327,6 +426,12 @@ const Periods = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleExportPeriod(period.id, period.nombre)}
+                          className="text-green-600 hover:text-green-900 mr-4"
+                        >
+                          Exportar
+                        </button>
                         <button
                           onClick={() => handleEdit(period)}
                           className="text-primary-600 hover:text-primary-900 mr-4"
