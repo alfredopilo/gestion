@@ -1,0 +1,150 @@
+# CI: Suite E2E + API para Gestión Escolar
+# Ejecutar desde la raíz del repo (si el repo es solo GestionEscolar, root = proyecto).
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+  # Raíz: . cuando el repo es solo GestionEscolar. Si está en un monorepo, cambia a GestionEscolar
+  PROJECT_ROOT: .
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gestion_escolar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.PROJECT_ROOT }}/package.json
+
+      - name: Install root deps
+        run: npm ci
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+      - name: Install backend deps
+        run: npm ci
+        working-directory: ${{ env.PROJECT_ROOT }}/backend
+
+      - name: Setup DB (migrate + seed test)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_escolar_test
+        run: |
+          cd ${{ env.PROJECT_ROOT }}/backend
+          npx prisma migrate deploy
+          node prisma/seed.test.js
+
+      - name: Run API tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_escolar_test
+          NODE_ENV: test
+        run: npm run test:api
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: api-tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gestion_escolar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install root deps
+        run: npm ci
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+      - name: Install backend deps
+        run: npm ci
+        working-directory: ${{ env.PROJECT_ROOT }}/backend
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: ${{ env.PROJECT_ROOT }}/frontend
+
+      - name: Setup DB
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_escolar_test
+        run: |
+          cd ${{ env.PROJECT_ROOT }}/backend
+          npx prisma migrate deploy
+          node prisma/seed.test.js
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: ${{ env.PROJECT_ROOT }}/frontend
+
+      - name: Start backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gestion_escolar_test
+          PORT: 3000
+          JWT_SECRET: test-secret-for-ci
+        run: node src/server.js &
+        working-directory: ${{ env.PROJECT_ROOT }}/backend
+
+      - name: Start frontend (preview)
+        run: npx vite preview --port 5173 --host 0.0.0.0 &
+        working-directory: ${{ env.PROJECT_ROOT }}/frontend
+
+      - name: Wait for servers
+        run: npx wait-on -t 30000 http://localhost:3000/health http://localhost:5173 || true
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+      - name: Run E2E tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+        run: npm run test:e2e
+        working-directory: ${{ env.PROJECT_ROOT }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: ${{ env.PROJECT_ROOT }}/playwright-report/
+          retention-days: 7

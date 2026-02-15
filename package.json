@@ -1,5 +1,21 @@
 {
+  "name": "gestion-escolar",
+  "private": true,
+  "type": "module",
   "dependencies": {
     "xlsx": "^0.18.5"
+  },
+  "scripts": {
+    "test:api": "set NODE_ENV=test && vitest run --config vitest.config.ts",
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:all": "npm run test:api && npm run test:e2e",
+    "test:db:seed": "cd backend && node prisma/seed.test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.0",
+    "dotenv": "^16.3.1",
+    "supertest": "^6.3.4",
+    "vitest": "^1.2.0"
   }
 }

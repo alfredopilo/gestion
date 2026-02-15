@@ -113,7 +113,7 @@ const Login = () => {
             <div className="space-y-4">
               <div>
                 <label htmlFor="numeroIdentificacion" className="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Identificación
+                  Número de Identificación (Cédula)
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -128,9 +128,10 @@ const Login = () => {
                     autoComplete="username"
                     required
                     className="input-field pl-10"
-                    placeholder="Ingresa tu identificación"
+                    placeholder="Ingresa tu cédula"
                     value={numeroIdentificacion}
                     onChange={(e) => setNumeroIdentificacion(e.target.value)}
+                    data-testid="login-cedula"
                   />
                 </div>
               </div>
@@ -155,6 +156,7 @@ const Login = () => {
                     placeholder="Ingresa tu contraseña"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    data-testid="login-password"
                   />
                 </div>
               </div>
@@ -164,6 +166,7 @@ const Login = () => {
               type="submit"
               disabled={loading}
               className="btn-primary w-full py-3 text-base font-semibold"
+              data-testid="login-submit"
             >
               {loading ? (
                 <span className="flex items-center justify-center">

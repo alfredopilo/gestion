@@ -4,9 +4,10 @@ import jwt from 'jsonwebtoken';
  * Genera un token JWT para un usuario
  */
 export const generateToken = (userId, rol) => {
+  const secret = process.env.JWT_SECRET || 'test-jwt-secret';
   return jwt.sign(
     { userId, rol },
-    process.env.JWT_SECRET,
+    secret,
     { expiresIn: process.env.JWT_EXPIRES_IN || '2h' }
   );
 };

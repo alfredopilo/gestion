@@ -17,7 +17,8 @@
     "save:data": "node scripts/save-data.js",
     "restore:data": "node scripts/restore-data.js",
     "fix:migration": "node scripts/fix-failed-migration.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:db:seed": "node prisma/seed.test.js"
   },
   "keywords": [
     "educacion",

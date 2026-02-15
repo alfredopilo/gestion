@@ -52,9 +52,10 @@ export const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.substring(7); // Remover "Bearer "
+    const secret = process.env.JWT_SECRET || 'test-jwt-secret';
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, secret);
       
       // Verificar que el usuario existe y está activo
       const userRecord = await prisma.user.findUnique({

@@ -1,0 +1,20 @@
+{
+  "calificaciones": [
+    {
+      "estudianteId": "__ESTUDIANTE_ID_1__",
+      "materiaId": "__MATERIA_ID__",
+      "subPeriodoId": "__SUBPERIODO_ID__",
+      "parcial": "P1",
+      "calificacion": 8.0,
+      "observaciones": null
+    },
+    {
+      "estudianteId": "__ESTUDIANTE_ID_2__",
+      "materiaId": "__MATERIA_ID__",
+      "subPeriodoId": "__SUBPERIODO_ID__",
+      "parcial": "P1",
+      "calificacion": 7.5,
+      "observaciones": null
+    }
+  ]
+}

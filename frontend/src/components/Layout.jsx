@@ -430,6 +430,7 @@ const Layout = () => {
               <button 
                 onClick={logout}
                 className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
+                data-testid="logout-btn"
               >
                 Salir
               </button>
@@ -648,6 +649,7 @@ const Layout = () => {
             <button 
               onClick={logout}
               className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
+              data-testid="logout-btn"
             >
               Salir
             </button>

@@ -1,0 +1,20 @@
+{
+  "asistencias": [
+    {
+      "estudianteId": "__ESTUDIANTE_ID__",
+      "cursoId": "__CURSO_ID__",
+      "materiaId": "__MATERIA_ID__",
+      "fecha": "2024-10-15",
+      "estado": "ASISTENCIA",
+      "observaciones": null
+    },
+    {
+      "estudianteId": "__ESTUDIANTE_ID__",
+      "cursoId": "__CURSO_ID__",
+      "materiaId": "__MATERIA_ID__",
+      "fecha": "2024-10-16",
+      "estado": "FALTA",
+      "observaciones": null
+    }
+  ]
+}
