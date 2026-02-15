@@ -1,6 +1,23 @@
 import prisma from '../config/database.js';
 
 /**
+ * Convierte recursivamente BigInt a Number para que JSON.stringify no falle.
+ * Prisma/MySQL devuelve BigInt en _count y en COUNT(*) de raw queries.
+ */
+function serializeBigInt(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'bigint') return Number(obj);
+  if (Array.isArray(obj)) return obj.map(serializeBigInt);
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[k] = serializeBigInt(v);
+    return out;
+  }
+  // Fechas y otros objetos se devuelven tal cual
+  return obj;
+}
+
+/**
  * Obtener logs de acceso con filtros y paginación
  */
 export const getAccessLogs = async (req, res, next) => {
@@ -79,15 +96,17 @@ export const getAccessLogs = async (req, res, next) => {
       prisma.accessLog.count({ where }),
     ]);
     
-    res.json({
-      data: logs,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit)),
-      },
-    });
+    res.json(
+      serializeBigInt({
+        data: logs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      })
+    );
   } catch (error) {
     next(error);
   }
@@ -176,12 +195,14 @@ export const getLoginStats = async (req, res, next) => {
       },
     });
     
-    res.json({
-      statsByAction,
-      logsByDay,
-      topUsers: topUsersWithInfo,
-      recentFailedLogins,
-    });
+    res.json(
+      serializeBigInt({
+        statsByAction,
+        logsByDay,
+        topUsers: topUsersWithInfo,
+        recentFailedLogins,
+      })
+    );
   } catch (error) {
     next(error);
   }
@@ -202,7 +223,7 @@ export const getAvailableActions = async (req, res, next) => {
       },
     });
     
-    res.json(actions);
+    res.json(serializeBigInt(actions));
   } catch (error) {
     next(error);
   }
@@ -226,15 +247,17 @@ export const getUserLogs = async (req, res, next) => {
       prisma.accessLog.count({ where: { userId } }),
     ]);
     
-    res.json({
-      data: logs,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit)),
-      },
-    });
+    res.json(
+      serializeBigInt({
+        data: logs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      })
+    );
   } catch (error) {
     next(error);
   }
