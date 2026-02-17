@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { getStudentInstitutionFilter, verifyStudentBelongsToInstitution } from '../utils/institutionFilter.js';
-import { calculateAveragesByMateria, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
+import { calculateAveragesByMateria, applyDecimalStrategy, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
+import { getEffectiveGradeRoundingConfigFromEntities, ERROR_MISSING_GRADE_ROUNDING_CONFIG } from '../services/gradeRoundingConfigService.js';
 
 /**
  * Obtener años lectivos de un estudiante a través de sus enrollments
@@ -146,6 +147,7 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
           id: true,
           nombre: true,
           ano: true,
+          institucionId: true,
         },
       },
       course_subject_assignments: {
@@ -301,6 +303,46 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
     ],
   });
 
+  // Resolver configuración de redondeo/truncamiento por período (obligatoria)
+  const periodIdsFromGrades = [...new Set(grades.flatMap(g => {
+    const p = g.subPeriodo?.periodo || g.insumo?.subPeriodo?.periodo;
+    return p?.id ? [p.id] : [];
+  }))];
+  const institutionIdHist = curso.anioLectivo?.institucionId;
+  let periodConfigMapHist = {};
+  if (periodIdsFromGrades.length > 0 && institutionIdHist) {
+    try {
+      const institution = await prisma.institution.findUnique({
+        where: { id: institutionIdHist },
+        select: {
+          gradeRoundingSubPeriodMethod: true,
+          gradeRoundingWeightedMethod: true,
+          gradeRoundingPeriodWeightedMethod: true,
+          gradeDecimals: true,
+        },
+      });
+      const periodsWithConfig = await prisma.period.findMany({
+        where: { id: { in: periodIdsFromGrades } },
+        select: {
+          id: true,
+          gradeRoundingSubPeriodMethod: true,
+          gradeRoundingWeightedMethod: true,
+          gradeRoundingPeriodWeightedMethod: true,
+          gradeDecimals: true,
+        },
+      });
+      periodIdsFromGrades.forEach(pid => {
+        const period = periodsWithConfig.find(p => p.id === pid);
+        periodConfigMapHist[pid] = getEffectiveGradeRoundingConfigFromEntities(institution, period);
+      });
+    } catch (err) {
+      if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+        throw err;
+      }
+      throw err;
+    }
+  }
+
   // Obtener el período desde las calificaciones si el curso no tiene período asignado
   let periodoNombre = curso.periodo?.nombre || '-';
   if (periodoNombre === '-' && grades.length > 0) {
@@ -331,8 +373,8 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
       };
     }
 
-    // Usar función centralizada para calcular promedios
-    const { promediosSubPeriodo, promediosPeriodo, promedioGeneral } = calculateAveragesByMateria(materiaGrades);
+    // Usar función centralizada con configuración por período
+    const { promediosSubPeriodo, promediosPeriodo, promedioGeneral } = calculateAveragesByMateria(materiaGrades, periodConfigMapHist);
 
     // Agregar equivalentes de escala a los promedios calculados
     Object.keys(promediosSubPeriodo).forEach(subPeriodoId => {
@@ -456,8 +498,14 @@ const generateReportCardForCourse = async (studentId, courseId, anioLectivoId) =
     console.log(`[HistoricalReportCards] ADVERTENCIA: No se generaron períodos agrupados para el año lectivo ${anioLectivoId}`);
   }
 
-  const promedioGeneralEstudiante = materiasData.length > 0
-    ? truncate(materiasData.reduce((sum, m) => sum + (m.promedioGeneral || 0), 0) / materiasData.filter(m => m.promedioGeneral !== null).length)
+  const withPromedioHist = materiasData.filter(m => m.promedioGeneral !== null);
+  const promedioGeneralEstudiante = withPromedioHist.length > 0
+    ? (() => {
+        const raw = withPromedioHist.reduce((sum, m) => sum + (m.promedioGeneral || 0), 0) / withPromedioHist.length;
+        const firstPid = Object.keys(periodConfigMapHist)[0];
+        const cfg = firstPid ? periodConfigMapHist[firstPid] : undefined;
+        return cfg ? applyDecimalStrategy(raw, cfg.decimals, cfg.periodWeightedMethod) : Math.floor(raw * 100) / 100;
+      })()
     : null;
 
   return {
@@ -696,23 +744,33 @@ export const getHistoricalReportCards = async (req, res, next) => {
 
     // Generar boletines para cada curso en cada año lectivo
     const reportCards = [];
-    for (const [anioLectivoKey, schoolYearData] of Object.entries(coursesBySchoolYear)) {
-      console.log(`[HistoricalReportCards] Procesando año lectivo ${anioLectivoKey} con ${schoolYearData.courses.length} cursos`);
-      for (const course of schoolYearData.courses) {
-        console.log(`[HistoricalReportCards] Generando boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
-        const reportCard = await generateReportCardForCourse(
-          estudianteId,
-          course.id,
-          course.anioLectivoId
-        );
-        
-        if (reportCard) {
-          console.log(`[HistoricalReportCards] Boletín generado exitosamente para curso ${course.nombre}`);
-          reportCards.push(reportCard);
-        } else {
-          console.log(`[HistoricalReportCards] ADVERTENCIA: No se pudo generar boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
+    try {
+      for (const [anioLectivoKey, schoolYearData] of Object.entries(coursesBySchoolYear)) {
+        console.log(`[HistoricalReportCards] Procesando año lectivo ${anioLectivoKey} con ${schoolYearData.courses.length} cursos`);
+        for (const course of schoolYearData.courses) {
+          console.log(`[HistoricalReportCards] Generando boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
+          const reportCard = await generateReportCardForCourse(
+            estudianteId,
+            course.id,
+            course.anioLectivoId
+          );
+          
+          if (reportCard) {
+            console.log(`[HistoricalReportCards] Boletín generado exitosamente para curso ${course.nombre}`);
+            reportCards.push(reportCard);
+          } else {
+            console.log(`[HistoricalReportCards] ADVERTENCIA: No se pudo generar boletín para cursoId=${course.id}, anioLectivoId=${course.anioLectivoId}`);
+          }
         }
       }
+    } catch (err) {
+      if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+        return res.status(400).json({
+          error: err.message,
+          code: err.code,
+        });
+      }
+      throw err;
     }
     
     console.log(`[HistoricalReportCards] Total de boletines generados: ${reportCards.length}`);

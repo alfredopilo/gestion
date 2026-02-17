@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { getCourseInstitutionFilter, verifyCourseBelongsToInstitution, getGradeInstitutionFilter, getStudentInstitutionFilter } from '../utils/institutionFilter.js';
-import { calculateAveragesByMateria, truncate, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
+import { calculateAveragesByMateria, applyDecimalStrategy, getGradeScaleEquivalent } from '../utils/gradeCalculations.js';
+import { getEffectiveGradeRoundingConfigFromEntities, ERROR_MISSING_GRADE_ROUNDING_CONFIG } from '../services/gradeRoundingConfigService.js';
 
 /**
  * Obtener boletines de calificaciones para estudiantes de un curso
@@ -80,7 +81,7 @@ export const getReportCards = async (req, res, next) => {
       }
     }
 
-    // Obtener información del curso (anioLectivo solo si se pide asistencia)
+    // Obtener información del curso (anioLectivo para institución y opcionalmente asistencia)
     const curso = await prisma.course.findUnique({
       where: { id: cursoId },
       include: {
@@ -91,7 +92,7 @@ export const getReportCards = async (req, res, next) => {
             },
           },
         },
-        ...(wantAttendance ? { anioLectivo: { select: { fechaInicio: true, fechaFin: true } } } : {}),
+        anioLectivo: { select: { institucionId: true, fechaInicio: true, fechaFin: true } },
         estudiantes: {
           where: {
             grupoId: cursoId,
@@ -272,6 +273,49 @@ export const getReportCards = async (req, res, next) => {
       ],
     });
 
+    // Resolver configuración de redondeo/truncamiento por período (obligatoria para promedios)
+    const periodIdsFromGrades = [...new Set(grades.flatMap(g => {
+      const p = g.subPeriodo?.periodo || g.insumo?.subPeriodo?.periodo;
+      return p?.id ? [p.id] : [];
+    }))];
+    const institutionIdReportCard = curso.anioLectivo?.institucionId;
+    let periodConfigMapReportCard = {};
+    if (periodIdsFromGrades.length > 0 && institutionIdReportCard) {
+      try {
+        const institution = await prisma.institution.findUnique({
+          where: { id: institutionIdReportCard },
+          select: {
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        const periods = await prisma.period.findMany({
+          where: { id: { in: periodIdsFromGrades } },
+          select: {
+            id: true,
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        periodIdsFromGrades.forEach(pid => {
+          const period = periods.find(p => p.id === pid);
+          periodConfigMapReportCard[pid] = getEffectiveGradeRoundingConfigFromEntities(institution, period);
+        });
+      } catch (err) {
+        if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+          return res.status(400).json({
+            error: err.message,
+            code: err.code,
+          });
+        }
+        throw err;
+      }
+    }
+
     // Obtener el período desde las calificaciones si el curso no tiene período asignado
     let periodoNombre = curso.periodo?.nombre || '-';
     if (periodoNombre === '-' && grades.length > 0) {
@@ -307,8 +351,8 @@ export const getReportCards = async (req, res, next) => {
           };
         }
 
-        // Usar función centralizada para calcular promedios
-        const { promediosSubPeriodo, promediosPeriodo, promedioGeneral } = calculateAveragesByMateria(materiaGrades);
+        // Usar función centralizada con configuración por período
+        const { promediosSubPeriodo, promediosPeriodo, promedioGeneral } = calculateAveragesByMateria(materiaGrades, periodConfigMapReportCard);
 
         // Agregar equivalentes de escala a los promedios calculados
         Object.keys(promediosSubPeriodo).forEach(subPeriodoId => {
@@ -362,9 +406,17 @@ export const getReportCards = async (req, res, next) => {
           periodo: periodoNombre,
         },
         materias: materiasData,
-        promedioGeneral: materiasData.length > 0
-          ? truncate(materiasData.reduce((sum, m) => sum + (m.promedioGeneral || 0), 0) / materiasData.filter(m => m.promedioGeneral !== null).length)
-          : null,
+        promedioGeneral: (() => {
+          const withPromedio = materiasData.filter(m => m.promedioGeneral !== null);
+          if (withPromedio.length === 0) return null;
+          const sum = withPromedio.reduce((s, m) => s + (m.promedioGeneral || 0), 0);
+          const raw = sum / withPromedio.length;
+          const firstPeriodId = Object.keys(periodConfigMapReportCard)[0];
+          const cfg = firstPeriodId ? periodConfigMapReportCard[firstPeriodId] : undefined;
+          return cfg
+            ? applyDecimalStrategy(raw, cfg.decimals, cfg.periodWeightedMethod)
+            : Math.floor(raw * 100) / 100;
+        })(),
       };
     });
 

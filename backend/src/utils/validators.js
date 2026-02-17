@@ -194,10 +194,12 @@ export const importTeachersSchema = z.object({
   instituciones: z.array(z.string().uuid()).min(1, 'Debes seleccionar al menos una institución'),
 });
 
+const gradeRoundingMethodSchema = z.enum(['TRUNCATE', 'ROUND']).optional().nullable();
+
 export const createPeriodSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  anioLectivoId: z.string().uuid('ID de año lectivo inválido').optional().nullable(), // Opcional, se obtendrá automáticamente
-  anioEscolar: z.string().min(4, 'El año escolar debe tener al menos 4 caracteres').optional().nullable(), // Opcional, se generará automáticamente
+  anioLectivoId: z.string().uuid('ID de año lectivo inválido').optional().nullable(),
+  anioEscolar: z.string().min(4, 'El año escolar debe tener al menos 4 caracteres').optional().nullable(),
   fechaInicio: z.union([z.string().datetime(), z.date()]),
   fechaFin: z.union([z.string().datetime(), z.date()]),
   calificacionMinima: z.number().min(0).max(10).default(7.0),
@@ -205,7 +207,11 @@ export const createPeriodSchema = z.object({
   activo: z.boolean().default(true),
   esSupletorio: z.boolean().default(false),
   orden: z.number().int().positive().optional(),
-}).passthrough(); // Permitir campos adicionales que no están en el schema
+  gradeRoundingSubPeriodMethod: gradeRoundingMethodSchema,
+  gradeRoundingWeightedMethod: gradeRoundingMethodSchema,
+  gradeRoundingPeriodWeightedMethod: gradeRoundingMethodSchema,
+  gradeDecimals: z.number().int().min(0).max(5).optional().nullable(),
+}).passthrough();
 
 export const updatePeriodSchema = z.object({
   nombre: z.string().min(2).optional(),
@@ -218,6 +224,10 @@ export const updatePeriodSchema = z.object({
   esSupletorio: z.boolean().optional(),
   orden: z.number().int().positive().optional(),
   anioLectivoId: z.string().uuid().optional(),
+  gradeRoundingSubPeriodMethod: gradeRoundingMethodSchema,
+  gradeRoundingWeightedMethod: gradeRoundingMethodSchema,
+  gradeRoundingPeriodWeightedMethod: gradeRoundingMethodSchema,
+  gradeDecimals: z.number().int().min(0).max(5).optional().nullable(),
 });
 
 /**
@@ -274,7 +284,7 @@ export const importPeriodsConfigSchema = z.object({
   periods: z.array(singlePeriodExportSchema),
 });
 
-// Esquemas para Institution
+// Esquemas para Institution (gradeRoundingMethodSchema definido arriba en Period)
 export const createInstitutionSchema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   codigo: z.string().optional().nullable(),
@@ -284,6 +294,10 @@ export const createInstitutionSchema = z.object({
   email: z.string().email().optional().nullable(),
   rector: z.string().optional().nullable(),
   activa: z.boolean().default(true),
+  gradeRoundingSubPeriodMethod: gradeRoundingMethodSchema,
+  gradeRoundingWeightedMethod: gradeRoundingMethodSchema,
+  gradeRoundingPeriodWeightedMethod: gradeRoundingMethodSchema,
+  gradeDecimals: z.number().int().min(0).max(5).optional().nullable(),
 });
 
 export const updateInstitutionSchema = z.object({
@@ -295,6 +309,10 @@ export const updateInstitutionSchema = z.object({
   email: z.string().email().optional().nullable(),
   rector: z.string().optional().nullable(),
   activa: z.boolean().optional(),
+  gradeRoundingSubPeriodMethod: gradeRoundingMethodSchema,
+  gradeRoundingWeightedMethod: gradeRoundingMethodSchema,
+  gradeRoundingPeriodWeightedMethod: gradeRoundingMethodSchema,
+  gradeDecimals: z.number().int().min(0).max(5).optional().nullable(),
 });
 
 // Esquemas para SchoolYear

@@ -156,26 +156,34 @@ model GradeScaleDetail {
 }
 
 model Institution {
-  id                     String                  @id
-  nombre                 String
-  codigo                 String?                 @unique
-  logo                   String?
-  direccion              String?
-  telefono               String?
-  email                  String?
-  rector                 String?
-  activa                 Boolean                 @default(true)
-  createdAt              DateTime                @default(now()) @map("created_at")
-  updatedAt              DateTime                @map("updated_at")
-  aniosLectivos          SchoolYear[]            @relation("InstitutionSchoolYears")
-  materias               Subject[]
-  userInstitutions       UserInstitution[]
-  usuarios               User[]                  @relation("InstitutionUsuarios")
-  gradeScales            GradeScale[]
-  studentProfileSections StudentProfileSection[]
-  enrollments            Enrollment[]
-  withdrawals            StudentWithdrawal[]
-  emailConfig            EmailConfig?
+  id                                  String                  @id
+  nombre                              String
+  codigo                              String?                 @unique
+  logo                                String?
+  direccion                           String?
+  telefono                            String?
+  email                               String?
+  rector                              String?
+  activa                              Boolean                 @default(true)
+  createdAt                           DateTime                @default(now()) @map("created_at")
+  updatedAt                           DateTime                @map("updated_at")
+  /// Truncar o redondear promedio de subperíodo (obligatorio para calcular reportes)
+  gradeRoundingSubPeriodMethod        GradeRoundingMethod?    @map("grade_rounding_sub_period_method")
+  /// Truncar o redondear promedio ponderado de subperíodo
+  gradeRoundingWeightedMethod         GradeRoundingMethod?    @map("grade_rounding_weighted_method")
+  /// Truncar o redondear promedio ponderado del período
+  gradeRoundingPeriodWeightedMethod   GradeRoundingMethod?    @map("grade_rounding_period_weighted_method")
+  /// Número de decimales para promedios (p. ej. 2)
+  gradeDecimals                       Int?                    @default(2) @map("grade_decimals")
+  aniosLectivos                       SchoolYear[]            @relation("InstitutionSchoolYears")
+  materias                            Subject[]
+  userInstitutions                    UserInstitution[]
+  usuarios                            User[]                  @relation("InstitutionUsuarios")
+  gradeScales                         GradeScale[]
+  studentProfileSections               StudentProfileSection[]
+  enrollments                         Enrollment[]
+  withdrawals                         StudentWithdrawal[]
+  emailConfig                         EmailConfig?
 
   @@map("institutions")
 }
@@ -243,22 +251,27 @@ model Payment {
 }
 
 model Period {
-  id                 String      @id
-  nombre             String
-  fechaInicio        DateTime    @map("fecha_inicio")
-  fechaFin           DateTime    @map("fecha_fin")
-  activo             Boolean     @default(true)
-  esSupletorio       Boolean     @default(false) @map("es_supletorio")
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @map("updated_at")
-  anioEscolar        String      @map("anio_escolar")
-  calificacionMinima Float?      @default(7.0) @map("calificacion_minima")
-  orden              Int?
-  ponderacion        Float?      @default(50.0)
-  anioLectivoId      String?     @map("anio_lectivo_id")
-  courses            Course[]
-  anioLectivo        SchoolYear? @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
-  subPeriodos        SubPeriod[]
+  id                                  String      @id
+  nombre                              String
+  fechaInicio                         DateTime    @map("fecha_inicio")
+  fechaFin                            DateTime    @map("fecha_fin")
+  activo                              Boolean     @default(true)
+  esSupletorio                        Boolean     @default(false) @map("es_supletorio")
+  createdAt                           DateTime    @default(now()) @map("created_at")
+  updatedAt                           DateTime    @map("updated_at")
+  anioEscolar                         String      @map("anio_escolar")
+  calificacionMinima                  Float?      @default(7.0) @map("calificacion_minima")
+  orden                               Int?
+  ponderacion                         Float?      @default(50.0)
+  anioLectivoId                       String?     @map("anio_lectivo_id")
+  /// Truncar o redondear promedio de subperíodo (prioridad sobre institución)
+  gradeRoundingSubPeriodMethod        GradeRoundingMethod?    @map("grade_rounding_sub_period_method")
+  gradeRoundingWeightedMethod         GradeRoundingMethod?    @map("grade_rounding_weighted_method")
+  gradeRoundingPeriodWeightedMethod   GradeRoundingMethod?    @map("grade_rounding_period_weighted_method")
+  gradeDecimals                       Int?                    @default(2) @map("grade_decimals")
+  courses                             Course[]
+  anioLectivo                         SchoolYear? @relation(fields: [anioLectivoId], references: [id], onDelete: Cascade)
+  subPeriodos                         SubPeriod[]
 
   @@map("periods")
 }
@@ -555,6 +568,12 @@ model User {
 
   @@unique([numeroIdentificacion, institucionId])
   @@map("users")
+}
+
+/// Método para aproximar promedios: TRUNCATE (cortar decimales) o ROUND (redondear matemáticamente)
+enum GradeRoundingMethod {
+  TRUNCATE
+  ROUND
 }
 
 enum EstadoAsistencia {

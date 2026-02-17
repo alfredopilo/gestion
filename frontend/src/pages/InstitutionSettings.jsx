@@ -41,6 +41,10 @@ const InstitutionSettings = () => {
     email: '',
     rector: '',
     activa: true,
+    gradeRoundingSubPeriodMethod: '',
+    gradeRoundingWeightedMethod: '',
+    gradeRoundingPeriodWeightedMethod: '',
+    gradeDecimals: 2,
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
@@ -169,6 +173,10 @@ const InstitutionSettings = () => {
         email: formData.email || null,
         rector: formData.rector || null,
         activa: formData.activa,
+        gradeRoundingSubPeriodMethod: formData.gradeRoundingSubPeriodMethod || null,
+        gradeRoundingWeightedMethod: formData.gradeRoundingWeightedMethod || null,
+        gradeRoundingPeriodWeightedMethod: formData.gradeRoundingPeriodWeightedMethod || null,
+        gradeDecimals: formData.gradeDecimals != null && formData.gradeDecimals !== '' ? Number(formData.gradeDecimals) : null,
       };
 
       if (editingInstitution) {
@@ -188,25 +196,35 @@ const InstitutionSettings = () => {
     }
   };
 
-  const handleEdit = (institution) => {
+  const handleEdit = async (institution) => {
     setEditingInstitution(institution);
-    const logoString = normalizeLogoValue(institution.logo);
-    
-    setFormData({
-      nombre: institution.nombre || '',
-      codigo: institution.codigo || '',
-      logo: logoString,
-      direccion: institution.direccion || '',
-      telefono: institution.telefono || '',
-      email: institution.email || '',
-      rector: institution.rector || '',
-      activa: institution.activa ?? true,
-    });
-    setLogoFile(null);
-    setLogoPreview(logoString);
-    setOriginalSize(0);
-    setCompressedSize(0);
     setShowModal(true);
+    try {
+      const { data: fullInstitution } = await api.get(`/institutions/${institution.id}`);
+      const logoString = normalizeLogoValue(fullInstitution.logo);
+      setFormData({
+        nombre: fullInstitution.nombre || '',
+        codigo: fullInstitution.codigo || '',
+        logo: logoString,
+        direccion: fullInstitution.direccion || '',
+        telefono: fullInstitution.telefono || '',
+        email: fullInstitution.email || '',
+        rector: fullInstitution.rector || '',
+        activa: fullInstitution.activa ?? true,
+        gradeRoundingSubPeriodMethod: fullInstitution.gradeRoundingSubPeriodMethod ?? '',
+        gradeRoundingWeightedMethod: fullInstitution.gradeRoundingWeightedMethod ?? '',
+        gradeRoundingPeriodWeightedMethod: fullInstitution.gradeRoundingPeriodWeightedMethod ?? '',
+        gradeDecimals: fullInstitution.gradeDecimals ?? 2,
+      });
+      setLogoFile(null);
+      setLogoPreview(logoString);
+      setOriginalSize(0);
+      setCompressedSize(0);
+    } catch (err) {
+      console.error('Error al cargar institución:', err);
+      toast.error('No se pudo cargar los datos de la institución');
+      setShowModal(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -245,6 +263,10 @@ const InstitutionSettings = () => {
       email: '',
       rector: '',
       activa: true,
+      gradeRoundingSubPeriodMethod: '',
+      gradeRoundingWeightedMethod: '',
+      gradeRoundingPeriodWeightedMethod: '',
+      gradeDecimals: 2,
     });
     setLogoFile(null);
     setLogoPreview('');
@@ -619,6 +641,60 @@ const InstitutionSettings = () => {
                 <label htmlFor="activa" className="ml-2 block text-sm text-gray-900">
                   Activar esta institución
                 </label>
+              </div>
+
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Configuración de promedios</h3>
+                <p className="text-xs text-gray-500 mb-3">Obligatorio para reportes. Si no se define aquí, puede definirse por período. Truncar corta decimales; redondear aplica redondeo matemático.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio subperíodo</label>
+                    <select
+                      value={formData.gradeRoundingSubPeriodMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingSubPeriodMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio ponderado</label>
+                    <select
+                      value={formData.gradeRoundingWeightedMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingWeightedMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio ponderado del período</label>
+                    <select
+                      value={formData.gradeRoundingPeriodWeightedMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingPeriodWeightedMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Decimales</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      value={formData.gradeDecimals}
+                      onChange={(e) => setFormData({ ...formData, gradeDecimals: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

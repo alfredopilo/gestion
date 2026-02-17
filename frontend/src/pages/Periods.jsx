@@ -20,6 +20,10 @@ const Periods = () => {
     activo: true,
     esSupletorio: false,
     orden: 1,
+    gradeRoundingSubPeriodMethod: '',
+    gradeRoundingWeightedMethod: '',
+    gradeRoundingPeriodWeightedMethod: '',
+    gradeDecimals: 2,
   });
   const [subPeriodFormData, setSubPeriodFormData] = useState({
     nombre: '',
@@ -58,7 +62,10 @@ const Periods = () => {
         orden: parseInt(formData.orden),
         activo: formData.activo,
         esSupletorio: formData.esSupletorio,
-        // No enviar anioEscolar ni anioLectivoId, el backend lo obtendrá automáticamente
+        gradeRoundingSubPeriodMethod: formData.gradeRoundingSubPeriodMethod || null,
+        gradeRoundingWeightedMethod: formData.gradeRoundingWeightedMethod || null,
+        gradeRoundingPeriodWeightedMethod: formData.gradeRoundingPeriodWeightedMethod || null,
+        gradeDecimals: formData.gradeDecimals != null && formData.gradeDecimals !== '' ? Number(formData.gradeDecimals) : null,
       };
 
       // Convertir fechas a formato ISO datetime si tienen valor
@@ -146,6 +153,10 @@ const Periods = () => {
       activo: period.activo ?? true,
       esSupletorio: period.esSupletorio ?? false,
       orden: period.orden || 1,
+      gradeRoundingSubPeriodMethod: period.gradeRoundingSubPeriodMethod || '',
+      gradeRoundingWeightedMethod: period.gradeRoundingWeightedMethod || '',
+      gradeRoundingPeriodWeightedMethod: period.gradeRoundingPeriodWeightedMethod || '',
+      gradeDecimals: period.gradeDecimals ?? 2,
     });
     setShowModal(true);
   };
@@ -288,6 +299,10 @@ const Periods = () => {
       activo: true,
       esSupletorio: false,
       orden: 1,
+      gradeRoundingSubPeriodMethod: '',
+      gradeRoundingWeightedMethod: '',
+      gradeRoundingPeriodWeightedMethod: '',
+      gradeDecimals: 2,
     });
     setEditingPeriod(null);
   };
@@ -610,6 +625,59 @@ const Periods = () => {
                   />
                   <span className="ml-2 text-sm text-gray-700">Es Supletorio</span>
                 </label>
+              </div>
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Configuración de promedios</h3>
+                <p className="text-xs text-gray-500 mb-3">Opcional. Si se define aquí tiene prioridad sobre la institución. Truncar corta decimales; redondear aplica redondeo matemático.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio subperíodo</label>
+                    <select
+                      value={formData.gradeRoundingSubPeriodMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingSubPeriodMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir (usar institución)</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio ponderado</label>
+                    <select
+                      value={formData.gradeRoundingWeightedMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingWeightedMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir (usar institución)</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Promedio ponderado del período</label>
+                    <select
+                      value={formData.gradeRoundingPeriodWeightedMethod}
+                      onChange={(e) => setFormData({ ...formData, gradeRoundingPeriodWeightedMethod: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    >
+                      <option value="">Sin definir (usar institución)</option>
+                      <option value="TRUNCATE">Truncar</option>
+                      <option value="ROUND">Redondear</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Decimales</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      value={formData.gradeDecimals}
+                      onChange={(e) => setFormData({ ...formData, gradeDecimals: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button

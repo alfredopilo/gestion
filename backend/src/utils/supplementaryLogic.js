@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
-import { calculateSubPeriodAverage, calculatePeriodAverageFromSubPeriods, calculateGeneralAverageFromPeriods, truncate } from './gradeCalculations.js';
+import { calculateSubPeriodAverage, calculatePeriodAverageFromSubPeriods, calculateGeneralAverageFromPeriods, applyDecimalStrategy } from './gradeCalculations.js';
+import { getEffectiveGradeRoundingConfigFromEntities } from '../services/gradeRoundingConfigService.js';
 
 /**
  * Calcula el promedio mínimo requerido para supletorio
@@ -34,7 +35,22 @@ export async function calculateMinimumSupplementaryGrade(anioLectivoId) {
  * @returns {Promise<{promedioGeneral: number, periodAverages: Array}>}
  */
 export async function calculateStudentGeneralAverage(studentId, materiaId, anioLectivoId) {
-  // Obtener todos los períodos regulares (no supletorios) del año lectivo
+  const schoolYear = await prisma.schoolYear.findUnique({
+    where: { id: anioLectivoId },
+    select: { institucionId: true },
+  });
+  const institution = schoolYear?.institucionId
+    ? await prisma.institution.findUnique({
+        where: { id: schoolYear.institucionId },
+        select: {
+          gradeRoundingSubPeriodMethod: true,
+          gradeRoundingWeightedMethod: true,
+          gradeRoundingPeriodWeightedMethod: true,
+          gradeDecimals: true,
+        },
+      })
+    : null;
+
   const regularPeriods = await prisma.period.findMany({
     where: {
       anioLectivoId: anioLectivoId,
@@ -50,8 +66,13 @@ export async function calculateStudentGeneralAverage(studentId, materiaId, anioL
 
   const periodAverages = [];
 
-  // Para cada período regular, calcular el promedio del estudiante
   for (const period of regularPeriods) {
+    let roundingConfig;
+    try {
+      roundingConfig = institution ? getEffectiveGradeRoundingConfigFromEntities(institution, period) : undefined;
+    } catch {
+      roundingConfig = undefined;
+    }
     const subPeriodIds = period.subPeriodos.map(sp => sp.id);
 
     // Obtener calificaciones del estudiante en esta materia para este período
@@ -131,24 +152,23 @@ export async function calculateStudentGeneralAverage(studentId, materiaId, anioL
       }
     });
 
-    // Calcular promedio por subperíodo usando función centralizada
     const subPeriodAverages = {};
     Object.keys(gradesBySubPeriod).forEach(subPeriodoId => {
       const data = gradesBySubPeriod[subPeriodoId];
       if (data.calificaciones.length > 0) {
-        const promedio = calculateSubPeriodAverage(data.calificaciones);
+        const promedio = calculateSubPeriodAverage(data.calificaciones, roundingConfig);
         subPeriodAverages[subPeriodoId] = {
-          promedio: promedio,
+          promedio,
           ponderacion: data.subPeriodo.ponderacion || 0,
         };
       }
     });
 
-    // Calcular promedio ponderado del período usando función centralizada
     const periodoPonderacion = period.ponderacion || 100;
     const { promedio: promedioPeriodoTruncado, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
       subPeriodAverages,
-      periodoPonderacion
+      periodoPonderacion,
+      roundingConfig
     );
 
     periodAverages.push({
@@ -161,9 +181,17 @@ export async function calculateStudentGeneralAverage(studentId, materiaId, anioL
     });
   }
 
-  // Calcular promedio general (suma de promedios ponderados de períodos) usando función centralizada
   const promediosPonderados = periodAverages.map(pa => pa.promedioPonderado);
-  const promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados);
+  let firstConfig;
+  try {
+    const firstPeriod = periodAverages.length > 0 && regularPeriods.length > 0
+      ? regularPeriods.find(p => p.id === periodAverages[0].periodoId)
+      : null;
+    firstConfig = institution && firstPeriod ? getEffectiveGradeRoundingConfigFromEntities(institution, firstPeriod) : undefined;
+  } catch {
+    firstConfig = undefined;
+  }
+  const promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados, firstConfig);
 
   return {
     promedioGeneral: promedioGeneral,
@@ -237,27 +265,28 @@ export async function getLowestPeriodAverages(studentId, materiaId, anioLectivoI
 }
 
 /**
- * Reemplaza períodos bajos con la calificación de supletorio
+ * Reemplaza períodos bajos con la calificación de supletorio.
  * @param {Array} periodAverages - Array de promedios de períodos
  * @param {number} supplementaryAverage - Calificación de supletorio
- * @returns {Array} - Array de promedios ajustados
+ * @param {{ periodWeightedMethod: string, decimals: number }} [roundingConfig] - Config efectiva (opcional)
  */
-export function replacePeriodWithSupplementary(periodAverages, supplementaryAverage) {
-  // Identificar períodos que están por debajo del mínimo
+export function replacePeriodWithSupplementary(periodAverages, supplementaryAverage, roundingConfig) {
   const periodsToReplace = periodAverages
     .map((pa, index) => ({ ...pa, originalIndex: index }))
     .filter(pa => pa.promedio < pa.calificacionMinima)
-    .sort((a, b) => a.promedio - b.promedio); // Ordenar por promedio más bajo primero
+    .sort((a, b) => a.promedio - b.promedio);
 
-  // Crear copia del array de promedios
   const adjustedAverages = [...periodAverages];
 
-  // Reemplazar los períodos más bajos con la calificación de supletorio
   periodsToReplace.forEach(period => {
+    const raw = supplementaryAverage * (period.ponderacion / 100);
+    const promedioPonderado = roundingConfig
+      ? applyDecimalStrategy(raw, roundingConfig.decimals, roundingConfig.periodWeightedMethod)
+      : Math.floor(raw * 100) / 100;
     adjustedAverages[period.originalIndex] = {
       ...period,
       promedio: supplementaryAverage,
-      promedioPonderado: truncate(supplementaryAverage * (period.ponderacion / 100)),
+      promedioPonderado,
       reemplazadoPorSupletorio: true,
       promedioOriginal: period.promedio,
     };

@@ -1,7 +1,8 @@
 import prisma from '../config/database.js';
 import { randomUUID } from 'crypto';
 import { calculateStudentGeneralAverage } from './supplementaryLogic.js';
-import { truncate } from './gradeCalculations.js';
+import { applyDecimalStrategy } from './gradeCalculations.js';
+import { getEffectiveGradeRoundingConfig } from '../services/gradeRoundingConfigService.js';
 
 const MINIMUM_GRADE_TO_PASS = 7.0;
 
@@ -72,11 +73,24 @@ export async function calculateStudentPromotionStatus(studentId, anioLectivoId, 
     });
   }
 
-  // Calcular promedio general (promedio de promedios de todas las materias)
-  // CRÍTICO: Se debe truncar el resultado para consistencia con otros cálculos
-  const promedioGeneral = materiasConCalificaciones > 0 
-    ? truncate(sumaPromedios / materiasConCalificaciones)
-    : 0;
+  let promedioGeneral = 0;
+  if (materiasConCalificaciones > 0) {
+    const raw = sumaPromedios / materiasConCalificaciones;
+    try {
+      const schoolYear = await prisma.schoolYear.findUnique({
+        where: { id: anioLectivoId },
+        select: { institucionId: true },
+      });
+      const config = schoolYear?.institucionId
+        ? await getEffectiveGradeRoundingConfig({ institutionId: schoolYear.institucionId, periodId: null })
+        : null;
+      promedioGeneral = config
+        ? applyDecimalStrategy(raw, config.decimals, config.periodWeightedMethod)
+        : Math.floor(raw * 100) / 100;
+    } catch {
+      promedioGeneral = Math.floor(raw * 100) / 100;
+    }
+  }
 
   return {
     pasa: todasAprobadas && materiasConCalificaciones > 0,

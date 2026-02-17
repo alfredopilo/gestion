@@ -1,6 +1,15 @@
 import prisma from '../config/database.js';
 import { getCourseInstitutionFilter } from '../utils/institutionFilter.js';
-import { calculateSubPeriodAverage, calculatePeriodAverageFromSubPeriods, calculateGeneralAverageFromPeriods, truncate } from '../utils/gradeCalculations.js';
+import {
+  calculateSubPeriodAverage,
+  calculatePeriodAverageFromSubPeriods,
+  calculateGeneralAverageFromPeriods,
+  applyDecimalStrategy,
+} from '../utils/gradeCalculations.js';
+import {
+  getEffectiveGradeRoundingConfigFromEntities,
+  ERROR_MISSING_GRADE_ROUNDING_CONFIG,
+} from '../services/gradeRoundingConfigService.js';
 
 /**
  * Reporte de calificaciones detallado
@@ -15,12 +24,15 @@ export const getGradesReport = async (req, res, next) => {
       });
     }
 
-    // Verificar acceso al curso
+    // Verificar acceso al curso y cargar año lectivo para institución
     const courseFilter = await getCourseInstitutionFilter(req, prisma);
     const course = await prisma.course.findFirst({
       where: {
         id: cursoId,
         ...courseFilter,
+      },
+      include: {
+        anioLectivo: { select: { institucionId: true } },
       },
     });
 
@@ -168,6 +180,49 @@ export const getGradesReport = async (req, res, next) => {
       ],
     });
 
+    // Resolver configuración de redondeo/truncamiento por período (obligatoria)
+    const periodIdsFromGrades = [...new Set(grades.flatMap(g => {
+      const p = g.subPeriodo?.periodo || g.insumo?.subPeriodo?.periodo;
+      return p?.id ? [p.id] : [];
+    }))];
+    const institutionId = course.anioLectivo?.institucionId;
+    let periodConfigMap = {};
+    if (periodIdsFromGrades.length > 0 && institutionId) {
+      try {
+        const institution = await prisma.institution.findUnique({
+          where: { id: institutionId },
+          select: {
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        const periods = await prisma.period.findMany({
+          where: { id: { in: periodIdsFromGrades } },
+          select: {
+            id: true,
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        periodIdsFromGrades.forEach(pid => {
+          const period = periods.find(p => p.id === pid);
+          periodConfigMap[pid] = getEffectiveGradeRoundingConfigFromEntities(institution, period);
+        });
+      } catch (err) {
+        if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+          return res.status(400).json({
+            error: err.message,
+            code: err.code,
+          });
+        }
+        throw err;
+      }
+    }
+
     // Crear estructura de tabla cruzada
     const pivotData = {};
     const columnsMap = new Map(); // Usar Map para guardar información de orden
@@ -275,34 +330,31 @@ export const getGradesReport = async (req, res, next) => {
       }
     });
     
-    // Calcular promedios para cada fila
+    // Calcular promedios para cada fila usando configuración efectiva por período
     Object.values(pivotData).forEach(row => {
-      // Calcular promedios por subperíodo usando función centralizada
       row.promediosSubPeriodo = {};
       Object.entries(row.subPeriodoGrades).forEach(([subPeriodoId, data]) => {
         if (data.calificaciones.length > 0) {
-          const promedio = calculateSubPeriodAverage(data.calificaciones);
-          // NO truncar promedioPonderado aquí para evitar acumulación de errores
-          const promedioPonderado = promedio * (data.ponderacion / 100);
+          const roundingConfig = data.periodoId ? periodConfigMap[data.periodoId] : undefined;
+          const promedio = calculateSubPeriodAverage(data.calificaciones, roundingConfig);
+          const promedioPonderadoRaw = promedio * (data.ponderacion / 100);
+          const promedioPonderado = roundingConfig
+            ? applyDecimalStrategy(promedioPonderadoRaw, roundingConfig.decimals, roundingConfig.weightedMethod)
+            : promedioPonderadoRaw;
           row.promediosSubPeriodo[subPeriodoId] = {
-            promedio: promedio,
-            promedioPonderado: promedioPonderado, // Sin truncate
+            promedio,
+            promedioPonderado,
             nombre: data.nombre,
             ponderacion: data.ponderacion,
           };
         }
       });
-      
-      // Calcular promedios por período usando función centralizada
+
       row.promediosPeriodo = {};
       Object.entries(row.periodoGrades).forEach(([periodoId, data]) => {
-        // Obtener todos los subperíodos que pertenecen a este período
         const subPeriodAveragesForPeriod = {};
-        
         Object.entries(row.subPeriodoGrades).forEach(([subPeriodoId, subData]) => {
-          // Verificar si este subperíodo pertenece al período actual usando la relación guardada
           if (subData.periodoId === periodoId) {
-            // Buscar el promedio calculado para este subperíodo
             const subPromedio = row.promediosSubPeriodo[subPeriodoId];
             if (subPromedio) {
               subPeriodAveragesForPeriod[subPeriodoId] = {
@@ -312,25 +364,26 @@ export const getGradesReport = async (req, res, next) => {
             }
           }
         });
-        
+        const roundingConfig = periodConfigMap[periodoId];
         const { promedio, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
           subPeriodAveragesForPeriod,
-          data.ponderacion
+          data.ponderacion,
+          roundingConfig
         );
-        
         row.promediosPeriodo[periodoId] = {
-          promedio: promedio,
-          promedioPonderado: promedioPonderado, // Ya viene sin truncate de la función
+          promedio,
+          promedioPonderado,
           nombre: data.nombre,
           ponderacion: data.ponderacion,
         };
       });
-      
-      // Calcular promedio general usando función centralizada
+
       const periodosCalculados = Object.values(row.promediosPeriodo);
+      const firstPeriodId = periodosCalculados.length > 0 ? Object.keys(row.promediosPeriodo)[0] : null;
+      const roundingConfigGeneral = firstPeriodId ? periodConfigMap[firstPeriodId] : undefined;
       if (periodosCalculados.length > 0) {
         const promediosPonderados = periodosCalculados.map(p => p.promedioPonderado);
-        row.promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados);
+        row.promedioGeneral = calculateGeneralAverageFromPeriods(promediosPonderados, roundingConfigGeneral);
       } else {
         row.promedioGeneral = null;
       }
@@ -471,12 +524,15 @@ export const getAveragesReport = async (req, res, next) => {
       });
     }
 
-    // Verificar acceso al curso
+    // Verificar acceso al curso y cargar año lectivo para institución
     const courseFilter = await getCourseInstitutionFilter(req, prisma);
     const course = await prisma.course.findFirst({
       where: {
         id: cursoId,
         ...courseFilter,
+      },
+      include: {
+        anioLectivo: { select: { institucionId: true } },
       },
     });
 
@@ -632,6 +688,49 @@ export const getAveragesReport = async (req, res, next) => {
       ],
     });
 
+    // Resolver configuración de redondeo/truncamiento por período (obligatoria)
+    const periodIdsFromGrades = [...new Set(grades.flatMap(g => {
+      const p = g.subPeriodo?.periodo || g.insumo?.subPeriodo?.periodo;
+      return p?.id ? [p.id] : [];
+    }))];
+    const institutionIdAverages = course.anioLectivo?.institucionId;
+    let periodConfigMapAverages = {};
+    if (periodIdsFromGrades.length > 0 && institutionIdAverages) {
+      try {
+        const institution = await prisma.institution.findUnique({
+          where: { id: institutionIdAverages },
+          select: {
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        const periods = await prisma.period.findMany({
+          where: { id: { in: periodIdsFromGrades } },
+          select: {
+            id: true,
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        periodIdsFromGrades.forEach(pid => {
+          const period = periods.find(p => p.id === pid);
+          periodConfigMapAverages[pid] = getEffectiveGradeRoundingConfigFromEntities(institution, period);
+        });
+      } catch (err) {
+        if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+          return res.status(400).json({
+            error: err.message,
+            code: err.code,
+          });
+        }
+        throw err;
+      }
+    }
+
     // Crear estructura de datos similar a getGradesReport pero sin insumos
     const pivotData = {};
     
@@ -689,7 +788,7 @@ export const getAveragesReport = async (req, res, next) => {
       }
     });
 
-    // Calcular promedios y crear estructura final
+    // Calcular promedios y crear estructura final usando configuración efectiva por período
     const averages = [];
     const subPeriodsMap = new Map();
     const periodsMap = new Map();
@@ -698,35 +797,34 @@ export const getAveragesReport = async (req, res, next) => {
       const promediosSubPeriodo = {};
       const promediosPeriodo = {};
       
-      // Calcular promedios por subperíodo usando función centralizada
+      // Calcular promedios por subperíodo
       Object.keys(row.subPeriodoGrades).forEach(subPeriodoId => {
         const calificaciones = row.subPeriodoGrades[subPeriodoId];
         if (calificaciones.length > 0) {
-          const promedio = calculateSubPeriodAverage(calificaciones);
-          
-          // Obtener información del subperíodo para ponderación
           const grade = grades.find(g => {
             const subPeriodo = g.subPeriodo || g.insumo?.subPeriodo;
             return subPeriodo?.id === subPeriodoId;
           });
-          
           const subPeriodo = grade?.subPeriodo || grade?.insumo?.subPeriodo;
           const periodo = subPeriodo?.periodo;
           
           if (subPeriodo) {
+            const roundingConfig = periodo?.id ? periodConfigMapAverages[periodo.id] : undefined;
+            const promedio = calculateSubPeriodAverage(calificaciones, roundingConfig);
             const ponderacion = subPeriodo.ponderacion || 0;
-            // NO truncar promedioPonderado aquí para evitar acumulación de errores
-            const promedioPonderado = promedio * (ponderacion / 100);
+            const promedioPonderadoRaw = promedio * (ponderacion / 100);
+            const promedioPonderado = roundingConfig
+              ? applyDecimalStrategy(promedioPonderadoRaw, roundingConfig.decimals, roundingConfig.weightedMethod)
+              : promedioPonderadoRaw;
             
             promediosSubPeriodo[subPeriodoId] = {
-              promedio: promedio,
-              promedioPonderado: promedioPonderado, // Sin truncate
+              promedio,
+              promedioPonderado,
               subPeriodoNombre: subPeriodo.nombre,
               subPeriodoOrden: subPeriodo.orden ?? 999,
-              ponderacion: ponderacion,
+              ponderacion,
             };
             
-            // Guardar información del subperíodo para estructura de períodos
             if (!subPeriodsMap.has(subPeriodoId)) {
               subPeriodsMap.set(subPeriodoId, {
                 subPeriodoId,
@@ -743,22 +841,18 @@ export const getAveragesReport = async (req, res, next) => {
         }
       });
       
-      // Calcular promedios por período usando función centralizada
+      // Calcular promedios por período
       Object.keys(row.periodoGrades).forEach(periodoId => {
-        // Obtener todos los subperíodos que pertenecen a este período
         const subPeriodAveragesForPeriod = {};
         
         Object.keys(row.subPeriodoGrades).forEach(subPeriodoId => {
-          // Obtener información del subperíodo para verificar a qué período pertenece
           const grade = grades.find(g => {
             const subPeriodo = g.subPeriodo || g.insumo?.subPeriodo;
             return subPeriodo?.id === subPeriodoId;
           });
-          
           const subPeriodo = grade?.subPeriodo || grade?.insumo?.subPeriodo;
           const periodo = subPeriodo?.periodo;
           
-          // Verificar si este subperíodo pertenece al período actual
           if (periodo?.id === periodoId) {
             const subPromedio = promediosSubPeriodo[subPeriodoId];
             if (subPromedio) {
@@ -770,28 +864,27 @@ export const getAveragesReport = async (req, res, next) => {
           }
         });
         
-        // Obtener información del período para ponderación
-        const grade = grades.find(g => {
+        const gradeForPeriod = grades.find(g => {
           const periodo = (g.subPeriodo || g.insumo?.subPeriodo)?.periodo;
           return periodo?.id === periodoId;
         });
-        
-        const periodo = (grade?.subPeriodo || grade?.insumo?.subPeriodo)?.periodo;
+        const periodo = (gradeForPeriod?.subPeriodo || gradeForPeriod?.insumo?.subPeriodo)?.periodo;
         
         if (periodo) {
           const ponderacion = periodo.ponderacion || 0;
+          const roundingConfig = periodConfigMapAverages[periodoId];
           const { promedio, promedioPonderado } = calculatePeriodAverageFromSubPeriods(
             subPeriodAveragesForPeriod,
-            ponderacion
+            ponderacion,
+            roundingConfig
           );
           
           promediosPeriodo[periodoId] = {
-            promedio: promedio,
-            promedioPonderado: promedioPonderado,
+            promedio,
+            promedioPonderado,
             nombre: periodo.nombre,
           };
           
-          // Guardar información del período
           if (!periodsMap.has(periodoId)) {
             periodsMap.set(periodoId, {
               periodoId,
@@ -803,10 +896,11 @@ export const getAveragesReport = async (req, res, next) => {
         }
       });
       
-      // Calcular promedio general usando función centralizada
       const periodAverages = Object.values(promediosPeriodo);
+      const firstPeriodId = periodAverages.length > 0 ? Object.keys(promediosPeriodo)[0] : null;
+      const roundingConfigGeneral = firstPeriodId ? periodConfigMapAverages[firstPeriodId] : undefined;
       const promedioGeneral = periodAverages.length > 0
-        ? calculateGeneralAverageFromPeriods(periodAverages.map(p => p.promedioPonderado))
+        ? calculateGeneralAverageFromPeriods(periodAverages.map(p => p.promedioPonderado), roundingConfigGeneral)
         : null;
       
       averages.push({
@@ -995,12 +1089,14 @@ export const getPerformanceReport = async (req, res, next) => {
       });
     }
 
-    // Verificar acceso al curso
     const courseFilter = await getCourseInstitutionFilter(req, prisma);
     const course = await prisma.course.findFirst({
       where: {
         id: cursoId,
         ...courseFilter,
+      },
+      include: {
+        anioLectivo: { select: { institucionId: true } },
       },
     });
 
@@ -1010,7 +1106,6 @@ export const getPerformanceReport = async (req, res, next) => {
       });
     }
 
-    // Obtener estudiantes del curso
     const students = await prisma.student.findMany({
       where: {
         grupoId: cursoId,
@@ -1047,9 +1142,58 @@ export const getPerformanceReport = async (req, res, next) => {
         },
       });
 
-      const promedioGeneral = grades.length > 0
-        ? Math.floor((grades.reduce((a, b) => a + b.calificacion, 0) / grades.length) * 100) / 100
-        : 0;
+      let promedioGeneral = 0;
+      if (grades.length > 0) {
+        const raw = grades.reduce((a, b) => a + b.calificacion, 0) / grades.length;
+        if (periodoId && course.anioLectivo?.institucionId) {
+          try {
+            const config = await getEffectiveGradeRoundingConfigFromEntities(
+              await prisma.institution.findUnique({
+                where: { id: course.anioLectivo.institucionId },
+                select: {
+                  gradeRoundingSubPeriodMethod: true,
+                  gradeRoundingWeightedMethod: true,
+                  gradeRoundingPeriodWeightedMethod: true,
+                  gradeDecimals: true,
+                },
+              }),
+              await prisma.period.findUnique({
+                where: { id: periodoId },
+                select: {
+                  gradeRoundingSubPeriodMethod: true,
+                  gradeRoundingWeightedMethod: true,
+                  gradeRoundingPeriodWeightedMethod: true,
+                  gradeDecimals: true,
+                },
+              })
+            );
+            promedioGeneral = applyDecimalStrategy(raw, config.decimals, config.subPeriodMethod);
+          } catch (err) {
+            if (err.code === ERROR_MISSING_GRADE_ROUNDING_CONFIG) {
+              return res.status(400).json({ error: err.message, code: err.code });
+            }
+            promedioGeneral = Math.floor(raw * 100) / 100;
+          }
+        } else if (course.anioLectivo?.institucionId) {
+          try {
+            const institution = await prisma.institution.findUnique({
+              where: { id: course.anioLectivo.institucionId },
+              select: {
+                gradeRoundingSubPeriodMethod: true,
+                gradeRoundingWeightedMethod: true,
+                gradeRoundingPeriodWeightedMethod: true,
+                gradeDecimals: true,
+              },
+            });
+            const config = getEffectiveGradeRoundingConfigFromEntities(institution, null);
+            promedioGeneral = applyDecimalStrategy(raw, config.decimals, config.subPeriodMethod);
+          } catch {
+            promedioGeneral = Math.floor(raw * 100) / 100;
+          }
+        } else {
+          promedioGeneral = Math.floor(raw * 100) / 100;
+        }
+      }
 
       // Calcular porcentaje de asistencia
       const attendanceWhereClause = {

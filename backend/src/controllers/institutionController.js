@@ -15,8 +15,18 @@ export const getInstitutions = async (req, res, next) => {
         id: true,
         nombre: true,
         activa: true,
-        // Solo incluir conteos si hay usuario autenticado
+        // Con usuario autenticado incluir todos los campos para editar (incl. configuración de promedios)
         ...(req.user ? {
+          codigo: true,
+          logo: true,
+          direccion: true,
+          telefono: true,
+          email: true,
+          rector: true,
+          gradeRoundingSubPeriodMethod: true,
+          gradeRoundingWeightedMethod: true,
+          gradeRoundingPeriodWeightedMethod: true,
+          gradeDecimals: true,
           _count: {
             select: {
               aniosLectivos: true,

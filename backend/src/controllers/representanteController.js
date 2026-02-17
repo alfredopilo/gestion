@@ -740,6 +740,7 @@ export const getStudentReportCard = async (req, res, next) => {
         },
         grupo: {
           include: {
+            anioLectivo: { select: { institucionId: true } },
             periodo: {
               include: {
                 subPeriodos: {
@@ -842,8 +843,48 @@ export const getStudentReportCard = async (req, res, next) => {
       ],
     });
 
-    // Importar funciones de cálculo
-    const { calculateWeightedAverage, truncate, getGradeScaleEquivalent } = await import('../utils/gradeCalculations.js');
+    // Resolver configuración de redondeo/truncamiento por período (obligatoria)
+    const periodIdsRep = [...new Set(grades.flatMap(g => {
+      const p = g.subPeriodo?.periodo || g.insumo?.subPeriodo?.periodo;
+      return p?.id ? [p.id] : [];
+    }))];
+    const institutionIdRep = curso.anioLectivo?.institucionId;
+    let periodConfigMapRep = {};
+    if (periodIdsRep.length > 0 && institutionIdRep) {
+      try {
+        const { getEffectiveGradeRoundingConfigFromEntities, ERROR_MISSING_GRADE_ROUNDING_CONFIG: ERR_REP } = await import('../services/gradeRoundingConfigService.js');
+        const institution = await prisma.institution.findUnique({
+          where: { id: institutionIdRep },
+          select: {
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        const periodsRep = await prisma.period.findMany({
+          where: { id: { in: periodIdsRep } },
+          select: {
+            id: true,
+            gradeRoundingSubPeriodMethod: true,
+            gradeRoundingWeightedMethod: true,
+            gradeRoundingPeriodWeightedMethod: true,
+            gradeDecimals: true,
+          },
+        });
+        periodIdsRep.forEach(pid => {
+          const period = periodsRep.find(p => p.id === pid);
+          periodConfigMapRep[pid] = getEffectiveGradeRoundingConfigFromEntities(institution, period);
+        });
+      } catch (err) {
+        if (err.code === 'MISSING_GRADE_ROUNDING_CONFIG') {
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
+        throw err;
+      }
+    }
+
+    const { calculateWeightedAverage, applyDecimalStrategy, getGradeScaleEquivalent } = await import('../utils/gradeCalculations.js');
 
     // Estructurar datos por materia
     const materiasData = materiasConEscala.map(({ materia, gradeScale }) => {
@@ -865,6 +906,9 @@ export const getStudentReportCard = async (req, res, next) => {
         };
       }
 
+      const firstPeriodId = materiaGrades.map(g => g.subPeriodo?.periodo?.id || g.insumo?.subPeriodo?.periodo?.id).find(Boolean);
+      const roundingConfigRep = firstPeriodId ? periodConfigMapRep[firstPeriodId] : undefined;
+
       // Agrupar calificaciones por subperíodo
       const gradesBySubPeriod = {};
       materiaGrades.forEach(grade => {
@@ -878,7 +922,6 @@ export const getStudentReportCard = async (req, res, next) => {
         gradesBySubPeriod[subPeriodId].grades.push(grade);
       });
 
-      // Calcular promedios por subperíodo
       const promediosSubPeriodo = {};
       const promediosPeriodo = {};
       let promedioGeneral = null;
@@ -887,10 +930,12 @@ export const getStudentReportCard = async (req, res, next) => {
         const { subPeriodo, grades: subPeriodGrades } = gradesBySubPeriod[subPeriodId];
         if (subPeriodGrades.length > 0) {
           const suma = subPeriodGrades.reduce((acc, g) => acc + g.calificacion, 0);
-          const promedio = truncate(suma / subPeriodGrades.length);
+          const raw = suma / subPeriodGrades.length;
+          const promedio = roundingConfigRep
+            ? applyDecimalStrategy(raw, roundingConfigRep.decimals, roundingConfigRep.subPeriodMethod)
+            : Math.floor(raw * 100) / 100;
           promediosSubPeriodo[subPeriodo?.nombre || 'General'] = promedio;
           
-          // Agrupar por período
           if (subPeriodo?.periodo) {
             const periodoNombre = subPeriodo.periodo.nombre;
             if (!promediosPeriodo[periodoNombre]) {
@@ -905,20 +950,21 @@ export const getStudentReportCard = async (req, res, next) => {
         }
       });
 
-      // Calcular promedio general ponderado
       const allGradesWithSubPeriod = materiaGrades.filter(g => g.subPeriodo || g.insumo?.subPeriodo);
       if (allGradesWithSubPeriod.length > 0) {
-        const weighted = calculateWeightedAverage(allGradesWithSubPeriod);
+        const weighted = calculateWeightedAverage(allGradesWithSubPeriod, roundingConfigRep);
         promedioGeneral = weighted.promedioFinal;
       } else if (materiaGrades.length > 0) {
         const suma = materiaGrades.reduce((acc, g) => acc + g.calificacion, 0);
-        promedioGeneral = truncate(suma / materiaGrades.length);
+        const raw = suma / materiaGrades.length;
+        promedioGeneral = roundingConfigRep
+          ? applyDecimalStrategy(raw, roundingConfigRep.decimals, roundingConfigRep.subPeriodMethod)
+          : Math.floor(raw * 100) / 100;
       }
 
-      // Obtener equivalente en escala si existe
       let equivalenteGeneral = null;
       if (promedioGeneral !== null && gradeScale) {
-        equivalenteGeneral = getGradeScaleEquivalent(promedioGeneral, gradeScale.detalles);
+        equivalenteGeneral = getGradeScaleEquivalent(gradeScale, promedioGeneral);
       }
 
       return {
@@ -936,12 +982,19 @@ export const getStudentReportCard = async (req, res, next) => {
       };
     });
 
-    // Calcular promedio general de todas las materias
     const promediosMaterias = materiasData
       .map(m => m.promedioGeneral)
       .filter(p => p !== null);
+    const firstPidRep = Object.keys(periodConfigMapRep)[0];
+    const cfgRep = firstPidRep ? periodConfigMapRep[firstPidRep] : undefined;
     const promedioGeneral = promediosMaterias.length > 0
-      ? truncate(promediosMaterias.reduce((acc, p) => acc + p, 0) / promediosMaterias.length)
+      ? (cfgRep
+          ? applyDecimalStrategy(
+              promediosMaterias.reduce((acc, p) => acc + p, 0) / promediosMaterias.length,
+              cfgRep.decimals,
+              cfgRep.periodWeightedMethod
+            )
+          : Math.floor((promediosMaterias.reduce((acc, p) => acc + p, 0) / promediosMaterias.length) * 100) / 100)
       : null;
 
     res.json({
