@@ -226,7 +226,9 @@ resolve_failed_as_applied() {
 }
 
 # Resolver migraciones fallidas existentes antes del primer deploy (p. ej. P3009)
-if echo "$migration_status" | grep -qE "failed migrations|P3009|failed"; then
+# Nota: buscamos P3009 o "failed migrations" específico, NO solo "failed" para evitar
+# falsos positivos del error de shadow database (P3006).
+if echo "$migration_status" | grep -qE "P3009|failed migrations|have failed"; then
     print_warning "Se detectaron migraciones fallidas, marcándolas como aplicadas..."
     resolve_failed_as_applied || true
 fi
@@ -283,6 +285,14 @@ done
 if [ "$deploy_ok" != "true" ]; then
     print_error "No se pudieron aplicar todas las migraciones tras $max_deploy_attempts intentos"
     exit 1
+fi
+
+# Sincronizar índices y cambios de schema que no tienen archivo de migración
+print_info "Sincronizando schema completo (índices de rendimiento)..."
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma db push --skip-generate 2>&1; then
+    print_success "Schema sincronizado con la base de datos"
+else
+    print_warning "db push tuvo advertencias, continuando..."
 fi
 
 # ============================================

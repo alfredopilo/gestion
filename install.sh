@@ -283,10 +283,10 @@ fi
 
 # Verificar estado de migraciones antes de aplicar
 print_info "Verificando estado de migraciones..."
-migration_status_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1)
+migration_status_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1) || true
 
-# Verificar si hay migraciones fallidas
-if echo "$migration_status_output" | grep -q "failed migrations\|P3009"; then
+# Verificar si hay migraciones fallidas (P3009 específico, no solo "failed")
+if echo "$migration_status_output" | grep -q "P3009\|failed migrations"; then
     print_warning "Se detectaron migraciones fallidas"
     if resolve_failed_migrations; then
         print_success "Migraciones fallidas resueltas"
@@ -330,6 +330,14 @@ if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate status 2>&1 | grep -qE
     print_success "Base de datos sincronizada correctamente"
 else
     print_warning "Verifica el estado de las migraciones manualmente"
+fi
+
+# Sincronizar índices y cambios de schema que no tienen archivo de migración
+print_info "Sincronizando schema completo (índices de rendimiento)..."
+if $DOCKER_COMPOSE_CMD exec -T backend npx prisma db push --skip-generate 2>&1; then
+    print_success "Schema sincronizado con la base de datos"
+else
+    print_warning "db push tuvo advertencias, continuando..."
 fi
 
 # Poblar base de datos con datos iniciales (seed)
