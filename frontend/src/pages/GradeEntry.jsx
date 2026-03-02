@@ -3,8 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
-
 const GradeEntry = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -890,12 +888,13 @@ const GradeEntry = () => {
     setImportData(template);
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     if (students.length === 0 || insumos.length === 0) {
       toast.error('No hay estudiantes o insumos para generar la plantilla');
       return;
     }
 
+    const XLSX = await import('xlsx');
     // Crear encabezados (Identificación primero)
     const headers = ['Identificación', 'Estudiante', ...insumos.map(i => i.nombre)];
     const rows = [headers];
@@ -956,12 +955,13 @@ const GradeEntry = () => {
 
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data, { type: 'array' });
-      
+
       // Obtener la primera hoja
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
-      
+
       // Convertir a array de arrays
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
       

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import * as XLSX from 'xlsx';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -217,12 +216,13 @@ const CourseDetail = () => {
     try {
       // Leer el archivo Excel
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data, { type: 'array' });
-      
+
       // Obtener la primera hoja
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
-      
+
       // Convertir la hoja a JSON
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 

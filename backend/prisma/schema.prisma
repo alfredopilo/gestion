@@ -25,6 +25,8 @@ model Attendance {
   materia       Subject?         @relation(fields: [materiaId], references: [id], onDelete: Cascade)
 
   @@unique([estudianteId, fecha, cursoId, materiaId, hora])
+  @@index([fecha])
+  @@index([estudianteId, fecha])
   @@map("attendance")
 }
 
@@ -86,6 +88,8 @@ model Course {
   estudiantes                Student[]
   mensajes                   Mensaje[]
 
+  @@index([anioLectivoId])
+  @@index([nivelId])
   @@map("courses")
 }
 
@@ -373,6 +377,8 @@ model Student {
   notificaciones  Notification[]
   tareas          TareaEntrega[]
 
+  @@index([grupoId])
+  @@index([representanteId])
   @@map("students")
 }
 
@@ -396,6 +402,7 @@ model Enrollment {
   withdrawals     StudentWithdrawal[]
 
   @@unique([institucionId, anioLectivoId, matricula])
+  @@index([institucionId, anioLectivoId])
   @@map("enrollments")
 }
 
@@ -583,6 +590,8 @@ model User {
   institucion          Institution       @relation("InstitutionUsuarios", fields: [institucionId], references: [id], onDelete: Cascade)
 
   @@unique([numeroIdentificacion, institucionId])
+  @@index([institucionId])
+  @@index([rol])
   @@map("users")
 }
 

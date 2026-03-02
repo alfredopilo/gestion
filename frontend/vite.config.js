@@ -9,9 +9,11 @@ export default defineConfig({
       output: {
         // Separar vendors en chunks para mejor caching
         manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui-vendor': ['react-hot-toast'],
-          'utils-vendor': ['axios'],
+          'react-vendor':  ['react', 'react-dom', 'react-router-dom'],
+          'ui-vendor':     ['react-hot-toast', 'recharts'],
+          'utils-vendor':  ['axios', 'date-fns'],
+          'export-xlsx':   ['xlsx', 'xlsx-js-style'],
+          'export-pdf':    ['jspdf', 'jspdf-autotable'],
         },
       },
     },

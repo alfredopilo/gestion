@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
 import StudentWithdrawalModal from '../components/StudentWithdrawalModal';
 import StudentReactivationModal from '../components/StudentReactivationModal';
 
@@ -250,6 +249,7 @@ const Students = () => {
     try {
       // Leer el archivo Excel
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data, { type: 'array' });
       
       // Obtener la primera hoja
@@ -338,6 +338,7 @@ const Students = () => {
       const formData = new FormData();
       
       // Recrear el archivo Excel desde bulkPreview
+      const XLSX = await import('xlsx');
       const workbook = XLSX.utils.book_new();
       const headers = Object.keys(bulkPreview[0]);
       const data = [

@@ -17,9 +17,11 @@ if (!process.env.JWT_SECRET) {
 }
 
 import express from 'express';
+import compression from 'compression';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import routes from './routes/index.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -62,6 +64,19 @@ const swaggerOptions = {
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const app = express();
+
+// Comprimir respuestas HTTP (gzip) — reduce tamaño de payload ~70%
+app.use(compression({ level: 6, threshold: 1024 }));
+
+// Rate limit global: 300 req/min por IP
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intente nuevamente en un momento.' },
+});
+app.use('/api/', globalLimiter);
 
 // CORS: con credentials: true no se puede usar '*'; hay que devolver el origen concreto.
 // Reflejamos el origen de la petición para que login y cookies funcionen desde cualquier puerto local.

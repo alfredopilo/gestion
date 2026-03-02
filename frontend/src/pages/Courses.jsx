@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
-
 const Courses = () => {
   const [courses, setCourses] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -183,6 +181,7 @@ const Courses = () => {
     setImportError('');
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
@@ -264,6 +263,7 @@ const Courses = () => {
     setImportError('');
 
     try {
+      const XLSX = await import('xlsx');
       const workbook = XLSX.utils.book_new();
       const headers = ['nombre', 'nivel', 'paralelo', 'capacidad', 'sortOrder'];
       const data = [headers, ...importPreview.map(item => [

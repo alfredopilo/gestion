@@ -10,6 +10,14 @@ let maintenanceCache = {
   ttl: 5000,
 };
 
+// Cache de permisos por rol (TTL 5 minutos) — evita query repetida por request
+const permissionsCache = new Map(); // rol → { perms: [], ts: number }
+const PERMS_TTL = 5 * 60 * 1000;
+
+// Cache de institución activa (TTL 30 segundos)
+let activeInstitutionCache = { value: null, ts: 0 };
+const INST_TTL = 30 * 1000;
+
 /**
  * Verificar si el modo mantenimiento está activo (con cache)
  */
@@ -129,15 +137,20 @@ export const authenticate = async (req, res, next) => {
         accessibleInstitutionIds.add(userRecord.institucionId);
       }
 
-      // Cargar permisos del rol del usuario
-      const rolePermissions = await prisma.rolePermission.findMany({
-        where: { rol: userRecord.rol },
-        include: {
-          permission: true,
-        },
-      });
-
-      const permissions = rolePermissions.map(rp => rp.permission);
+      // Cargar permisos del rol del usuario (con cache por TTL)
+      const now = Date.now();
+      const cachedPerms = permissionsCache.get(userRecord.rol);
+      let permissions;
+      if (cachedPerms && now - cachedPerms.ts < PERMS_TTL) {
+        permissions = cachedPerms.perms;
+      } else {
+        const rolePermissions = await prisma.rolePermission.findMany({
+          where: { rol: userRecord.rol },
+          include: { permission: true },
+        });
+        permissions = rolePermissions.map(rp => rp.permission);
+        permissionsCache.set(userRecord.rol, { perms: permissions, ts: now });
+      }
 
       req.user = {
         id: userRecord.id,
@@ -153,14 +166,17 @@ export const authenticate = async (req, res, next) => {
         permissions,
       };
 
-      // Obtener institución activa del sistema
-      const activeInstitution = await prisma.institution.findFirst({
-        where: { activa: true },
-        select: {
-          id: true,
-          nombre: true,
-        },
-      });
+      // Obtener institución activa del sistema (con cache por TTL)
+      let activeInstitution;
+      if (activeInstitutionCache.value !== null && now - activeInstitutionCache.ts < INST_TTL) {
+        activeInstitution = activeInstitutionCache.value;
+      } else {
+        activeInstitution = await prisma.institution.findFirst({
+          where: { activa: true },
+          select: { id: true, nombre: true },
+        });
+        activeInstitutionCache = { value: activeInstitution, ts: now };
+      }
 
       // Verificar si hay una institución seleccionada en el header
       const selectedInstitutionId = req.headers['x-institution-id'];
