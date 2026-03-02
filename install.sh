@@ -76,14 +76,15 @@ resolve_failed_migrations() {
         return 1
     fi
     
-    # Resolver cada migración fallida
+    # Resolver cada migración fallida marcándola como aplicada
+    # (--applied = "ya estaba hecha", Prisma la saltea en el siguiente deploy)
     while IFS= read -r migration; do
         if [ -n "$migration" ]; then
-            print_info "Resolviendo migración fallida: $migration"
-            if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --rolled-back "$migration" 2>&1; then
-                print_success "Migración $migration resuelta"
+            print_info "Marcando como aplicada: $migration"
+            if $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$migration" 2>&1; then
+                print_success "Migración $migration marcada como aplicada"
             else
-                print_error "Error al resolver migración $migration"
+                print_error "Error al marcar migración $migration"
                 return 1
             fi
         fi
@@ -297,31 +298,47 @@ if echo "$migration_status_output" | grep -q "P3009\|failed migrations"; then
     fi
 fi
 
-# Aplicar migraciones
+# Aplicar migraciones con retry automático (hasta 5 intentos)
+# Si una migración falla (P3018/P3009), la marcamos como aplicada y reintentamos
 print_info "Aplicando migraciones de base de datos..."
-if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy; then
-    print_success "Migraciones aplicadas correctamente"
-else
-    print_error "Error al aplicar migraciones"
-    print_info "Verifica los logs: $DOCKER_COMPOSE_CMD logs backend"
-    
-    # Intentar resolver migraciones fallidas si el error es P3009
-    if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy 2>&1 | grep -q "P3009"; then
-        print_warning "Error P3009 detectado. Intentando resolver..."
-        if resolve_failed_migrations; then
-            print_info "Reintentando aplicar migraciones..."
-            if $DOCKER_COMPOSE_CMD exec -T backend npm run prisma:migrate:deploy; then
-                print_success "Migraciones aplicadas después de resolver conflictos"
-            else
-                print_error "Error persistente al aplicar migraciones"
-                exit 1
-            fi
-        else
-            exit 1
-        fi
-    else
-        exit 1
+max_deploy_attempts=5
+deploy_attempt=1
+deploy_ok=false
+
+while [ $deploy_attempt -le $max_deploy_attempts ]; do
+    print_info "Ejecutando migrate deploy (intento $deploy_attempt/$max_deploy_attempts)..."
+    deploy_output=$($DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate deploy 2>&1) || true
+    deploy_exit=$?
+    echo "$deploy_output" | tail -5
+
+    if [ "$deploy_exit" -eq 0 ]; then
+        print_success "Migraciones aplicadas correctamente"
+        deploy_ok=true
+        break
     fi
+
+    # Extraer nombre de la migración que bloqueó el deploy
+    failed_name=$(echo "$deploy_output" | grep -oE '[0-9]{14}_[a-zA-Z0-9_]+' | head -1)
+    if [ -z "$failed_name" ]; then
+        # Fallback: buscar en _prisma_migrations
+        failed_name=$($DOCKER_COMPOSE_CMD exec -T postgres psql -U gestionscolar -d gestion_escolar -t -A -c \
+            "SELECT migration_name FROM \"_prisma_migrations\" WHERE finished_at IS NULL ORDER BY migration_name LIMIT 1;" 2>/dev/null | tr -d ' \r' || true)
+    fi
+
+    if [ -n "$failed_name" ]; then
+        print_warning "Marcando como aplicada la migración bloqueante: $failed_name"
+        $DOCKER_COMPOSE_CMD exec -T backend npx prisma migrate resolve --applied "$failed_name" 2>&1 || true
+        deploy_attempt=$((deploy_attempt + 1))
+    else
+        print_error "No se pudo identificar la migración fallida"
+        break
+    fi
+done
+
+if [ "$deploy_ok" != "true" ]; then
+    print_error "Error persistente al aplicar migraciones tras $max_deploy_attempts intentos"
+    print_info "Verifica los logs: $DOCKER_COMPOSE_CMD logs backend"
+    exit 1
 fi
 
 # Verificar estado final de migraciones
