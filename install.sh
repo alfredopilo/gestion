@@ -185,9 +185,9 @@ else
 fi
 
 # Crear o actualizar frontend/.env
-print_info "Configurando frontend/.env con VITE_API_URL=http://$server_ip:3000/api/v1"
+print_info "Configurando frontend/.env con VITE_API_URL=http://$server_ip/api/v1"
 mkdir -p frontend
-echo "VITE_API_URL=http://$server_ip:3000/api/v1" > frontend/.env
+echo "VITE_API_URL=http://$server_ip/api/v1" > frontend/.env
 print_success "Archivo frontend/.env creado/actualizado"
 
 # También crear .env en la raíz si no existe (para docker-compose)
@@ -195,16 +195,16 @@ if [ ! -f .env ]; then
     print_info "Creando archivo .env en la raíz del proyecto..."
     cat > .env << EOF
 # Variables de entorno para Docker Compose
-VITE_API_URL=http://$server_ip:3000/api/v1
+VITE_API_URL=http://$server_ip/api/v1
 EOF
     print_success "Archivo .env creado en la raíz"
 else
     # Actualizar VITE_API_URL en .env si existe
     if grep -q "VITE_API_URL" .env; then
-        sed -i.bak "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip:3000/api/v1|" .env
+        sed -i.bak "s|VITE_API_URL=.*|VITE_API_URL=http://$server_ip/api/v1|" .env
         print_success "VITE_API_URL actualizado en .env"
     else
-        echo "VITE_API_URL=http://$server_ip:3000/api/v1" >> .env
+        echo "VITE_API_URL=http://$server_ip/api/v1" >> .env
         print_success "VITE_API_URL agregado a .env"
     fi
 fi
