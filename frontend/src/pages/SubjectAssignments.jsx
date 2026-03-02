@@ -324,7 +324,7 @@ const SubjectAssignments = () => {
                       }
                       return (
                         <option key={course.id} value={course.id}>
-                          {course.nombre} - {course.nivel}
+                          {course.nombre} - {course.nivel?.nombreNivel ?? course.nivel}
                           {course.paralelo ? ` (${course.paralelo})` : ''}
                         </option>
                       );

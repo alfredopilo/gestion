@@ -215,7 +215,7 @@ const StudentReactivationModal = ({ student, onClose, onSuccess }) => {
                 <option value="">Seleccione un curso</option>
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
-                    {course.nombre} - {course.nivel} {course.paralelo ? `(${course.paralelo})` : ''}
+                    {course.nombre} - {course.nivel?.nombreNivel ?? course.nivel} {course.paralelo ? `(${course.paralelo})` : ''}
                   </option>
                 ))}
               </select>

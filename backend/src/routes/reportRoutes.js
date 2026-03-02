@@ -6,6 +6,7 @@ import {
   getPerformanceReport,
   exportToPDF,
 } from '../controllers/reportController.js';
+import { getInspectionReport, getInspectionIndicators, notifyInspectionAlerts } from '../controllers/inspectionController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -19,6 +20,11 @@ router.get('/averages', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), getAvera
 router.get('/attendance', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), getAttendanceReport);
 router.get('/performance', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), getPerformanceReport);
 router.get('/export/pdf', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), exportToPDF);
+
+// Módulo de inspección de asistencia
+router.get('/inspection', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), getInspectionReport);
+router.get('/inspection/indicators', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), getInspectionIndicators);
+router.post('/inspection/notify', authorize(['ADMIN', 'PROFESOR', 'SECRETARIA']), notifyInspectionAlerts);
 
 export default router;
 

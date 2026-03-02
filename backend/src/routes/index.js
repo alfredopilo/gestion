@@ -32,6 +32,7 @@ import settingsRoutes from './settingsRoutes.js';
 import dashboardRoutes from './dashboardRoutes.js';
 import emailConfigRoutes from './emailConfigRoutes.js';
 import mensajeRoutes from './mensajeRoutes.js';
+import nivelRoutes from './nivelRoutes.js';
 
 const router = express.Router();
 
@@ -68,6 +69,7 @@ router.use('/logs', logRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/email-config', emailConfigRoutes);
 router.use('/mensajes', mensajeRoutes);
+router.use('/niveles', nivelRoutes);
 
 export default router;
 

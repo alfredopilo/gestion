@@ -187,6 +187,11 @@ const Layout = () => {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
       </svg>
     ),
+    'Inspección': (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    ),
   };
 
   const navigation = [
@@ -205,6 +210,7 @@ const Layout = () => {
     { name: 'Reportes', href: '/reports', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] },
     { name: 'Boletines', href: '/report-cards', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] },
     { name: 'Asistencia', href: '/attendance', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] },
+    { name: 'Inspección', href: '/inspection', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA'] },
     { name: 'Horarios', href: '/schedule', roles: ['ADMIN', 'PROFESOR', 'SECRETARIA', 'ESTUDIANTE'] },
     { name: 'Pagos', href: '/payments', roles: ['ADMIN', 'SECRETARIA', 'ESTUDIANTE', 'REPRESENTANTE'] },
     { name: 'Promoción Escolar', href: '/school-promotion', roles: ['ADMIN'] },
@@ -336,11 +342,11 @@ const Layout = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar Desktop */}
-      <aside className={`hidden lg:block bg-white border-r border-gray-200 transition-all duration-300 ${
+      <aside className={`hidden lg:block bg-slate-900 border-r border-slate-700/50 transition-all duration-300 ${
         sidebarOpen ? 'w-64' : 'w-20'
       } fixed h-screen z-30`}>
         {/* Header del sidebar con degradado */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-purple-200/50 bg-gradient-to-r from-primary-600 to-purple-700 relative overflow-hidden">
+        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-700/50 bg-gradient-to-r from-primary-700 to-purple-900 relative overflow-hidden">
           {/* Efecto de brillo animado */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
           
@@ -364,15 +370,11 @@ const Layout = () => {
 
         {/* NUEVO: Información de Usuario e Institución - Siempre visible en la parte superior */}
         {sidebarOpen && (
-          <div className="p-4 border-b border-purple-200/50 bg-gradient-to-br from-primary-50 via-purple-50/30 to-white relative overflow-hidden">
-            {/* Decorative gradient blobs */}
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl -z-10" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-500/10 to-transparent rounded-full blur-2xl -z-10" />
-            
+          <div className="p-4 border-b border-slate-700 bg-slate-800/60">
             {/* Selector de Institución */}
             {institutions.length > 0 && (
               <div className="mb-3 relative">
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                   Institución
                 </label>
                 <div className="relative">
@@ -382,15 +384,15 @@ const Layout = () => {
                       const institutionId = e.target.value || null;
                       changeInstitution(institutionId);
                     }}
-                    className="w-full text-sm border-2 border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent hover:border-purple-300 transition-all appearance-none"
+                    className="w-full text-sm border border-slate-600 rounded-lg px-3 py-2 bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent hover:border-primary-500 transition-all appearance-none"
                   >
                     {institutions.map((inst) => (
-                      <option key={inst.id} value={inst.id}>
+                      <option key={inst.id} value={inst.id} className="bg-slate-700">
                         {inst.nombre} {inst.activa && '✓'}
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -398,38 +400,36 @@ const Layout = () => {
                 </div>
               </div>
             )}
-            
+
             {/* Info Usuario */}
             <div className="flex items-center space-x-3 mb-3">
               {/* Avatar con anillo degradado animado */}
               <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+                <div className="w-11 h-11 bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10 text-sm">
                   {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
                 </div>
-                {/* Anillo pulsante */}
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
-                {/* Anillo estático con blur */}
-                <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+                <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 opacity-25 blur-sm -z-10" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-900 truncate">
+                <p className="text-sm font-semibold text-slate-100 truncate">
                   {user?.nombre} {user?.apellido}
                 </p>
-                <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+                <p className="text-xs text-slate-400 truncate">{user?.email}</p>
               </div>
             </div>
-            
+
             {/* Botones Perfil y Cerrar Sesión */}
             <div className="flex gap-2">
-              <Link 
-                to="/profile" 
-                className="flex-1 text-center px-3 py-2 text-xs font-semibold text-primary-700 bg-white border-2 border-primary-300 rounded-lg hover:bg-gradient-to-r hover:from-primary-600 hover:to-purple-600 hover:text-white hover:border-transparent transition-all duration-300 shadow-sm hover:shadow-md"
+              <Link
+                to="/profile"
+                className="flex-1 text-center px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-700 border border-slate-600 rounded-lg hover:bg-primary-600 hover:text-white hover:border-primary-500 transition-all duration-200 shadow-sm"
               >
                 Perfil
               </Link>
-              <button 
+              <button
                 onClick={logout}
-                className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
+                className="flex-1 text-center px-3 py-1.5 text-xs font-semibold text-white bg-red-600/80 rounded-lg hover:bg-red-600 transition-all duration-200 shadow-sm"
                 data-testid="logout-btn"
               >
                 Salir
@@ -440,22 +440,20 @@ const Layout = () => {
 
         {/* Versión colapsada - Solo avatar */}
         {!sidebarOpen && (
-          <div className="py-4 border-b border-purple-200/50 flex justify-center bg-gradient-to-br from-primary-50/50 to-purple-50/30">
+          <div className="py-4 border-b border-slate-700 flex justify-center bg-slate-800">
             <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10 text-sm">
                 {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
               </div>
-              {/* Anillo pulsante */}
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
-              {/* Anillo estático con blur */}
-              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 opacity-25 blur-sm -z-10" />
             </div>
           </div>
         )}
 
         {/* Menú de navegación */}
-        <nav className="flex-1 overflow-y-auto py-4 max-h-[calc(100vh-24rem)] custom-scrollbar">
-          <div className="space-y-1 px-2">
+        <nav className="flex-1 overflow-y-auto py-3 max-h-[calc(100vh-24rem)] sidebar-scrollbar">
+          <div className="space-y-0.5 px-2">
             {filteredNav.map((item) => {
               if (item.children) {
                 const isExpanded = expandedMenus[item.name] || hasActiveChild(item);
@@ -467,29 +465,28 @@ const Layout = () => {
                   <div key={item.name}>
                     <button
                       onClick={() => sidebarOpen && toggleMenu(item.name)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                         hasActiveChild(item)
-                          ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
-                          : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
+                          ? 'bg-primary-500/15 text-primary-300'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`}
                       title={!sidebarOpen ? item.name : ''}
                     >
-                      {/* Borde degradado al hover */}
+                      {/* Borde izquierdo indicador */}
                       {!hasActiveChild(item) && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full" />
                       )}
-                      {/* Borde degradado para item activo */}
                       {hasActiveChild(item) && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                       )}
-                      
+
                       <div className="flex items-center relative z-10">
                         <span className="flex-shrink-0">{icons[item.name]}</span>
                         {sidebarOpen && <span className="ml-3">{item.name}</span>}
                       </div>
                       {sidebarOpen && (
                         <svg
-                          className={`w-4 h-4 transition-transform duration-300 relative z-10 ${isExpanded ? 'transform rotate-90' : ''}`}
+                          className={`w-4 h-4 transition-transform duration-200 relative z-10 text-slate-500 ${isExpanded ? 'transform rotate-90' : ''}`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -499,20 +496,19 @@ const Layout = () => {
                       )}
                     </button>
                     {sidebarOpen && isExpanded && (
-                      <div className="ml-6 mt-1 space-y-1">
+                      <div className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-700 pl-2">
                         {filteredChildren.map((child) => (
                           <Link
                             key={child.name}
                             to={child.href}
-                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-300 relative group ${
+                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                               isActive(child.href)
-                                ? 'bg-gradient-to-r from-primary-50 to-purple-50 text-primary-700'
-                                : 'text-gray-600 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/20 hover:text-gray-900'
+                                ? 'bg-primary-500/15 text-primary-300'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                             }`}
                           >
-                            {/* Indicador de item activo */}
                             {isActive(child.href) && (
-                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-gradient-to-b from-primary-600 to-purple-700 rounded-full" />
+                              <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                             )}
                             <span className="flex-shrink-0">{icons[child.name]}</span>
                             <span className="ml-3">{child.name}</span>
@@ -528,22 +524,21 @@ const Layout = () => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
+                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                     isActive(item.href)
-                      ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
+                      ? 'bg-primary-500/15 text-primary-300'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                   title={!sidebarOpen ? item.name : ''}
                 >
-                  {/* Borde degradado al hover */}
+                  {/* Borde izquierdo indicador */}
                   {!isActive(item.href) && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full" />
                   )}
-                  {/* Borde degradado para item activo */}
                   {isActive(item.href) && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                   )}
-                  
+
                   <span className="flex-shrink-0 relative z-10">{icons[item.name]}</span>
                   {sidebarOpen && <span className="ml-3 relative z-10">{item.name}</span>}
                 </Link>
@@ -562,11 +557,11 @@ const Layout = () => {
       )}
 
       {/* Sidebar móvil - se muestra sobre el contenido */}
-      <aside className={`lg:hidden fixed left-0 top-0 h-full bg-white border-r border-gray-200 transition-transform duration-300 z-30 ${
+      <aside className={`lg:hidden fixed left-0 top-0 h-full bg-slate-900 border-r border-slate-700/50 transition-transform duration-300 z-30 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } w-64`}>
         {/* Header del sidebar móvil con degradado */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-purple-200/50 bg-gradient-to-r from-primary-600 to-purple-700 relative overflow-hidden">
+        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-700/50 bg-gradient-to-r from-primary-700 to-purple-900 relative overflow-hidden">
           {/* Efecto de brillo animado */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
           
@@ -582,15 +577,11 @@ const Layout = () => {
         </div>
 
         {/* Información de Usuario e Institución Móvil */}
-        <div className="p-4 border-b border-purple-200/50 bg-gradient-to-br from-primary-50 via-purple-50/30 to-white relative overflow-hidden">
-          {/* Decorative gradient blobs */}
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl -z-10" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-blue-500/10 to-transparent rounded-full blur-2xl -z-10" />
-          
+        <div className="p-4 border-b border-slate-700 bg-slate-800/60">
           {/* Selector de Institución */}
           {institutions.length > 0 && (
             <div className="mb-3 relative">
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                 Institución
               </label>
               <div className="relative">
@@ -600,15 +591,15 @@ const Layout = () => {
                     const institutionId = e.target.value || null;
                     changeInstitution(institutionId);
                   }}
-                  className="w-full text-sm border-2 border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent hover:border-purple-300 transition-all appearance-none"
+                  className="w-full text-sm border border-slate-600 rounded-lg px-3 py-2 bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent hover:border-primary-500 transition-all appearance-none"
                 >
                   {institutions.map((inst) => (
-                    <option key={inst.id} value={inst.id}>
+                    <option key={inst.id} value={inst.id} className="bg-slate-700">
                       {inst.nombre} {inst.activa && '✓'}
                     </option>
                   ))}
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -616,39 +607,36 @@ const Layout = () => {
               </div>
             </div>
           )}
-          
+
           {/* Info Usuario */}
           <div className="flex items-center space-x-3 mb-3">
-            {/* Avatar con anillo degradado animado */}
             <div className="relative">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10">
+              <div className="w-11 h-11 bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg relative z-10 text-sm">
                 {user?.nombre?.charAt(0)}{user?.apellido?.charAt(0)}
               </div>
-              {/* Anillo pulsante */}
-              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
-              {/* Anillo estático con blur */}
-              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 opacity-30 blur-sm -z-10" />
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 animate-ping opacity-20" />
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-primary-500 via-purple-600 to-pink-600 opacity-25 blur-sm -z-10" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900 truncate">
+              <p className="text-sm font-semibold text-slate-100 truncate">
                 {user?.nombre} {user?.apellido}
               </p>
-              <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+              <p className="text-xs text-slate-400 truncate">{user?.email}</p>
             </div>
           </div>
-          
+
           {/* Botones Perfil y Cerrar Sesión */}
           <div className="flex gap-2">
-            <Link 
+            <Link
               to="/profile"
               onClick={() => setSidebarOpen(false)}
-              className="flex-1 text-center px-3 py-2 text-xs font-semibold text-primary-700 bg-white border-2 border-primary-300 rounded-lg hover:bg-gradient-to-r hover:from-primary-600 hover:to-purple-600 hover:text-white hover:border-transparent transition-all duration-300 shadow-sm hover:shadow-md"
+              className="flex-1 text-center px-3 py-1.5 text-xs font-semibold text-slate-200 bg-slate-700 border border-slate-600 rounded-lg hover:bg-primary-600 hover:text-white hover:border-primary-500 transition-all duration-200 shadow-sm"
             >
               Perfil
             </Link>
-            <button 
+            <button
               onClick={logout}
-              className="flex-1 text-center px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 shadow-sm hover:shadow-md"
+              className="flex-1 text-center px-3 py-1.5 text-xs font-semibold text-white bg-red-600/80 rounded-lg hover:bg-red-600 transition-all duration-200 shadow-sm"
               data-testid="logout-btn"
             >
               Salir
@@ -657,8 +645,8 @@ const Layout = () => {
         </div>
 
         {/* Menú de navegación móvil */}
-        <nav className="flex-1 overflow-y-auto py-4 max-h-[calc(100vh-24rem)] custom-scrollbar">
-          <div className="space-y-1 px-2">
+        <nav className="flex-1 overflow-y-auto py-3 max-h-[calc(100vh-24rem)] sidebar-scrollbar">
+          <div className="space-y-0.5 px-2">
             {filteredNav.map((item) => {
               if (item.children) {
                 const isExpanded = expandedMenus[item.name] || hasActiveChild(item);
@@ -670,27 +658,25 @@ const Layout = () => {
                   <div key={item.name}>
                     <button
                       onClick={() => toggleMenu(item.name)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                         hasActiveChild(item)
-                          ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
-                          : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
+                          ? 'bg-primary-500/15 text-primary-300'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`}
                     >
-                      {/* Borde degradado al hover */}
                       {!hasActiveChild(item) && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full" />
                       )}
-                      {/* Borde degradado para item activo */}
                       {hasActiveChild(item) && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                        <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                       )}
-                      
+
                       <div className="flex items-center relative z-10">
                         <span className="flex-shrink-0">{icons[item.name]}</span>
                         <span className="ml-3">{item.name}</span>
                       </div>
                       <svg
-                        className={`w-4 h-4 transition-transform duration-300 relative z-10 ${isExpanded ? 'transform rotate-90' : ''}`}
+                        className={`w-4 h-4 transition-transform duration-200 relative z-10 text-slate-500 ${isExpanded ? 'transform rotate-90' : ''}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -699,21 +685,20 @@ const Layout = () => {
                       </svg>
                     </button>
                     {isExpanded && (
-                      <div className="ml-6 mt-1 space-y-1">
+                      <div className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-700 pl-2">
                         {filteredChildren.map((child) => (
                           <Link
                             key={child.name}
                             to={child.href}
                             onClick={() => setSidebarOpen(false)}
-                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-300 relative group ${
+                            className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                               isActive(child.href)
-                                ? 'bg-gradient-to-r from-primary-50 to-purple-50 text-primary-700'
-                                : 'text-gray-600 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/20 hover:text-gray-900'
+                                ? 'bg-primary-500/15 text-primary-300'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                             }`}
                           >
-                            {/* Indicador de item activo */}
                             {isActive(child.href) && (
-                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-gradient-to-b from-primary-600 to-purple-700 rounded-full" />
+                              <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                             )}
                             <span className="flex-shrink-0">{icons[child.name]}</span>
                             <span className="ml-3">{child.name}</span>
@@ -730,21 +715,19 @@ const Layout = () => {
                   key={item.name}
                   to={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 relative overflow-hidden group ${
+                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative group ${
                     isActive(item.href)
-                      ? 'bg-gradient-to-r from-primary-100 to-purple-100 text-primary-700 shadow-sm'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-purple-50/30 hover:text-gray-900'
+                      ? 'bg-primary-500/15 text-primary-300'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  {/* Borde degradado al hover */}
                   {!isActive(item.href) && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-lg" />
+                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-full" />
                   )}
-                  {/* Borde degradado para item activo */}
                   {isActive(item.href) && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary-600 to-purple-700 rounded-l-lg" />
+                    <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary-400 rounded-full" />
                   )}
-                  
+
                   <span className="flex-shrink-0 relative z-10">{icons[item.name]}</span>
                   <span className="ml-3 relative z-10">{item.name}</span>
                 </Link>

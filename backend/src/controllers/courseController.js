@@ -112,7 +112,11 @@ export const getCourses = async (req, res, next) => {
         });
       }
     }
-    if (nivel) where.nivel = nivel;
+    if (nivel) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nivel);
+      if (isUuid) where.nivelId = nivel;
+      else where.nivel = { nombreNivel: nivel };
+    }
     if (docenteId) where.docenteId = docenteId;
 
     const [courses, total] = await Promise.all([
@@ -128,7 +132,14 @@ export const getCourses = async (req, res, next) => {
               activo: true,
             },
           },
-          periodo: true, // Mantener para compatibilidad
+          nivel: {
+            select: {
+              id: true,
+              nombreNivel: true,
+              numeroHorasClases: true,
+            },
+          },
+          periodo: true,
           docente: {
             include: {
               user: {
@@ -144,7 +155,8 @@ export const getCourses = async (req, res, next) => {
             select: {
               id: true,
               nombre: true,
-              nivel: true,
+              nivelId: true,
+              nivel: { select: { id: true, nombreNivel: true, numeroHorasClases: true } },
               paralelo: true,
             },
           },
@@ -224,11 +236,19 @@ export const getCourseById = async (req, res, next) => {
             horarios: true,
           },
         },
+        nivel: {
+          select: {
+            id: true,
+            nombreNivel: true,
+            numeroHorasClases: true,
+          },
+        },
         cursoSiguiente: {
           select: {
             id: true,
             nombre: true,
-            nivel: true,
+            nivelId: true,
+            nivel: { select: { id: true, nombreNivel: true, numeroHorasClases: true } },
             paralelo: true,
           },
         },
@@ -333,13 +353,26 @@ export const createCourse = async (req, res, next) => {
     console.log('✅ [createCourse] Año escolar encontrado:', schoolYear.id, schoolYear.nombre);
     console.log('✅ [createCourse] El año escolar es GLOBAL - todas las instituciones lo comparten');
 
+    // Verificar que el nivel existe y pertenece a la institución del año lectivo
+    const nivel = await prisma.nivel.findUnique({
+      where: { id: validatedData.nivelId },
+      select: { id: true, institucionId: true, nombreNivel: true, numeroHorasClases: true },
+    });
+    if (!nivel) {
+      return res.status(400).json({ error: 'El nivel seleccionado no existe.' });
+    }
+    if (nivel.institucionId !== schoolYear.institucion.id) {
+      return res.status(400).json({
+        error: 'El nivel seleccionado no pertenece a la institución del año lectivo.',
+      });
+    }
 
     const sortOrder = validatedData.sortOrder ?? 0;
 
     const courseData = {
       id: randomUUID(),
       nombre: validatedData.nombre,
-      nivel: validatedData.nivel,
+      nivelId: validatedData.nivelId,
       paralelo: validatedData.paralelo ?? null,
       docenteId: validatedData.docenteId ?? null,
       capacidad: validatedData.capacidad ?? null,
@@ -365,6 +398,13 @@ export const createCourse = async (req, res, next) => {
             id: true,
             nombre: true,
             activo: true,
+          },
+        },
+        nivel: {
+          select: {
+            id: true,
+            nombreNivel: true,
+            numeroHorasClases: true,
           },
         },
         periodo: true,
@@ -428,6 +468,25 @@ export const updateCourse = async (req, res, next) => {
       updateData.sortOrder = updateData.sortOrder ?? 0;
     }
 
+    if (validatedData.nivelId !== undefined) {
+      const nivel = await prisma.nivel.findUnique({
+        where: { id: validatedData.nivelId },
+        select: { institucionId: true },
+      });
+      if (!nivel) {
+        return res.status(400).json({ error: 'El nivel seleccionado no existe.' });
+      }
+      const courseSchoolYear = await prisma.schoolYear.findUnique({
+        where: { id: course.anioLectivoId },
+        select: { institucionId: true },
+      });
+      if (courseSchoolYear && nivel.institucionId !== courseSchoolYear.institucionId) {
+        return res.status(400).json({
+          error: 'El nivel seleccionado no pertenece a la institución del curso.',
+        });
+      }
+    }
+
     const updatedCourse = await prisma.course.update({
       where: { id },
       data: updateData,
@@ -437,6 +496,13 @@ export const updateCourse = async (req, res, next) => {
             id: true,
             nombre: true,
             activo: true,
+          },
+        },
+        nivel: {
+          select: {
+            id: true,
+            nombreNivel: true,
+            numeroHorasClases: true,
           },
         },
         periodo: true,
@@ -800,6 +866,9 @@ export const importCourses = async (req, res, next) => {
     }
 
     const anioLectivoId = activeSchoolYear.id;
+    const institutionIdForImport = activeSchoolYear.institucionId;
+    const NUMERO_HORAS_CLASES_DEFAULT = 40;
+    const nivelCache = new Map();
 
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const firstSheetName = workbook.SheetNames[0];
@@ -870,8 +939,29 @@ export const importCourses = async (req, res, next) => {
         }
 
         const nombre = record.nombre.trim();
-        const nivel = record.nivel.trim();
+        const nombreNivel = (record.nivel && record.nivel.trim()) || 'Sin nivel';
         const paralelo = record.paralelo ? record.paralelo.trim() : null;
+
+        let nivelId = nivelCache.get(nombreNivel);
+        if (!nivelId) {
+          const nivelRow = await prisma.nivel.upsert({
+            where: {
+              institucionId_nombreNivel: {
+                institucionId: institutionIdForImport,
+                nombreNivel,
+              },
+            },
+            create: {
+              institucionId: institutionIdForImport,
+              nombreNivel,
+              numeroHorasClases: NUMERO_HORAS_CLASES_DEFAULT,
+            },
+            update: {},
+            select: { id: true },
+          });
+          nivelId = nivelRow.id;
+          nivelCache.set(nombreNivel, nivelId);
+        }
 
         let capacidad = null;
         if (record.capacidad !== undefined) {
@@ -902,7 +992,7 @@ export const importCourses = async (req, res, next) => {
         const existingCourse = await prisma.course.findFirst({
           where: {
             nombre,
-            nivel,
+            nivelId,
             paralelo: paralelo ?? null,
             anioLectivoId,
           },
@@ -913,7 +1003,7 @@ export const importCourses = async (req, res, next) => {
             where: { id: existingCourse.id },
             data: {
               nombre,
-              nivel,
+              nivelId,
               paralelo: paralelo ?? null,
               capacidad,
               sortOrder,
@@ -926,7 +1016,7 @@ export const importCourses = async (req, res, next) => {
             data: {
               id: randomUUID(),
               nombre,
-              nivel,
+              nivelId,
               paralelo: paralelo ?? null,
               capacidad,
               sortOrder,
@@ -1553,10 +1643,10 @@ export const promoteStudents = async (req, res, next) => {
     // Verificar que el curso siguiente existe en el período destino
     let cursoDestino;
     if (periodoIdDestino) {
-      // Buscar o crear el curso en el período destino
+      // Buscar o crear el curso en el período destino (por nivelId y paralelo)
       cursoDestino = await prisma.course.findFirst({
         where: {
-          nivel: curso.cursoSiguiente.nivel,
+          nivelId: curso.cursoSiguiente.nivelId,
           paralelo: curso.cursoSiguiente.paralelo,
           periodoId: periodoIdDestino,
         },
@@ -1567,11 +1657,12 @@ export const promoteStudents = async (req, res, next) => {
         cursoDestino = await prisma.course.create({
           data: {
             nombre: curso.cursoSiguiente.nombre,
-            nivel: curso.cursoSiguiente.nivel,
+            nivelId: curso.cursoSiguiente.nivelId,
             paralelo: curso.cursoSiguiente.paralelo,
             periodoId: periodoIdDestino,
             capacidad: curso.cursoSiguiente.capacidad || curso.capacidad,
             docenteId: curso.cursoSiguiente.docenteId,
+            anioLectivoId: curso.anioLectivoId,
           },
         });
       }

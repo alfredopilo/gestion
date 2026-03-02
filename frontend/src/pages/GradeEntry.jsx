@@ -22,6 +22,10 @@ const GradeEntry = () => {
   const [gradeInputs, setGradeInputs] = useState({}); // { studentId: { insumoId: { calificacion: '', observaciones: '' } } }
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedInsumoForNotif, setSelectedInsumoForNotif] = useState('');
+  const [notifMessage, setNotifMessage]   = useState('');
+  const [showCustomMsg, setShowCustomMsg] = useState(false);
+  const [sendingNotif, setSendingNotif]   = useState(false);
   const debounceTimer = useRef({});
   // Params de URL para preseleccionar materia y subperíodo tras cargar listas
   const pendingPreselectRef = useRef({ subjectId: null, subPeriodId: null });
@@ -915,6 +919,25 @@ const GradeEntry = () => {
     toast.success('Plantilla descargada exitosamente');
   };
 
+  const handleNotifyNoncompliance = async () => {
+    if (!selectedInsumoForNotif) return toast.error('Seleccione una tarea');
+    try {
+      setSendingNotif(true);
+      const res = await api.post('/grades/notify-noncompliance', {
+        insumoId: selectedInsumoForNotif,
+        ...(notifMessage.trim() && { mensajePersonalizado: notifMessage.trim() }),
+      });
+      toast.success(res.data.message);
+      setSelectedInsumoForNotif('');
+      setNotifMessage('');
+      setShowCustomMsg(false);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error al enviar notificaciones');
+    } finally {
+      setSendingNotif(false);
+    }
+  };
+
   const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -991,7 +1014,7 @@ const GradeEntry = () => {
               <option value="">Seleccionar curso</option>
               {courses.map(course => (
                 <option key={course.id} value={course.id}>
-                  {course.nombre} - {course.nivel} {course.paralelo || ''}
+                  {course.nombre} - {course.nivel?.nombreNivel ?? course.nivel} {course.paralelo || ''}
                 </option>
               ))}
             </select>
@@ -1331,6 +1354,134 @@ const GradeEntry = () => {
           )}
         </div>
       )}
+
+      {/* ── Panel: Notificar incumplimiento de deberes ────────────────────────── */}
+      {selectedCourse && selectedSubject && selectedPeriod && selectedSubPeriod && insumos.length > 0 && (() => {
+        const nonCompliantCount = selectedInsumoForNotif
+          ? students.filter((s) => !grades[s.id]?.[selectedInsumoForNotif]).length
+          : null;
+        return (
+          <div className="mt-6 card">
+            {/* Header */}
+            <div className="card-header flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary-100 flex-shrink-0">
+                <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Notificar incumplimiento de deberes</h3>
+                <p className="text-xs text-gray-500">Envía un mensaje al representante de los estudiantes sin calificación en la tarea seleccionada</p>
+              </div>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="card-body space-y-4">
+              {/* Selector de tarea */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                    Seleccione la tarea a notificar
+                  </label>
+                  <select
+                    value={selectedInsumoForNotif}
+                    onChange={(e) => setSelectedInsumoForNotif(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="">— Seleccione una tarea —</option>
+                    {insumos.map((ins) => (
+                      <option key={ins.id} value={ins.id}>
+                        {ins.nombre}
+                        {ins.fechaEntrega ? ` — entrega: ${new Date(ins.fechaEntrega).toLocaleDateString('es-EC', { day: '2-digit', month: 'short' })}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Preview de incumplidos */}
+                <div className="flex items-center gap-3 h-10">
+                  {nonCompliantCount === null ? (
+                    <p className="text-sm text-gray-400 italic">Seleccione una tarea para ver el preview</p>
+                  ) : nonCompliantCount === 0 ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-medium">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Todos tienen calificación
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      </svg>
+                      {nonCompliantCount} estudiante{nonCompliantCount !== 1 ? 's' : ''} sin calificación
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Toggle mensaje personalizado */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomMsg((v) => !v)}
+                  className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-800 font-medium transition-colors"
+                >
+                  <svg className={`w-4 h-4 transition-transform ${showCustomMsg ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  {showCustomMsg ? 'Ocultar mensaje personalizado' : 'Personalizar mensaje (opcional)'}
+                </button>
+
+                {showCustomMsg && (
+                  <div className="mt-2">
+                    <textarea
+                      value={notifMessage}
+                      onChange={(e) => setNotifMessage(e.target.value)}
+                      rows={3}
+                      className="input-field resize-none"
+                      placeholder="Escriba un mensaje adicional para los representantes. Si lo deja vacío se usará el mensaje predeterminado."
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      El nombre del estudiante, la tarea y el curso se agregan automáticamente al final del mensaje.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Botón de envío */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleNotifyNoncompliance}
+                  disabled={sendingNotif || !selectedInsumoForNotif || nonCompliantCount === 0}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg font-medium text-sm
+                             hover:bg-primary-700 active:scale-[0.98] transition-all duration-150
+                             disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                >
+                  {sendingNotif ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      Enviar notificación a padres
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal para importar calificaciones masivamente */}
       {showTemplateModal && (

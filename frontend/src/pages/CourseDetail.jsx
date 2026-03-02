@@ -570,7 +570,7 @@ const handleDownloadTemplate = async () => {
           </button>
           <h1 className="text-3xl font-bold text-gray-900">{course.nombre}</h1>
           <p className="mt-2 text-gray-600">
-            {course.nivel} - {course.paralelo || 'Sin paralelo'}
+            {course.nivel?.nombreNivel ?? course.nivel} - {course.paralelo || 'Sin paralelo'}
           </p>
         </div>
       </div>

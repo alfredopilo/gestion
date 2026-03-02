@@ -529,7 +529,7 @@ const SchoolPromotion = () => {
                                 <option value="">Seleccionar curso...</option>
                                 {preview.cursosACopiar.map(curso => (
                                   <option key={curso.id} value={curso.id}>
-                                    {curso.nombre} {curso.nivel} {curso.paralelo ? `"${curso.paralelo}"` : ''}
+                                    {curso.nombre} {curso.nivel?.nombreNivel ?? curso.nivel} {curso.paralelo ? `"${curso.paralelo}"` : ''}
                                   </option>
                                 ))}
                               </select>
@@ -697,7 +697,7 @@ const SchoolPromotion = () => {
                         {curso.nombre}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {curso.nivel} {curso.paralelo || ''}
+                        {curso.nivel?.nombreNivel ?? curso.nivel} {curso.paralelo || ''}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {curso.capacidad || 30}

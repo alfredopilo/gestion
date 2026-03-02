@@ -317,7 +317,7 @@ const EnviarMensaje = () => {
               <option value="">Seleccionar curso</option>
               {cursos.map(curso => (
                 <option key={curso.id} value={curso.id}>
-                  {curso.nombre} - {curso.nivel} {curso.paralelo || ''}
+                  {curso.nombre} - {curso.nivel?.nombreNivel ?? curso.nivel} {curso.paralelo || ''}
                 </option>
               ))}
             </select>

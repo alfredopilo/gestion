@@ -1901,7 +1901,7 @@ const Reports = () => {
               <option value="">Seleccionar curso</option>
               {courses.map(course => (
                 <option key={course.id} value={course.id}>
-                  {course.nombre} - {course.nivel} {course.paralelo || ''}
+                  {course.nombre} - {course.nivel?.nombreNivel ?? course.nivel} {course.paralelo || ''}
                 </option>
               ))}
             </select>

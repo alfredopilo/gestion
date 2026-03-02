@@ -160,6 +160,20 @@ if [ -d "backend/src/utils" ]; then
     print_success "Utils actualizados"
 fi
 
+# Copiar rutas actualizadas (nivelRoutes, reportRoutes con inspección)
+if [ -d "backend/src/routes" ]; then
+    print_info "Copiando rutas actualizadas..."
+    $DOCKER_COMPOSE_CMD cp backend/src/routes/. backend:/app/src/routes/ 2>/dev/null || true
+    print_success "Rutas actualizadas"
+fi
+
+# Copiar servicios actualizados (inspectionNotificationService para notificaciones a padres)
+if [ -d "backend/src/services" ]; then
+    print_info "Copiando servicios actualizados..."
+    $DOCKER_COMPOSE_CMD cp backend/src/services/. backend:/app/src/services/ 2>/dev/null || true
+    print_success "Servicios actualizados"
+fi
+
 # ============================================
 # PASO 4: Generar Prisma Client
 # ============================================

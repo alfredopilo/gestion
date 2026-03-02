@@ -146,7 +146,7 @@ const Schedule = () => {
             const cellContent = slotSchedules.map(s => {
               let content = s.materia?.nombre || '';
               if (s.materia?.codigo) content += ` (${s.materia.codigo})`;
-              if (s.curso) content += `\n${s.curso.nombre} - ${s.curso.nivel} ${s.curso.paralelo}`;
+              if (s.curso) content += `\n${s.curso.nombre} - ${s.curso.nivel?.nombreNivel ?? s.curso.nivel} ${s.curso.paralelo}`;
               if (s.docente) content += `\nProf. ${s.docente.nombre} ${s.docente.apellido}`;
               return content;
             }).join('\n\n');
@@ -237,7 +237,7 @@ const Schedule = () => {
                 <option value="">Todos los cursos</option>
                 {cursos.map((curso) => (
                   <option key={curso.id} value={curso.id}>
-                    {curso.nombre} - {curso.nivel} {curso.paralelo}
+                    {curso.nombre} - {curso.nivel?.nombreNivel ?? curso.nivel} {curso.paralelo}
                   </option>
                 ))}
               </select>
@@ -308,7 +308,7 @@ const Schedule = () => {
                                   )}
                                   {schedule.curso && (
                                     <div className={`text-xs ${colors.textLight} mt-1`}>
-                                      {schedule.curso.nombre} - {schedule.curso.nivel} {schedule.curso.paralelo}
+                                      {schedule.curso.nombre} - {schedule.curso.nivel?.nombreNivel ?? schedule.curso.nivel} {schedule.curso.paralelo}
                                     </div>
                                   )}
                                   {schedule.docente && (

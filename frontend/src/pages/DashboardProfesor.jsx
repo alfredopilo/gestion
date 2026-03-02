@@ -59,7 +59,7 @@ const DashboardProfesor = () => {
                   >
                     <h3 className="font-medium">{course.nombre}</h3>
                     <p className="text-sm text-gray-600">
-                      {course.nivel} - {course.paralelo || 'Sin paralelo'}
+                      {course.nivel?.nombreNivel ?? course.nivel} - {course.paralelo || 'Sin paralelo'}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {course._count?.estudiantes || 0} estudiantes

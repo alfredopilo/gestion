@@ -113,7 +113,7 @@ const Login = () => {
             <div className="space-y-4">
               <div>
                 <label htmlFor="numeroIdentificacion" className="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Identificación (Cédula)
+                  Número de Identificación (Cédula) o correo electrónico
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -128,7 +128,7 @@ const Login = () => {
                     autoComplete="username"
                     required
                     className="input-field pl-10"
-                    placeholder="Ingresa tu cédula"
+                    placeholder="Ej: 123456 o correo@ejemplo.com"
                     value={numeroIdentificacion}
                     onChange={(e) => setNumeroIdentificacion(e.target.value)}
                     data-testid="login-cedula"

@@ -915,3 +915,118 @@ export const bulkCreateGrades = async (req, res, next) => {
   }
 };
 
+/**
+ * Notificar a representantes sobre el incumplimiento de una tarea/insumo.
+ * Crea mensajes internos (visibles en Historial de Envíos) para los
+ * representantes de estudiantes que no tienen calificación para el insumo dado.
+ */
+export const notifyNoncompliance = async (req, res, next) => {
+  try {
+    const { insumoId, mensajePersonalizado } = req.body;
+    const emisorId = req.user.id;
+
+    if (!insumoId) {
+      return res.status(400).json({ error: 'insumoId es requerido' });
+    }
+
+    // 1. Obtener el insumo con su curso, materia y sub-período
+    const insumo = await prisma.insumo.findUnique({
+      where: { id: insumoId },
+      include: {
+        curso:      { select: { id: true, nombre: true } },
+        materia:    { select: { nombre: true } },
+        subPeriodo: { select: { nombre: true } },
+      },
+    });
+    if (!insumo) {
+      return res.status(404).json({ error: 'Insumo no encontrado' });
+    }
+
+    // 2. Obtener todos los estudiantes activos del curso con info de representante
+    const course = await prisma.course.findUnique({
+      where: { id: insumo.cursoId },
+      include: {
+        estudiantes: {
+          where: { retirado: false },
+          select: {
+            id: true,
+            representante: {
+              select: { userId: true },
+            },
+            user: { select: { nombre: true, apellido: true } },
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      return res.status(404).json({ error: 'Curso no encontrado' });
+    }
+
+    // 3. Determinar estudiantes sin calificación para este insumo
+    const existingGrades = await prisma.grade.findMany({
+      where: {
+        insumoId,
+        estudianteId: { in: course.estudiantes.map((e) => e.id) },
+      },
+      select: { estudianteId: true },
+    });
+    const gradedIds = new Set(existingGrades.map((g) => g.estudianteId));
+    const noncompliant = course.estudiantes.filter((e) => !gradedIds.has(e.id));
+
+    if (noncompliant.length === 0) {
+      return res.json({
+        message: 'Todos los estudiantes tienen calificación registrada.',
+        mensajesCreados: 0,
+        estudiantesNotificados: 0,
+        sinRepresentante: 0,
+      });
+    }
+
+    // 4. Agrupar estudiantes incumplidos por representante
+    const byRep = {};
+    let sinRepresentante = 0;
+    noncompliant.forEach((student) => {
+      const repUserId = student.representante?.userId;
+      if (!repUserId) {
+        sinRepresentante++;
+        return;
+      }
+      if (!byRep[repUserId]) byRep[repUserId] = [];
+      byRep[repUserId].push(`${student.user.nombre} ${student.user.apellido}`);
+    });
+
+    // 5. Crear un mensaje por representante
+    const creados = [];
+    for (const [receptorId, nombres] of Object.entries(byRep)) {
+      const asunto = `Incumplimiento de tarea: ${insumo.nombre}`;
+      const cuerpo = mensajePersonalizado
+        ? `${mensajePersonalizado}\n\nEstudiante(s): ${nombres.join(', ')}\nTarea: ${insumo.nombre}\nCurso: ${insumo.curso.nombre} - ${insumo.materia.nombre}`
+        : `Se informa que su representado(a) ${nombres.join(' y ')} no ha entregado la tarea "${insumo.nombre}" correspondiente al curso ${insumo.curso.nombre} - ${insumo.materia.nombre} (${insumo.subPeriodo.nombre}).\n\nPor favor comuníquese con el docente para más información.`;
+
+      const msg = await prisma.mensaje.create({
+        data: {
+          id: randomUUID(),
+          emisorId,
+          receptorId,
+          asunto,
+          cuerpo,
+          tipoMensaje: 'INDIVIDUAL',
+          enviadoPorEmail: false,
+          emailEnviado:    false,
+        },
+      });
+      creados.push(msg);
+    }
+
+    return res.json({
+      message: `Notificación enviada a ${creados.length} representante(s).`,
+      mensajesCreados:        creados.length,
+      estudiantesNotificados: noncompliant.length,
+      sinRepresentante,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

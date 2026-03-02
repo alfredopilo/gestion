@@ -222,7 +222,7 @@ const ReportCards = () => {
       cursorY += 5;
       doc.text(`Identificación: ${reportCard.estudiante.numeroIdentificacion}`, marginLeft, cursorY);
       cursorY += 5;
-      doc.text(`Curso: ${reportCard.curso.nombre} - ${reportCard.curso.nivel} ${reportCard.curso.paralelo}`, marginLeft, cursorY);
+      doc.text(`Curso: ${reportCard.curso.nombre} - ${reportCard.curso.nivel?.nombreNivel ?? reportCard.curso.nivel} ${reportCard.curso.paralelo}`, marginLeft, cursorY);
       cursorY += 5;
       doc.text(`Período: ${reportCard.curso.periodo}`, marginLeft, cursorY);
       cursorY += 8;
@@ -649,7 +649,7 @@ const ReportCards = () => {
               <option value="">Seleccionar curso</option>
               {cursos.map((curso) => (
                 <option key={curso.id} value={curso.id}>
-                  {curso.nombre} - {curso.nivel} {curso.paralelo || ''}
+                  {curso.nombre} - {curso.nivel?.nombreNivel ?? curso.nivel} {curso.paralelo || ''}
                 </option>
               ))}
             </select>
@@ -839,7 +839,7 @@ const ReportCards = () => {
                     </h2>
                     <p className="text-sm text-gray-600 mb-4">
                       Identificación: <span className="font-semibold">{reportCard.estudiante.numeroIdentificacion}</span> | 
-                      Curso: <span className="font-semibold">{reportCard.curso.nombre} - {reportCard.curso.nivel} {reportCard.curso.paralelo}</span> | 
+                      Curso: <span className="font-semibold">{reportCard.curso.nombre} - {reportCard.curso.nivel?.nombreNivel ?? reportCard.curso.nivel} {reportCard.curso.paralelo}</span> | 
                       Período: <span className="font-semibold">{reportCard.curso.periodo}</span>
                     </p>
                   </div>

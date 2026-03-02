@@ -34,6 +34,7 @@ const GeneralSettings = lazy(() => import('./pages/GeneralSettings'));
 const Insumos = lazy(() => import('./pages/Insumos'));
 const TaskReview = lazy(() => import('./pages/TaskReview'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Inspection = lazy(() => import('./pages/Inspection'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 const ReportCards = lazy(() => import('./pages/ReportCards'));
 const HistoricalReportCards = lazy(() => import('./pages/HistoricalReportCards'));
@@ -123,6 +124,7 @@ function App() {
             <Route path="database-backup" element={<ProtectedRoute requiredRole={['ADMIN']}><DatabaseBackup /></ProtectedRoute>} />
             <Route path="student-profile-template" element={<ProtectedRoute requiredRole={['ADMIN', 'SECRETARIA']}><StudentProfileTemplate /></ProtectedRoute>} />
             <Route path="attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
+            <Route path="inspection" element={<ProtectedRoute requiredRole={['ADMIN', 'PROFESOR', 'SECRETARIA']}><Inspection /></ProtectedRoute>} />
             <Route path="schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
             <Route path="payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="mis-tareas" element={<ProtectedRoute requiredRole={['ESTUDIANTE']}><MisTareas /></ProtectedRoute>} />

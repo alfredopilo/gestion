@@ -236,7 +236,7 @@ const HistoricalReportCards = () => {
       cursorY += 5;
       doc.text(`Identificación: ${reportCard.estudiante.numeroIdentificacion}`, marginLeft, cursorY);
       cursorY += 5;
-      doc.text(`Curso: ${reportCard.curso.nombre} - ${reportCard.curso.nivel} ${reportCard.curso.paralelo || ''}`, marginLeft, cursorY);
+      doc.text(`Curso: ${reportCard.curso.nombre} - ${reportCard.curso.nivel?.nombreNivel ?? reportCard.curso.nivel} ${reportCard.curso.paralelo || ''}`, marginLeft, cursorY);
       cursorY += 5;
       doc.text(`Año Lectivo: ${reportCard.anioLectivo?.nombre || reportCard.anioLectivo?.ano || '-'}`, marginLeft, cursorY);
       cursorY += 5;
@@ -756,7 +756,7 @@ const HistoricalReportCards = () => {
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <h3 className="text-xl font-bold mb-2">
-                          {reportCard.curso.nombre} - {reportCard.curso.nivel} {reportCard.curso.paralelo || ''}
+                          {reportCard.curso.nombre} - {reportCard.curso.nivel?.nombreNivel ?? reportCard.curso.nivel} {reportCard.curso.paralelo || ''}
                         </h3>
                         <p className="text-sm text-gray-600">
                           {reportCard.curso.periodo && reportCard.curso.periodo !== '-' && (

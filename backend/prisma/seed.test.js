@@ -23,7 +23,7 @@ async function cleanup() {
     'accessLog', 'rolePermission', 'mensaje', 'notification', 'tareaEntrega',
     'studentProfileValue', 'documento', 'grade', 'attendance', 'payment',
     'studentWithdrawal', 'enrollment', 'insumo', 'assignmentSchedule',
-    'courseSubjectAssignment', 'student', 'course', 'subject', 'teacher',
+    'courseSubjectAssignment', 'student', 'course', 'nivel', 'subject', 'teacher',
     'representante', 'secretaria', 'userInstitution', 'user', 'subPeriod',
     'period', 'schoolYear', 'gradeScaleDetail', 'gradeScale', 'institution',
     'setting', 'studentProfileField', 'studentProfileSection', 'emailConfig', 'permission',
@@ -152,12 +152,21 @@ async function main() {
     },
   });
 
+  const nivelIds = [randomUUID(), randomUUID(), randomUUID()];
+  await prisma.nivel.createMany({
+    data: [
+      { id: nivelIds[0], institucionId: instId, nombreNivel: '1', numeroHorasClases: 40, createdAt: new Date(), updatedAt: new Date() },
+      { id: nivelIds[1], institucionId: instId, nombreNivel: '2', numeroHorasClases: 40, createdAt: new Date(), updatedAt: new Date() },
+      { id: nivelIds[2], institucionId: instId, nombreNivel: '3', numeroHorasClases: 40, createdAt: new Date(), updatedAt: new Date() },
+    ],
+  });
+
   const courseIds = [randomUUID(), randomUUID(), randomUUID()];
   await prisma.course.createMany({
     data: [
-      { id: courseIds[0], nombre: 'Curso A', nivel: '1', anioLectivoId: anioId, periodoId: periodId, docenteId: teacherId, createdAt: new Date(), updatedAt: new Date() },
-      { id: courseIds[1], nombre: 'Curso B', nivel: '2', anioLectivoId: anioId, periodoId: periodId, createdAt: new Date(), updatedAt: new Date() },
-      { id: courseIds[2], nombre: 'Curso C', nivel: '3', anioLectivoId: anioId, periodoId: periodId, createdAt: new Date(), updatedAt: new Date() },
+      { id: courseIds[0], nombre: 'Curso A', nivelId: nivelIds[0], anioLectivoId: anioId, periodoId: periodId, docenteId: teacherId, createdAt: new Date(), updatedAt: new Date() },
+      { id: courseIds[1], nombre: 'Curso B', nivelId: nivelIds[1], anioLectivoId: anioId, periodoId: periodId, createdAt: new Date(), updatedAt: new Date() },
+      { id: courseIds[2], nombre: 'Curso C', nivelId: nivelIds[2], anioLectivoId: anioId, periodoId: periodId, createdAt: new Date(), updatedAt: new Date() },
     ],
   });
 

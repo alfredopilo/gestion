@@ -300,7 +300,7 @@ const Supplementary = () => {
                         {item.curso.nombre}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {item.curso.nivel} {item.curso.paralelo}
+                        {item.curso.nivel?.nombreNivel ?? item.curso.nivel} {item.curso.paralelo}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

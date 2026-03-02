@@ -70,7 +70,7 @@ export const createStudentSchema = z.object({
 
 export const createCourseSchema = z.object({
   nombre: z.string().min(2),
-  nivel: z.string().min(2),
+  nivelId: z.string().uuid('Debe seleccionar un nivel válido'),
   paralelo: z.string().optional().nullable(),
   docenteId: z.string().uuid().optional().nullable(),
   anioLectivoId: z.string().uuid().optional(), // Opcional, se usará el activo si no se proporciona
@@ -83,7 +83,7 @@ export const createCourseSchema = z.object({
 
 export const updateCourseSchema = z.object({
   nombre: z.string().min(2).optional(),
-  nivel: z.string().min(2).optional(),
+  nivelId: z.string().uuid('Debe seleccionar un nivel válido').optional(),
   paralelo: z.string().optional().nullable(),
   docenteId: z.string().uuid().optional().nullable(),
   anioLectivoId: z.string().uuid().optional(),
@@ -92,6 +92,16 @@ export const updateCourseSchema = z.object({
   cursoSiguienteId: z.string().uuid().optional().nullable(),
   sortOrder: z.number().int().optional().nullable(),
   ultimoCurso: z.boolean().optional(),
+});
+
+export const createNivelSchema = z.object({
+  nombreNivel: z.string().min(2, 'El nombre del nivel debe tener al menos 2 caracteres'),
+  numeroHorasClases: z.number().int().min(1, 'Debe ser al menos 1 hora'),
+});
+
+export const updateNivelSchema = z.object({
+  nombreNivel: z.string().min(2).optional(),
+  numeroHorasClases: z.number().int().min(1).optional(),
 });
 
 export const createSubjectSchema = z.object({

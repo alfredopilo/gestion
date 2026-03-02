@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 const Courses = () => {
   const [courses, setCourses] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [niveles, setNiveles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
@@ -18,7 +19,7 @@ const Courses = () => {
   const [importLoading, setImportLoading] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '',
-    nivel: '',
+    nivelId: '',
     paralelo: '',
     docenteId: '',
     capacidad: 30,
@@ -34,14 +35,14 @@ const Courses = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [coursesRes, teachersRes] = await Promise.all([
+      const [coursesRes, teachersRes, nivelesRes] = await Promise.all([
         api.get('/courses?limit=100'),
         api.get('/teachers?limit=100'),
+        api.get('/niveles'),
       ]);
 
       setCourses(coursesRes.data.data || []);
-      
-      // Filtrar solo profesores activos
+      setNiveles(nivelesRes.data.data || []);
       const activeTeachers = (teachersRes.data.data || []).filter(
         t => t.user && t.user.estado === 'ACTIVO'
       );
@@ -59,6 +60,7 @@ const Courses = () => {
     try {
       const data = {
         ...formData,
+        nivelId: formData.nivelId || null,
         paralelo: formData.paralelo || null,
         docenteId: formData.docenteId || null,
         capacidad: formData.capacidad ? parseInt(formData.capacidad) : null,
@@ -89,7 +91,7 @@ const Courses = () => {
     setEditingCourse(course);
     setFormData({
       nombre: course.nombre || '',
-      nivel: course.nivel || '',
+      nivelId: course.nivelId || course.nivel?.id || '',
       paralelo: course.paralelo || '',
       docenteId: course.docenteId || '',
       capacidad: course.capacidad || 30,
@@ -118,7 +120,7 @@ const Courses = () => {
   const resetForm = () => {
     setFormData({
       nombre: '',
-      nivel: '',
+      nivelId: '',
       paralelo: '',
       docenteId: '',
       capacidad: 30,
@@ -385,7 +387,7 @@ const Courses = () => {
                         {course.nombre}
                       </Link>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{course.nivel}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{course.nivel?.nombreNivel ?? '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{course.paralelo || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {course.anioLectivo?.nombre || '-'}
@@ -463,14 +465,24 @@ const Courses = () => {
                   <label className="block text-sm font-medium text-gray-700">
                     Nivel <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    value={formData.nivel}
-                    onChange={(e) => setFormData({ ...formData, nivel: e.target.value })}
+                    value={formData.nivelId}
+                    onChange={(e) => setFormData({ ...formData, nivelId: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="Ej: Bachillerato, Primaria"
-                  />
+                  >
+                    <option value="">Seleccione un nivel</option>
+                    {niveles.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.nombreNivel} ({n.numeroHorasClases} h/clase)
+                      </option>
+                    ))}
+                  </select>
+                  {formData.nivelId && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Horas de clase del nivel: {niveles.find((n) => n.id === formData.nivelId)?.numeroHorasClases ?? '-'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -544,11 +556,11 @@ const Courses = () => {
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
                 >
                   <option value="">Sin siguiente grado</option>
-                  {courses
-                    .filter(c => !editingCourse || c.id !== editingCourse.id) // Excluir el curso actual
+                    {courses
+                    .filter(c => !editingCourse || c.id !== editingCourse.id)
                     .map(course => (
                       <option key={course.id} value={course.id}>
-                        {course.nombre} ({course.nivel} {course.paralelo || ''}) - {course.anioLectivo?.nombre || ''}
+                        {course.nombre} ({course.nivel?.nombreNivel ?? ''} {course.paralelo || ''}) - {course.anioLectivo?.nombre || ''}
                       </option>
                     ))}
                 </select>
@@ -647,7 +659,7 @@ const Courses = () => {
                               <tr key={index} className="hover:bg-gray-50">
                                 <td className="px-4 py-2 text-sm">{index + 1}</td>
                                 <td className="px-4 py-2 text-sm">{course.nombre}</td>
-                                <td className="px-4 py-2 text-sm">{course.nivel}</td>
+                                <td className="px-4 py-2 text-sm">{course.nivel?.nombreNivel ?? '-'}</td>
                                 <td className="px-4 py-2 text-sm">{course.paralelo || '-'}</td>
                                 <td className="px-4 py-2 text-sm">{course.capacidad || '-'}</td>
                                 <td className="px-4 py-2 text-sm">{course.sortOrder || '-'}</td>

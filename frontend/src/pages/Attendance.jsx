@@ -367,7 +367,7 @@ const Attendance = () => {
                 <option value="">Seleccione un curso</option>
                 {cursos.map((curso) => (
                   <option key={curso.id} value={curso.id}>
-                    {curso.nombre} - {curso.nivel} {curso.paralelo}
+                    {curso.nombre} - {curso.nivel?.nombreNivel ?? curso.nivel ?? ''} {curso.paralelo ?? ''}
                   </option>
                 ))}
               </select>
@@ -527,7 +527,7 @@ const Attendance = () => {
               <option value="">Todos los cursos</option>
               {cursos.map((curso) => (
                 <option key={curso.id} value={curso.id}>
-                  {curso.nombre} - {curso.nivel} {curso.paralelo}
+                  {curso.nombre} - {curso.nivel?.nombreNivel ?? curso.nivel ?? ''} {curso.paralelo ?? ''}
                 </option>
               ))}
             </select>

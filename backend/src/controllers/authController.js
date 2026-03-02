@@ -29,18 +29,18 @@ export const login = async (req, res, next) => {
     // Validar datos (strip elimina campos adicionales automáticamente)
     const validatedData = loginSchema.parse(req.body);
     const { numeroIdentificacion, password } = validatedData;
+    const loginValue = numeroIdentificacion.trim();
 
-    // Buscar usuario por número de identificación (buscar en todas las instituciones)
-    // El número de identificación debería ser único por usuario
+    // Permitir inicio de sesión por número de identificación o por email
+    const isEmail = loginValue.includes('@');
     const user = await prisma.user.findFirst({
-      where: {
-        numeroIdentificacion: numeroIdentificacion.trim(),
-      },
+      where: isEmail
+        ? { email: loginValue }
+        : { numeroIdentificacion: loginValue },
     });
 
     if (!user) {
-      // Registrar intento de login fallido
-      await logLoginFailed(numeroIdentificacion, 'Usuario no encontrado', req);
+      await logLoginFailed(loginValue, 'Usuario no encontrado', req);
       return res.status(401).json({
         error: 'Credenciales inválidas.',
       });

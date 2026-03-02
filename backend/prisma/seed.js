@@ -314,22 +314,37 @@ async function main() {
     console.log(`✅ Profesor creado: ${docenteUser.email}`);
   }
 
+  // Crear nivel Bachillerato si no existe (para el curso)
+  const nivelBachillerato = await prisma.nivel.upsert({
+    where: {
+      institucionId_nombreNivel: {
+        institucionId: institucion.id,
+        nombreNivel: 'Bachillerato',
+      },
+    },
+    create: {
+      institucionId: institucion.id,
+      nombreNivel: 'Bachillerato',
+      numeroHorasClases: 40,
+    },
+    update: {},
+  });
+
   // Crear curso
-  // Buscar curso existente o crear uno nuevo (sin ID personalizado para que use UUID)
   let curso = await prisma.course.findFirst({
     where: {
       nombre: 'Primero de Bachillerato',
-      nivel: 'Bachillerato',
+      nivelId: nivelBachillerato.id,
       paralelo: 'A',
       periodoId: periodoActual.id,
     },
   });
-  
+
   if (!curso) {
     curso = await prisma.course.create({
       data: {
         nombre: 'Primero de Bachillerato',
-        nivel: 'Bachillerato',
+        nivelId: nivelBachillerato.id,
         paralelo: 'A',
         docenteId: profesor.id,
         periodoId: periodoActual.id,

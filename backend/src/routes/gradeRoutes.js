@@ -8,6 +8,7 @@ import {
   deleteGrade,
   bulkCreateGrades,
   resetGrades,
+  notifyNoncompliance,
 } from '../controllers/gradeController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
@@ -18,6 +19,7 @@ router.use(authenticate);
 router.get('/summary', authorize('ADMIN', 'PROFESOR', 'SECRETARIA'), getGradesSummary);
 router.get('/', getGrades);
 router.get('/student/:estudianteId', getStudentGrades);
+router.post('/notify-noncompliance', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), notifyNoncompliance);
 router.post('/', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), upsertGrade);
 router.put('/:id', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), updateGrade);
 router.delete('/:id', authorize('PROFESOR', 'ADMIN', 'SECRETARIA'), deleteGrade);

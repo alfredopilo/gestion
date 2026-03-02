@@ -49,44 +49,70 @@
     background: #94a3b8;
   }
 
+  /* Scrollbar oscuro para sidebar */
+  .sidebar-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 4px;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
   /* Botones mejorados */
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2 rounded-lg font-medium 
-           hover:bg-primary-700 focus:outline-none focus:ring-2 
-           focus:ring-primary-500 focus:ring-offset-2 
+    @apply bg-primary-600 text-white px-4 py-2 rounded-lg font-medium
+           hover:bg-primary-700 focus:outline-none focus:ring-2
+           focus:ring-primary-500 focus:ring-offset-2
            transition-all duration-200 shadow-sm hover:shadow-md
+           active:scale-[0.98] active:shadow-none
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-secondary-600 text-white px-4 py-2 rounded-lg font-medium 
-           hover:bg-secondary-700 focus:outline-none focus:ring-2 
-           focus:ring-secondary-500 focus:ring-offset-2 
+    @apply bg-secondary-600 text-white px-4 py-2 rounded-lg font-medium
+           hover:bg-secondary-700 focus:outline-none focus:ring-2
+           focus:ring-secondary-500 focus:ring-offset-2
            transition-all duration-200 shadow-sm hover:shadow-md
+           active:scale-[0.98] active:shadow-none
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-danger {
-    @apply bg-danger-600 text-white px-4 py-2 rounded-lg font-medium 
-           hover:bg-danger-700 focus:outline-none focus:ring-2 
-           focus:ring-danger-500 focus:ring-offset-2 
+    @apply bg-danger-600 text-white px-4 py-2 rounded-lg font-medium
+           hover:bg-danger-700 focus:outline-none focus:ring-2
+           focus:ring-danger-500 focus:ring-offset-2
            transition-all duration-200 shadow-sm hover:shadow-md
+           active:scale-[0.98] active:shadow-none
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-outline {
-    @apply border-2 border-gray-300 text-gray-700 px-4 py-2 rounded-lg 
-           font-medium hover:border-gray-400 hover:bg-gray-50 
-           focus:outline-none focus:ring-2 focus:ring-gray-400 
+    @apply border-2 border-gray-300 text-gray-700 px-4 py-2 rounded-lg
+           font-medium hover:border-gray-400 hover:bg-gray-50
+           focus:outline-none focus:ring-2 focus:ring-gray-400
            focus:ring-offset-2 transition-all duration-200
+           active:scale-[0.98]
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   /* Inputs mejorados */
   .input-field {
-    @apply w-full px-4 py-2 border border-gray-300 rounded-lg 
-           focus:outline-none focus:ring-2 focus:ring-primary-500 
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-primary-500
            focus:border-transparent transition-all duration-200
+           shadow-sm focus:shadow-md
            placeholder-gray-400;
   }
 
@@ -99,12 +125,13 @@
 
   /* Cards mejoradas */
   .card {
-    @apply bg-white rounded-xl shadow-soft hover:shadow-medium 
-           transition-shadow duration-300 overflow-hidden;
+    @apply bg-white rounded-xl shadow-soft hover:shadow-medium
+           transition-shadow duration-300 overflow-hidden
+           border border-gray-100/80;
   }
 
   .card-header {
-    @apply px-6 py-4 border-b border-gray-200 bg-gray-50;
+    @apply px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50;
   }
 
   .card-body {
@@ -113,7 +140,7 @@
 
   /* Badges */
   .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold;
   }
 
   .badge-success {
@@ -213,7 +240,7 @@
   }
 
   .modern-table thead {
-    @apply bg-gray-50;
+    @apply bg-gradient-to-r from-gray-50 to-slate-50;
   }
 
   .modern-table th {
@@ -232,8 +259,12 @@
     @apply transition-colors duration-150;
   }
 
+  .modern-table tbody tr:nth-child(even) {
+    @apply bg-gray-50/40;
+  }
+
   .modern-table tbody tr:hover {
-    @apply bg-gray-50;
+    @apply bg-primary-50/30;
   }
 
   /* Status dots */

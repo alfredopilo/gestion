@@ -63,9 +63,15 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const app = express();
 
+// CORS: con credentials: true no se puede usar '*'; hay que devolver el origen concreto.
+// Reflejamos el origen de la petición para que login y cookies funcionen desde cualquier puerto local.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || '*');
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-institution-id, Content-Disposition'
@@ -81,7 +87,10 @@ app.use((req, res, next) => {
 
 app.use(
   cors({
-    origin: '*',
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      callback(null, origin);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: [
       'Origin',
