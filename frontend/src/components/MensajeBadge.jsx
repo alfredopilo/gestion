@@ -8,17 +8,20 @@ const MensajeBadge = () => {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
+    if (!user) { setCount(0); return; }
     fetchCount();
-    const interval = setInterval(fetchCount, 30000); // Actualizar cada 30s
+    const interval = setInterval(fetchCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   const fetchCount = async () => {
     try {
       const response = await api.get('/mensajes/count');
       setCount(response.data.count);
     } catch (error) {
-      console.error('Error al cargar contador de mensajes');
+      if (error?.response?.status !== 401) {
+        console.error('Error al cargar contador de mensajes');
+      }
     }
   };
 
